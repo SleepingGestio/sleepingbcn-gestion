@@ -7,12 +7,12 @@ export async function fetchReservas(params?: {
   search?: string;
   estado?: string;
 }): Promise<Reserva[]> {
-  let q = supabase.from("reservas_kb").select("*").order("Llegada", { ascending: false });
-  if (params?.from) q = q.gte("Llegada", params.from);
-  if (params?.to) q = q.lte("Llegada", params.to);
+  let q = supabase.from("reservas_kb").select("*").order("Check in", { ascending: false });
+  if (params?.from) q = q.gte("Check in", params.from);
+  if (params?.to) q = q.lte("Check in", params.to);
   if (params?.estado) q = q.eq("Estado", params.estado);
   if (params?.search) {
-    q = q.or(`Huésped.ilike.%${params.search}%,Número.ilike.%${params.search}%`);
+    q = q.or(`"Referencia".ilike.%${params.search}%,"Número".ilike.%${params.search}%`);
   }
   const { data: kb, error } = await q.limit(500);
   if (error) throw error;
