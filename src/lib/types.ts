@@ -29,7 +29,10 @@ export type ReservaGestio = {
   NotasGestio: string | null;
 };
 
-export type AgCheckIn = { id_agente: number; nombre: string };
-export type PersLimp = { id_persona: number; nombre: string };
+export type AgCheckIn = { id_agente: number; nombre: string | null; apellidos: string | null };
+export type PersLimp = { id_persona: number; nombre: string | null; apellidos: string | null };
+
+export const fullName = (p: { nombre: string | null; apellidos: string | null } | null | undefined) =>
+  p ? [p.nombre, p.apellidos].filter(Boolean).join(" ").trim() || "—" : "—";
 
 export type Reserva = ReservaKB & { gestio: ReservaGestio | null };
