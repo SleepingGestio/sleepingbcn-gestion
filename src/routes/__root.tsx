@@ -87,6 +87,10 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
       { name: "twitter:site", content: "@Lovable" },
+      { name: "twitter:title", content: "SleepingBCN · Gestión interna" },
+      { name: "twitter:description", content: "Panel interno de gestión de apartamentos turísticos SleepingBCN" },
+      { property: "og:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/98e254a9-9e14-451f-8c65-be6311edb8f4/id-preview-8dd83776--82c6afbf-8f27-4bd1-89a0-8fa21040d8bf.lovable.app-1781369211542.png" },
+      { name: "twitter:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/98e254a9-9e14-451f-8c65-be6311edb8f4/id-preview-8dd83776--82c6afbf-8f27-4bd1-89a0-8fa21040d8bf.lovable.app-1781369211542.png" },
     ],
     links: [
       {
