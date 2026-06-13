@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { fetchReserva, upsertGestio } from "@/lib/reservas";
 import { fetchAgentes, fetchLimpiadores } from "@/lib/catalogos";
-import type { Reserva, ReservaGestio } from "@/lib/types";
+import { fullName, type Reserva, type ReservaGestio } from "@/lib/types";
 import { toast } from "sonner";
 import { useQuery } from "@tanstack/react-query";
 
@@ -109,7 +109,7 @@ export function ReservaDetail({
                     <SelectContent>
                       <SelectItem value="none">Sin asignar</SelectItem>
                       {agentesQ.data?.map((a) => (
-                        <SelectItem key={a.id_agente} value={String(a.id_agente)}>{a.nombre}</SelectItem>
+                        <SelectItem key={a.id_agente} value={String(a.id_agente)}>{fullName(a)}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
@@ -124,7 +124,7 @@ export function ReservaDetail({
                     <SelectContent>
                       <SelectItem value="none">Sin asignar</SelectItem>
                       {limpiadoresQ.data?.map((p) => (
-                        <SelectItem key={p.id_persona} value={String(p.id_persona)}>{p.nombre}</SelectItem>
+                        <SelectItem key={p.id_persona} value={String(p.id_persona)}>{fullName(p)}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>

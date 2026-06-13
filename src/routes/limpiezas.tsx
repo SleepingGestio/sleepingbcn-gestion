@@ -11,6 +11,7 @@ import { supabase } from "@/integrations/supabase/client";
 import type { Reserva, ReservaGestio, ReservaKB } from "@/lib/types";
 import { useQuery as useQuery2 } from "@tanstack/react-query";
 import { fetchLimpiadores } from "@/lib/catalogos";
+import { fullName } from "@/lib/types";
 
 async function fetchSalidasHoy(): Promise<Reserva[]> {
   const today = todayISO();
@@ -33,7 +34,10 @@ function LimpiezasPage() {
   const q = useQuery({ queryKey: ["limpiezas-hoy"], queryFn: fetchSalidasHoy });
   const limpiadoresQ = useQuery2({ queryKey: ["limpiadores"], queryFn: fetchLimpiadores });
   const nombreLimp = (id: number | null | undefined) =>
-    id == null ? null : limpiadoresQ.data?.find((p) => p.id_persona === id)?.nombre ?? `#${id}`;
+    id == null ? null : (() => {
+      const p = limpiadoresQ.data?.find((x) => x.id_persona === id);
+      return p ? fullName(p) : `#${id}`;
+    })();
 
   return (
     <AppShell title={`Limpiezas de hoy · ${todayISO()}`}>
