@@ -1,14 +1,9 @@
 import { createClient } from "@supabase/supabase-js";
 
-const url = import.meta.env.VITE_SUPABASE_URL as string;
-const key = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string;
+const SUPABASE_URL = "https://wayawbosopwqyivacxah.supabase.co";
+const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_FLy0zybGrk-OEItDBrjoqw_mSw7UB4J";
 
-if (!url || !key) {
-  // eslint-disable-next-line no-console
-  console.error("Missing VITE_SUPABASE_URL or VITE_SUPABASE_PUBLISHABLE_KEY build secrets");
-}
-
-export const supabase = createClient(url ?? "", key ?? "", {
+export const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
   auth: {
     persistSession: true,
     autoRefreshToken: true,
