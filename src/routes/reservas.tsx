@@ -29,7 +29,7 @@ function ReservasPage() {
     const s = search.trim().toLowerCase();
     if (!s) return q.data;
     return q.data.filter((r) =>
-      [r["Huésped"], r["Número"], r["Apartamento"]].some((v) => v && String(v).toLowerCase().includes(s)),
+      [r["Referencia"], r["Número"], r["Habitaciones"]].some((v) => v && String(v).toLowerCase().includes(s)),
     );
   }, [q.data, search]);
 
@@ -60,12 +60,12 @@ function ReservasPage() {
           <TableHeader>
             <TableRow>
               <TableHead>Número</TableHead>
-              <TableHead>Huésped</TableHead>
-              <TableHead>Apartamento</TableHead>
-              <TableHead>Llegada</TableHead>
-              <TableHead>Salida</TableHead>
+              <TableHead>Referencia</TableHead>
+              <TableHead>Habitación</TableHead>
+              <TableHead>Check-in</TableHead>
+              <TableHead>Check-out</TableHead>
               <TableHead>Pers.</TableHead>
-              <TableHead>Canal</TableHead>
+              <TableHead>Portal</TableHead>
               <TableHead>Estado</TableHead>
             </TableRow>
           </TableHeader>
@@ -86,12 +86,12 @@ function ReservasPage() {
                 onClick={() => setSelected(r["Número"])}
               >
                 <TableCell className="font-mono text-xs">{r["Número"]}</TableCell>
-                <TableCell className="font-medium">{r["Huésped"] ?? "—"}</TableCell>
-                <TableCell>{r["Apartamento"] ?? "—"}</TableCell>
-                <TableCell>{r["Llegada"] ?? "—"}</TableCell>
-                <TableCell>{r["Salida"] ?? "—"}</TableCell>
-                <TableCell>{r["Personas"] ?? "—"}</TableCell>
-                <TableCell>{r["Canal"] ?? "—"}</TableCell>
+                <TableCell className="font-medium">{r["Referencia"] ?? "—"}</TableCell>
+                <TableCell>{r["Habitaciones"] ?? "—"}</TableCell>
+                <TableCell>{r["Check in"] ?? "—"}</TableCell>
+                <TableCell>{r["Check-out"] ?? "—"}</TableCell>
+                <TableCell>{r["Huéspedes"] ?? "—"}</TableCell>
+                <TableCell>{r["Portal"] ?? "—"}</TableCell>
                 <TableCell><Badge variant="secondary">{r["Estado"] ?? "—"}</Badge></TableCell>
               </TableRow>
             ))}

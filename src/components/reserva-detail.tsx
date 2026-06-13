@@ -61,7 +61,7 @@ export function ReservaDetail({
         <DialogHeader>
           <DialogTitle>Reserva {numero}</DialogTitle>
           <DialogDescription>
-            {reserva?.["Huésped"] ?? ""} · {reserva?.["Apartamento"] ?? ""}
+            {reserva?.["Referencia"] ?? ""} · {reserva?.["Habitaciones"] ?? ""}
           </DialogDescription>
         </DialogHeader>
 
@@ -70,11 +70,11 @@ export function ReservaDetail({
         ) : (
           <div className="space-y-6">
             <section className="grid grid-cols-2 gap-3 text-sm">
-              <Info label="Llegada" value={reserva["Llegada"]} />
-              <Info label="Salida" value={reserva["Salida"]} />
-              <Info label="Personas" value={reserva["Personas"]} />
-              <Info label="Canal" value={reserva["Canal"]} />
-              <Info label="Importe" value={reserva["Importe"] != null ? `${reserva["Importe"]} €` : null} />
+              <Info label="Check-in" value={reserva["Check in"]} />
+              <Info label="Check-out" value={reserva["Check-out"]} />
+              <Info label="Huéspedes" value={reserva["Huéspedes"]} />
+              <Info label="Portal" value={reserva["Portal"]} />
+              <Info label="Cobros" value={reserva["Cobros"] != null ? `${reserva["Cobros"]} €` : null} />
               <Info label="Estado" value={<Badge variant="secondary">{reserva["Estado"] ?? "—"}</Badge>} />
               <Info label="Email" value={reserva["Email"]} />
               <Info label="Teléfono" value={reserva["Teléfono"]} />

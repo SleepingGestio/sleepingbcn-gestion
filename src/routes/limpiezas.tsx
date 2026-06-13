@@ -15,7 +15,7 @@ import { fullName } from "@/lib/types";
 
 async function fetchSalidasHoy(): Promise<Reserva[]> {
   const today = todayISO();
-  const { data: kb, error } = await supabase.from("reservas_kb").select("*").eq("Salida", today);
+  const { data: kb, error } = await supabase.from("reservas_kb").select("*").eq("Check-out", today);
   if (error) throw error;
   const nums = (kb ?? []).map((r) => (r as ReservaKB)["Número"]);
   if (!nums.length) return [];
@@ -58,8 +58,8 @@ function LimpiezasPage() {
             )}
             {q.data?.map((r) => (
               <TableRow key={r["Número"]} className="cursor-pointer" onClick={() => setSelected(r["Número"])}>
-                <TableCell className="font-medium">{r["Apartamento"] ?? "—"}</TableCell>
-                <TableCell>{r["Huésped"] ?? "—"}</TableCell>
+                <TableCell className="font-medium">{r["Habitaciones"] ?? "—"}</TableCell>
+                <TableCell>{r["Referencia"] ?? "—"}</TableCell>
                 <TableCell>{nombreLimp(r.gestio?.PersLImpAsig) ?? <span className="text-muted-foreground">Sin asignar</span>}</TableCell>
                 <TableCell>
                   {r.gestio?.ReadyCheckIn

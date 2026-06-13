@@ -1,15 +1,29 @@
 export type ReservaKB = {
   "Número": string;
-  "Llegada": string | null;
-  "Salida": string | null;
-  "Huésped": string | null;
-  "Apartamento": string | null;
-  "Canal": string | null;
+  "Check in": string | null;
+  "Check-out": string | null;
+  "Referencia": string | null;
+  "Habitaciones": string | null;
+  "Portal": string | null;
   "Estado": string | null;
-  "Personas": number | null;
-  "Importe": number | null;
+  "Huéspedes": number | null;
+  "Cobros": number | null;
   "Email": string | null;
   "Teléfono": string | null;
+  "Hora estimada de llegada": string | null;
+  "Hora estimada de salida": string | null;
+  "Notas internas": string | null;
+  "Notas": string | null;
+  "Cargo estancia": number | null;
+  "Cargo tasa turística": number | null;
+  "Pendiente de pago": number | null;
+  "Pagado": number | null;
+  "Comisiones": number | null;
+  "Fecha de creación": string | null;
+  "Fecha de cancelación": string | null;
+  "Método de adquisición": string | null;
+  "Creado por": string | null;
+  "fecha_ultima_importacion": string | null;
   [key: string]: unknown;
 };
 

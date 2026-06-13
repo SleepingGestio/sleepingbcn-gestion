@@ -42,9 +42,9 @@ function CheckinsPage() {
             {q.data?.map((r) => (
               <TableRow key={r["Número"]} className="cursor-pointer" onClick={() => setSelected(r["Número"])}>
                 <TableCell className="font-mono">{r.gestio?.HCheckInConf ?? "—"}</TableCell>
-                <TableCell className="font-medium">{r["Huésped"] ?? "—"}</TableCell>
-                <TableCell>{r["Apartamento"] ?? "—"}</TableCell>
-                <TableCell>{r["Personas"] ?? "—"}</TableCell>
+                <TableCell className="font-medium">{r["Referencia"] ?? "—"}</TableCell>
+                <TableCell>{r["Habitaciones"] ?? "—"}</TableCell>
+                <TableCell>{r["Huéspedes"] ?? "—"}</TableCell>
                 <TableCell>{r["Teléfono"] ?? "—"}</TableCell>
                 <TableCell>
                   {r.gestio?.ReadyCheckIn
