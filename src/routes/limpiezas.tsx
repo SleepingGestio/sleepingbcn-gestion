@@ -9,6 +9,8 @@ import { Badge } from "@/components/ui/badge";
 import { ReservaDetail } from "@/components/reserva-detail";
 import { supabase } from "@/integrations/supabase/client";
 import type { Reserva, ReservaGestio, ReservaKB } from "@/lib/types";
+import { useQuery as useQuery2 } from "@tanstack/react-query";
+import { fetchLimpiadores } from "@/lib/catalogos";
 
 async function fetchSalidasHoy(): Promise<Reserva[]> {
   const today = todayISO();
@@ -29,6 +31,9 @@ export const Route = createFileRoute("/limpiezas")({
 function LimpiezasPage() {
   const [selected, setSelected] = useState<string | null>(null);
   const q = useQuery({ queryKey: ["limpiezas-hoy"], queryFn: fetchSalidasHoy });
+  const limpiadoresQ = useQuery2({ queryKey: ["limpiadores"], queryFn: fetchLimpiadores });
+  const nombreLimp = (id: number | null | undefined) =>
+    id == null ? null : limpiadoresQ.data?.find((p) => p.id_persona === id)?.nombre ?? `#${id}`;
 
   return (
     <AppShell title={`Limpiezas de hoy · ${todayISO()}`}>
@@ -51,9 +56,9 @@ function LimpiezasPage() {
               <TableRow key={r["Número"]} className="cursor-pointer" onClick={() => setSelected(r["Número"])}>
                 <TableCell className="font-medium">{r["Apartamento"] ?? "—"}</TableCell>
                 <TableCell>{r["Huésped"] ?? "—"}</TableCell>
-                <TableCell>{r.gestio?.limpiador_asignado ?? <span className="text-muted-foreground">Sin asignar</span>}</TableCell>
+                <TableCell>{nombreLimp(r.gestio?.PersLImpAsig) ?? <span className="text-muted-foreground">Sin asignar</span>}</TableCell>
                 <TableCell>
-                  {r.gestio?.limpieza_realizada
+                  {r.gestio?.ReadyCheckIn
                     ? <Badge>Limpio</Badge>
                     : <Badge variant="outline">Pendiente</Badge>}
                 </TableCell>

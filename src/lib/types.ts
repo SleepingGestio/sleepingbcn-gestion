@@ -15,14 +15,21 @@ export type ReservaKB = {
 
 export type ReservaGestio = {
   "Número": string;
-  hora_llegada_estimada: string | null;
-  check_in_realizado: boolean | null;
-  limpieza_realizada: boolean | null;
-  limpiador_asignado: string | null;
-  fianza_recibida: boolean | null;
-  documento_recibido: boolean | null;
-  notas: string | null;
-  updated_at?: string | null;
+  HCheckInConf: string | null;
+  HCheckOutConf: string | null;
+  ParteeEnv: string | null;
+  ParteeRecl1: string | null;
+  ParteeRecl2: string | null;
+  ParteeRecl3: string | null;
+  AgCheckIN: number | null;
+  PersLImpAsig: number | null;
+  ImpTTAX: number | null;
+  TaxCobradas: number | null;
+  ReadyCheckIn: boolean | null;
+  NotasGestio: string | null;
 };
+
+export type AgCheckIn = { id_agente: number; nombre: string };
+export type PersLimp = { id_persona: number; nombre: string };
 
 export type Reserva = ReservaKB & { gestio: ReservaGestio | null };
