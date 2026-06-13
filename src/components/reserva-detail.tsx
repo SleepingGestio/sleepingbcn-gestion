@@ -6,9 +6,12 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { fetchReserva, upsertGestio } from "@/lib/reservas";
+import { fetchAgentes, fetchLimpiadores } from "@/lib/catalogos";
 import type { Reserva, ReservaGestio } from "@/lib/types";
 import { toast } from "sonner";
+import { useQuery } from "@tanstack/react-query";
 
 export function ReservaDetail({
   numero,
@@ -24,6 +27,9 @@ export function ReservaDetail({
   const [reserva, setReserva] = useState<Reserva | null>(null);
   const [g, setG] = useState<Partial<ReservaGestio>>({});
   const [saving, setSaving] = useState(false);
+
+  const agentesQ = useQuery({ queryKey: ["agentes"], queryFn: fetchAgentes });
+  const limpiadoresQ = useQuery({ queryKey: ["limpiadores"], queryFn: fetchLimpiadores });
 
   useEffect(() => {
     if (!numero || !open) return;
@@ -78,33 +84,113 @@ export function ReservaDetail({
               <h3 className="font-medium text-sm">Gestión interna</h3>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label>Hora de llegada estimada</Label>
+                  <Label>Hora check-in confirmada</Label>
                   <Input
                     type="time"
-                    value={g.hora_llegada_estimada ?? ""}
-                    onChange={(e) => setG({ ...g, hora_llegada_estimada: e.target.value || null })}
+                    value={g.HCheckInConf ?? ""}
+                    onChange={(e) => setG({ ...g, HCheckInConf: e.target.value || null })}
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label>Limpiador asignado</Label>
+                  <Label>Hora check-out confirmada</Label>
                   <Input
-                    value={g.limpiador_asignado ?? ""}
-                    onChange={(e) => setG({ ...g, limpiador_asignado: e.target.value || null })}
+                    type="time"
+                    value={g.HCheckOutConf ?? ""}
+                    onChange={(e) => setG({ ...g, HCheckOutConf: e.target.value || null })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Agente check-in</Label>
+                  <Select
+                    value={g.AgCheckIN != null ? String(g.AgCheckIN) : "none"}
+                    onValueChange={(v) => setG({ ...g, AgCheckIN: v === "none" ? null : Number(v) })}
+                  >
+                    <SelectTrigger><SelectValue placeholder="Sin asignar" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Sin asignar</SelectItem>
+                      {agentesQ.data?.map((a) => (
+                        <SelectItem key={a.id_agente} value={String(a.id_agente)}>{a.nombre}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Personal de limpieza</Label>
+                  <Select
+                    value={g.PersLImpAsig != null ? String(g.PersLImpAsig) : "none"}
+                    onValueChange={(v) => setG({ ...g, PersLImpAsig: v === "none" ? null : Number(v) })}
+                  >
+                    <SelectTrigger><SelectValue placeholder="Sin asignar" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Sin asignar</SelectItem>
+                      {limpiadoresQ.data?.map((p) => (
+                        <SelectItem key={p.id_persona} value={String(p.id_persona)}>{p.nombre}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Tasa turística (€)</Label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    value={g.ImpTTAX ?? ""}
+                    onChange={(e) => setG({ ...g, ImpTTAX: e.target.value === "" ? null : Number(e.target.value) })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Tasa cobrada (€)</Label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    value={g.TaxCobradas ?? ""}
+                    onChange={(e) => setG({ ...g, TaxCobradas: e.target.value === "" ? null : Number(e.target.value) })}
                   />
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-3">
-                <Check label="Check-in realizado" checked={!!g.check_in_realizado} onChange={(v) => setG({ ...g, check_in_realizado: v })} />
-                <Check label="Limpieza realizada" checked={!!g.limpieza_realizada} onChange={(v) => setG({ ...g, limpieza_realizada: v })} />
-                <Check label="Fianza recibida" checked={!!g.fianza_recibida} onChange={(v) => setG({ ...g, fianza_recibida: v })} />
-                <Check label="Documento recibido" checked={!!g.documento_recibido} onChange={(v) => setG({ ...g, documento_recibido: v })} />
+                <Check label="Listo para check-in" checked={!!g.ReadyCheckIn} onChange={(v) => setG({ ...g, ReadyCheckIn: v })} />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Parte policía enviado</Label>
+                  <Input
+                    type="datetime-local"
+                    value={toLocal(g.ParteeEnv)}
+                    onChange={(e) => setG({ ...g, ParteeEnv: e.target.value ? new Date(e.target.value).toISOString() : null })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Reclamación 1</Label>
+                  <Input
+                    type="datetime-local"
+                    value={toLocal(g.ParteeRecl1)}
+                    onChange={(e) => setG({ ...g, ParteeRecl1: e.target.value ? new Date(e.target.value).toISOString() : null })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Reclamación 2</Label>
+                  <Input
+                    type="datetime-local"
+                    value={toLocal(g.ParteeRecl2)}
+                    onChange={(e) => setG({ ...g, ParteeRecl2: e.target.value ? new Date(e.target.value).toISOString() : null })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Reclamación 3</Label>
+                  <Input
+                    type="datetime-local"
+                    value={toLocal(g.ParteeRecl3)}
+                    onChange={(e) => setG({ ...g, ParteeRecl3: e.target.value ? new Date(e.target.value).toISOString() : null })}
+                  />
+                </div>
               </div>
               <div className="space-y-2">
-                <Label>Notas</Label>
+                <Label>Notas de gestión</Label>
                 <Textarea
                   rows={4}
-                  value={g.notas ?? ""}
-                  onChange={(e) => setG({ ...g, notas: e.target.value || null })}
+                  value={g.NotasGestio ?? ""}
+                  onChange={(e) => setG({ ...g, NotasGestio: e.target.value || null })}
                 />
               </div>
             </section>
@@ -136,4 +222,12 @@ function Check({ label, checked, onChange }: { label: string; checked: boolean; 
       <span>{label}</span>
     </label>
   );
+}
+
+function toLocal(iso: string | null | undefined): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return "";
+  const off = d.getTimezoneOffset() * 60000;
+  return new Date(d.getTime() - off).toISOString().slice(0, 16);
 }

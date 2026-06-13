@@ -41,14 +41,14 @@ function CheckinsPage() {
             )}
             {q.data?.map((r) => (
               <TableRow key={r["Número"]} className="cursor-pointer" onClick={() => setSelected(r["Número"])}>
-                <TableCell className="font-mono">{r.gestio?.hora_llegada_estimada ?? "—"}</TableCell>
+                <TableCell className="font-mono">{r.gestio?.HCheckInConf ?? "—"}</TableCell>
                 <TableCell className="font-medium">{r["Huésped"] ?? "—"}</TableCell>
                 <TableCell>{r["Apartamento"] ?? "—"}</TableCell>
                 <TableCell>{r["Personas"] ?? "—"}</TableCell>
                 <TableCell>{r["Teléfono"] ?? "—"}</TableCell>
                 <TableCell>
-                  {r.gestio?.check_in_realizado
-                    ? <Badge>Realizado</Badge>
+                  {r.gestio?.ReadyCheckIn
+                    ? <Badge>Listo</Badge>
                     : <Badge variant="outline">Pendiente</Badge>}
                 </TableCell>
               </TableRow>
