@@ -16,7 +16,7 @@ export const Route = createFileRoute("/reservas")({
 
 function ReservasPage() {
   const [search, setSearch] = useState("");
-  const [estado, setEstado] = useState<string>("all");
+  const [estado, setEstado] = useState<string>("Confirmada");
   const [selected, setSelected] = useState<string | null>(null);
 
   const q = useQuery({

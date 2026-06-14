@@ -74,7 +74,6 @@ export function ReservaDetail({
               <Info label="Check-out" value={reserva["Check-out"]} />
               <Info label="Huéspedes" value={reserva["Huéspedes"]} />
               <Info label="Portal" value={reserva["Portal"]} />
-              <Info label="Cobros" value={reserva["Cobros"] != null ? `${reserva["Cobros"]} €` : null} />
               <Info label="Estado" value={<Badge variant="secondary">{reserva["Estado"] ?? "—"}</Badge>} />
               <Info label="Email" value={reserva["Email"]} />
               <Info label="Teléfono" value={reserva["Teléfono"]} />
@@ -128,24 +127,6 @@ export function ReservaDetail({
                       ))}
                     </SelectContent>
                   </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label>Tasa turística (€)</Label>
-                  <Input
-                    type="number"
-                    step="0.01"
-                    value={g.ImpTTAX ?? ""}
-                    onChange={(e) => setG({ ...g, ImpTTAX: e.target.value === "" ? null : Number(e.target.value) })}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Tasa cobrada (€)</Label>
-                  <Input
-                    type="number"
-                    step="0.01"
-                    value={g.TaxCobradas ?? ""}
-                    onChange={(e) => setG({ ...g, TaxCobradas: e.target.value === "" ? null : Number(e.target.value) })}
-                  />
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-3">
