@@ -40,6 +40,7 @@ export type ReservaGestio = {
   ImpTTAX: number | null;
   TaxCobradas: number | null;
   ReadyCheckIn: boolean | null;
+  EnLimpieza: boolean | null;
   NotasGestio: string | null;
 };
 

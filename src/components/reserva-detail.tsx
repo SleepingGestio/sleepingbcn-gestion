@@ -5,8 +5,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { EstadoBadge } from "@/components/estado-badge";
 import { fetchReserva, upsertGestio } from "@/lib/reservas";
 import { fetchAgentes, fetchLimpiadores } from "@/lib/catalogos";
 import { fullName, type Reserva, type ReservaGestio } from "@/lib/types";
@@ -74,7 +74,7 @@ export function ReservaDetail({
               <Info label="Check-out" value={reserva["Check-out"]} />
               <Info label="Huéspedes" value={reserva["Huéspedes"]} />
               <Info label="Portal" value={reserva["Portal"]} />
-              <Info label="Estado" value={<Badge variant="secondary">{reserva["Estado"] ?? "—"}</Badge>} />
+              <Info label="Estado" value={<EstadoBadge estado={reserva["Estado"]} enLimpieza={reserva.gestio?.EnLimpieza} />} />
               <Info label="Email" value={reserva["Email"]} />
               <Info label="Teléfono" value={reserva["Teléfono"]} />
             </section>
