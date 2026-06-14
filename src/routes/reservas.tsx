@@ -6,9 +6,9 @@ import { AppShell } from "@/components/app-shell";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { ReservaDetail } from "@/components/reserva-detail";
+import { EstadoBadge } from "@/components/estado-badge";
 
 export const Route = createFileRoute("/reservas")({
   component: ReservasPage,
@@ -92,7 +92,7 @@ function ReservasPage() {
                 <TableCell>{r["Check-out"] ?? "—"}</TableCell>
                 <TableCell>{r["Huéspedes"] ?? "—"}</TableCell>
                 <TableCell>{r["Portal"] ?? "—"}</TableCell>
-                <TableCell><Badge variant="secondary">{r["Estado"] ?? "—"}</Badge></TableCell>
+                <TableCell><EstadoBadge estado={r["Estado"]} enLimpieza={r.gestio?.EnLimpieza} /></TableCell>
               </TableRow>
             ))}
           </TableBody>

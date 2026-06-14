@@ -5,8 +5,9 @@ import { fetchReservas, todayISO } from "@/lib/reservas";
 import { AppShell } from "@/components/app-shell";
 import { Card } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
 import { ReservaDetail } from "@/components/reserva-detail";
+import { EstadoBadge } from "@/components/estado-badge";
+import { Badge } from "@/components/ui/badge";
 
 export const Route = createFileRoute("/checkins")({
   component: CheckinsPage,
@@ -31,6 +32,7 @@ function CheckinsPage() {
               <TableHead>Apartamento</TableHead>
               <TableHead>Pers.</TableHead>
               <TableHead>Teléfono</TableHead>
+              <TableHead>Listo</TableHead>
               <TableHead>Estado</TableHead>
             </TableRow>
           </TableHeader>
@@ -51,6 +53,7 @@ function CheckinsPage() {
                     ? <Badge>Listo</Badge>
                     : <Badge variant="outline">Pendiente</Badge>}
                 </TableCell>
+                <TableCell><EstadoBadge estado={r["Estado"]} enLimpieza={r.gestio?.EnLimpieza} /></TableCell>
               </TableRow>
             ))}
           </TableBody>
