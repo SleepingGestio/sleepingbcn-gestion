@@ -128,36 +128,6 @@ export function ReservaDetail({
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="space-y-2">
-                  <Label>Agente check-in</Label>
-                  <Select
-                    value={g.AgCheckIN != null ? String(g.AgCheckIN) : "none"}
-                    onValueChange={(v) => setG({ ...g, AgCheckIN: v === "none" ? null : Number(v) })}
-                  >
-                    <SelectTrigger><SelectValue placeholder="Sin asignar" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">Sin asignar</SelectItem>
-                      {agentesQ.data?.map((a) => (
-                        <SelectItem key={a.id_agente} value={String(a.id_agente)}>{fullName(a)}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label>Personal de limpieza</Label>
-                  <Select
-                    value={g.PersLImpAsig != null ? String(g.PersLImpAsig) : "none"}
-                    onValueChange={(v) => setG({ ...g, PersLImpAsig: v === "none" ? null : Number(v) })}
-                  >
-                    <SelectTrigger><SelectValue placeholder="Sin asignar" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">Sin asignar</SelectItem>
-                      {limpiadoresQ.data?.map((p) => (
-                        <SelectItem key={p.id_persona} value={String(p.id_persona)}>{fullName(p)}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <Check label="Listo para check-in" checked={!!g.ReadyCheckIn} onChange={(v) => setG({ ...g, ReadyCheckIn: v })} />
