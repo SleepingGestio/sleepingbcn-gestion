@@ -7,7 +7,6 @@ import { Card } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ReservaDetail } from "@/components/reserva-detail";
 import { EstadoBadge } from "@/components/estado-badge";
-import { Badge } from "@/components/ui/badge";
 
 export const Route = createFileRoute("/checkins")({
   component: CheckinsPage,
@@ -37,9 +36,9 @@ function CheckinsPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {q.isLoading && <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground">Cargando…</TableCell></TableRow>}
+            {q.isLoading && <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">Cargando…</TableCell></TableRow>}
             {!q.isLoading && (q.data?.length ?? 0) === 0 && (
-              <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground">No hay check-ins hoy</TableCell></TableRow>
+              <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">No hay check-ins hoy</TableCell></TableRow>
             )}
             {q.data?.map((r) => (
               <TableRow key={r["Número"]} className="cursor-pointer" onClick={() => setSelected(r["Número"])}>
@@ -50,8 +49,8 @@ function CheckinsPage() {
                 <TableCell>{r["Teléfono"] ?? "—"}</TableCell>
                 <TableCell>
                   {r.gestio?.ReadyCheckIn
-                    ? <Badge>Listo</Badge>
-                    : <Badge variant="outline">Pendiente</Badge>}
+                    ? <span className="text-xs font-medium text-green-700">Listo</span>
+                    : <span className="text-xs text-muted-foreground">Pendiente</span>}
                 </TableCell>
                 <TableCell><EstadoBadge estado={r["Estado"]} enLimpieza={r.gestio?.EnLimpieza} /></TableCell>
               </TableRow>
