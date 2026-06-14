@@ -74,7 +74,6 @@ export function ReservaDetail({
               <Info label="Check-out" value={reserva["Check-out"]} />
               <Info label="Huéspedes" value={reserva["Huéspedes"]} />
               <Info label="Portal" value={reserva["Portal"]} />
-              <Info label="Cobros" value={reserva["Cobros"] != null ? `${reserva["Cobros"]} €` : null} />
               <Info label="Estado" value={<Badge variant="secondary">{reserva["Estado"] ?? "—"}</Badge>} />
               <Info label="Email" value={reserva["Email"]} />
               <Info label="Teléfono" value={reserva["Teléfono"]} />
@@ -130,22 +129,34 @@ export function ReservaDetail({
                   </Select>
                 </div>
                 <div className="space-y-2">
-                  <Label>Tasa turística (€)</Label>
-                  <Input
-                    type="number"
-                    step="0.01"
-                    value={g.ImpTTAX ?? ""}
-                    onChange={(e) => setG({ ...g, ImpTTAX: e.target.value === "" ? null : Number(e.target.value) })}
-                  />
+                  <Label>Agente check-in</Label>
+                  <Select
+                    value={g.AgCheckIN != null ? String(g.AgCheckIN) : "none"}
+                    onValueChange={(v) => setG({ ...g, AgCheckIN: v === "none" ? null : Number(v) })}
+                  >
+                    <SelectTrigger><SelectValue placeholder="Sin asignar" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Sin asignar</SelectItem>
+                      {agentesQ.data?.map((a) => (
+                        <SelectItem key={a.id_agente} value={String(a.id_agente)}>{fullName(a)}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div className="space-y-2">
-                  <Label>Tasa cobrada (€)</Label>
-                  <Input
-                    type="number"
-                    step="0.01"
-                    value={g.TaxCobradas ?? ""}
-                    onChange={(e) => setG({ ...g, TaxCobradas: e.target.value === "" ? null : Number(e.target.value) })}
-                  />
+                  <Label>Personal de limpieza</Label>
+                  <Select
+                    value={g.PersLImpAsig != null ? String(g.PersLImpAsig) : "none"}
+                    onValueChange={(v) => setG({ ...g, PersLImpAsig: v === "none" ? null : Number(v) })}
+                  >
+                    <SelectTrigger><SelectValue placeholder="Sin asignar" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Sin asignar</SelectItem>
+                      {limpiadoresQ.data?.map((p) => (
+                        <SelectItem key={p.id_persona} value={String(p.id_persona)}>{fullName(p)}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-3">
