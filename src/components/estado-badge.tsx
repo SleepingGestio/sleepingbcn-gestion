@@ -10,6 +10,19 @@ const STYLES: Record<string, string> = {
   "Check-in realizado": "bg-blue-600 text-white hover:bg-blue-600",
   "En salida": "bg-pink-500 text-white hover:bg-pink-500",
   "En limpieza": "bg-teal-500 text-white hover:bg-teal-500",
+  "Cancelada": "bg-red-600 text-white hover:bg-red-600",
+};
+
+const ABBR: Record<string, string> = {
+  "Confirmada": "CONF",
+  "En espera de confirmación": "PTE",
+  "En espera de confirmación (Caducadas)": "PTE CAD",
+  "Check-out realizado": "C-OUT",
+  "No show": "NO SHOW",
+  "Check-in realizado": "C-IN",
+  "En salida": "SALIDA",
+  "En limpieza": "LIMP",
+  "Cancelada": "CANC",
 };
 
 export function EstadoBadge({
@@ -21,7 +34,19 @@ export function EstadoBadge({
   enLimpieza?: boolean | null;
   className?: string;
 }) {
-  const label = enLimpieza ? "En limpieza" : (estado ?? "—");
-  const style = STYLES[label] ?? "bg-secondary text-secondary-foreground hover:bg-secondary";
-  return <Badge className={cn("border-transparent", style, className)}>{label}</Badge>;
+  const full = enLimpieza ? "En limpieza" : (estado ?? "—");
+  const label = ABBR[full] ?? full;
+  const style = STYLES[full] ?? "bg-secondary text-secondary-foreground hover:bg-secondary";
+  return (
+    <Badge
+      title={full}
+      className={cn(
+        "border-transparent px-1.5 py-0 text-[10px] font-semibold leading-4 tracking-wide rounded",
+        style,
+        className,
+      )}
+    >
+      {label}
+    </Badge>
+  );
 }

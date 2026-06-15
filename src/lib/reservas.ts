@@ -6,10 +6,12 @@ export async function fetchReservas(params?: {
   to?: string;
   search?: string;
   estado?: string;
+  dateField?: "Check in" | "Check-out";
 }): Promise<Reserva[]> {
-  let q = supabase.from("reservas_kb").select("*").order("Check in", { ascending: false });
-  if (params?.from) q = q.gte("Check in", params.from);
-  if (params?.to) q = q.lte("Check in", params.to);
+  const dateField = params?.dateField ?? "Check in";
+  let q = supabase.from("reservas_kb").select("*").order(dateField, { ascending: false });
+  if (params?.from) q = q.gte(dateField, params.from);
+  if (params?.to) q = q.lte(dateField, params.to);
   if (params?.estado) q = q.eq("Estado", params.estado);
   if (params?.search) {
     q = q.or(`"Referencia".ilike.%${params.search}%,"Número".ilike.%${params.search}%`);
