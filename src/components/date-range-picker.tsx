@@ -1,11 +1,11 @@
 import { useState } from "react";
-import { format } from "date-fns";
-import { es } from "date-fns/locale";
 import { CalendarIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
+import { fmtDate } from "@/lib/format";
+import { es } from "date-fns/locale";
 import type { DateRange } from "react-day-picker";
 
 export function toISO(d: Date): string {
@@ -18,6 +18,13 @@ export type Range = { from: string; to: string };
 export function todayRange(): Range {
   const t = toISO(new Date());
   return { from: t, to: t };
+}
+
+export function nextWeekRange(): Range {
+  const today = new Date();
+  const end = new Date(today);
+  end.setDate(end.getDate() + 6);
+  return { from: toISO(today), to: toISO(end) };
 }
 
 function addDays(base: Date, n: number) {
@@ -39,8 +46,8 @@ export function DateRangePicker({
 
   const label =
     value.from === value.to
-      ? format(fromD, "PPP", { locale: es })
-      : `${format(fromD, "d MMM", { locale: es })} → ${format(toD, "d MMM y", { locale: es })}`;
+      ? fmtDate(fromD)
+      : `${fmtDate(fromD)} → ${fmtDate(toD)}`;
 
   const setPreset = (days: number) => {
     const today = new Date();
