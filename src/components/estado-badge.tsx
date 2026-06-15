@@ -29,19 +29,23 @@ export function EstadoBadge({
   estado,
   enLimpieza,
   className,
+  full: showFull,
 }: {
   estado: string | null | undefined;
   enLimpieza?: boolean | null;
   className?: string;
+  full?: boolean;
 }) {
   const full = enLimpieza ? "En limpieza" : (estado ?? "—");
-  const label = ABBR[full] ?? full;
+  const label = showFull ? full : (ABBR[full] ?? full);
   const style = STYLES[full] ?? "bg-secondary text-secondary-foreground hover:bg-secondary";
   return (
     <Badge
       title={full}
       className={cn(
-        "border-transparent px-1.5 py-0 text-[10px] font-semibold leading-4 tracking-wide rounded",
+        showFull
+          ? "border-transparent px-2.5 py-0.5 text-xs font-semibold rounded"
+          : "border-transparent px-1.5 py-0 text-[10px] font-semibold leading-4 tracking-wide rounded",
         style,
         className,
       )}

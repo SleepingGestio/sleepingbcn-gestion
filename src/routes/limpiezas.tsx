@@ -12,13 +12,18 @@ import { EstadoBadge } from "@/components/estado-badge";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import { DateRangePicker, todayRange } from "@/components/date-range-picker";
-import { ArrowUpDown } from "lucide-react";
+import { SortHeader } from "@/components/sort-header";
+import { fmtDate, fmtTime } from "@/lib/format";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import { Check } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/limpiezas")({
   component: LimpiezasPage,
 });
 
-type SortKey = "checkout" | "limpiador";
+type SortKey = "checkout" | "limpiador" | "salidaKB" | "salidaConf";
 
 function LimpiezasPage() {
   const [selected, setSelected] = useState<string | null>(null);
@@ -55,18 +60,29 @@ function LimpiezasPage() {
     const arr = [...(q.data ?? [])];
     arr.sort((a, b) => {
       let av = "", bv = "";
-      if (sortKey === "checkout") {
-        av = a["Check-out"] ?? "";
-        bv = b["Check-out"] ?? "";
-      } else {
-        av = nombreLimp(a.gestio?.PersLImpAsig) ?? "";
-        bv = nombreLimp(b.gestio?.PersLImpAsig) ?? "";
+      switch (sortKey) {
+        case "checkout":
+          av = a["Check-out"] ?? ""; bv = b["Check-out"] ?? ""; break;
+        case "salidaKB":
+          av = a["Hora estimada de salida"] ?? ""; bv = b["Hora estimada de salida"] ?? ""; break;
+        case "salidaConf":
+          av = a.gestio?.HCheckOutConf ?? ""; bv = b.gestio?.HCheckOutConf ?? ""; break;
+        case "limpiador":
+          av = nombreLimp(a.gestio?.PersLImpAsig) ?? "";
+          bv = nombreLimp(b.gestio?.PersLImpAsig) ?? ""; break;
       }
       const c = av.localeCompare(bv);
       return sortDir === "asc" ? c : -c;
     });
     return arr;
   }, [q.data, sortKey, sortDir, limpiadoresQ.data]);
+  const asignarM = useMutation({
+    mutationFn: async ({ numero, id }: { numero: string; id: number | null }) =>
+      upsertGestio({ "Número": numero, PersLImpAsig: id }),
+    onSuccess: () => { q.refetch(); toast.success("Limpiador asignado"); },
+    onError: (e) => toast.error("Error: " + (e as Error).message),
+  });
+
 
   const toggleSort = (k: SortKey) => {
     if (sortKey === k) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
@@ -87,39 +103,70 @@ function LimpiezasPage() {
             <TableRow>
               <TableHead>Apartamento</TableHead>
               <TableHead>
-                <button className="inline-flex items-center gap-1" onClick={() => toggleSort("checkout")}>
-                  Check-out <ArrowUpDown className="h-3 w-3" />
-                </button>
+                <SortHeader label="Check-out" active={sortKey === "checkout"} dir={sortDir} onClick={() => toggleSort("checkout")} />
               </TableHead>
-              <TableHead>Llegada (KB)</TableHead>
-              <TableHead>Llegada (conf.)</TableHead>
-              <TableHead>Salida (KB)</TableHead>
-              <TableHead>Salida (conf.)</TableHead>
+              <TableHead>
+                <SortHeader label="Salida (KB)" active={sortKey === "salidaKB"} dir={sortDir} onClick={() => toggleSort("salidaKB")} />
+              </TableHead>
+              <TableHead>
+                <SortHeader label="Salida (conf.)" active={sortKey === "salidaConf"} dir={sortDir} onClick={() => toggleSort("salidaConf")} />
+              </TableHead>
               <TableHead>Huésped</TableHead>
               <TableHead>
-                <button className="inline-flex items-center gap-1" onClick={() => toggleSort("limpiador")}>
-                  Limpiador <ArrowUpDown className="h-3 w-3" />
-                </button>
+                <SortHeader label="Limpiador" active={sortKey === "limpiador"} dir={sortDir} onClick={() => toggleSort("limpiador")} />
               </TableHead>
               <TableHead>En limpieza</TableHead>
               <TableHead>Estado</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {q.isLoading && <TableRow><TableCell colSpan={10} className="text-center py-8 text-muted-foreground">Cargando…</TableCell></TableRow>}
+            {q.isLoading && <TableRow><TableCell colSpan={8} className="text-center py-8 text-muted-foreground">Cargando…</TableCell></TableRow>}
             {!q.isLoading && sorted.length === 0 && (
-              <TableRow><TableCell colSpan={10} className="text-center py-8 text-muted-foreground">Sin estancias en curso en el rango</TableCell></TableRow>
+              <TableRow><TableCell colSpan={8} className="text-center py-8 text-muted-foreground">Sin estancias en curso en el rango</TableCell></TableRow>
             )}
             {sorted.map((r) => (
               <TableRow key={r["Número"]} className="cursor-pointer" onClick={() => setSelected(r["Número"])}>
                 <TableCell className="font-medium">{r["Habitaciones"] ?? "—"}</TableCell>
-                <TableCell>{r["Check-out"] ?? "—"}</TableCell>
-                <TableCell className="font-mono text-xs">{r["Hora estimada de llegada"] ?? "—"}</TableCell>
-                <TableCell className="font-mono text-xs">{r.gestio?.HCheckInConf ?? "—"}</TableCell>
-                <TableCell className="font-mono text-xs">{r["Hora estimada de salida"] ?? "—"}</TableCell>
-                <TableCell className="font-mono text-xs">{r.gestio?.HCheckOutConf ?? "—"}</TableCell>
+                <TableCell>{fmtDate(r["Check-out"])}</TableCell>
+                <TableCell className="font-mono text-xs">{fmtTime(r["Hora estimada de salida"])}</TableCell>
+                <TableCell className="font-mono text-xs">{fmtTime(r.gestio?.HCheckOutConf)}</TableCell>
                 <TableCell>{r["Referencia"] ?? "—"}</TableCell>
-                <TableCell>{nombreLimp(r.gestio?.PersLImpAsig) ?? <span className="text-muted-foreground">Sin asignar</span>}</TableCell>
+                <TableCell onClick={(e) => e.stopPropagation()}>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <button className="rounded px-2 py-1 -mx-2 text-left hover:bg-muted transition-colors w-full">
+                        {nombreLimp(r.gestio?.PersLImpAsig) ?? <span className="text-muted-foreground">Sin asignar</span>}
+                      </button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-56 p-0" align="start">
+                      <Command>
+                        <CommandInput placeholder="Buscar limpiador…" />
+                        <CommandList>
+                          <CommandEmpty>Sin resultados</CommandEmpty>
+                          <CommandGroup>
+                            <CommandItem
+                              value="__none__"
+                              onSelect={() => asignarM.mutate({ numero: r["Número"], id: null })}
+                            >
+                              <Check className={cn("mr-2 h-4 w-4", r.gestio?.PersLImpAsig == null ? "opacity-100" : "opacity-0")} />
+                              Sin asignar
+                            </CommandItem>
+                            {limpiadoresQ.data?.map((p) => (
+                              <CommandItem
+                                key={p.id_persona}
+                                value={fullName(p)}
+                                onSelect={() => asignarM.mutate({ numero: r["Número"], id: p.id_persona })}
+                              >
+                                <Check className={cn("mr-2 h-4 w-4", r.gestio?.PersLImpAsig === p.id_persona ? "opacity-100" : "opacity-0")} />
+                                {fullName(p)}
+                              </CommandItem>
+                            ))}
+                          </CommandGroup>
+                        </CommandList>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
+                </TableCell>
                 <TableCell onClick={(e) => e.stopPropagation()}>
                   <Switch
                     checked={!!r.gestio?.EnLimpieza}

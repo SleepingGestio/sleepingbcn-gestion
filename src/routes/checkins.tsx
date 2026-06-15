@@ -10,13 +10,14 @@ import { EstadoBadge } from "@/components/estado-badge";
 import { Switch } from "@/components/ui/switch";
 import { DateRangePicker, todayRange } from "@/components/date-range-picker";
 import { toast } from "sonner";
-import { ArrowUpDown } from "lucide-react";
+import { SortHeader } from "@/components/sort-header";
+import { fmtDate, fmtTime } from "@/lib/format";
 
 export const Route = createFileRoute("/checkins")({
   component: CheckinsPage,
 });
 
-type SortKey = "checkin" | "habitaciones";
+type SortKey = "checkin" | "habitaciones" | "horaKB" | "horaConf";
 
 function CheckinsPage() {
   const [selected, setSelected] = useState<string | null>(null);
@@ -40,8 +41,16 @@ function CheckinsPage() {
   const sorted = useMemo(() => {
     const arr = [...(q.data ?? [])];
     arr.sort((a, b) => {
-      const av = (sortKey === "checkin" ? a["Check in"] : a["Habitaciones"]) ?? "";
-      const bv = (sortKey === "checkin" ? b["Check in"] : b["Habitaciones"]) ?? "";
+      const pick = (r: typeof a) => {
+        switch (sortKey) {
+          case "checkin": return r["Check in"] ?? "";
+          case "habitaciones": return r["Habitaciones"] ?? "";
+          case "horaKB": return r["Hora estimada de llegada"] ?? "";
+          case "horaConf": return r.gestio?.HCheckInConf ?? "";
+        }
+      };
+      const av = pick(a);
+      const bv = pick(b);
       const c = String(av).localeCompare(String(bv));
       return sortDir === "asc" ? c : -c;
     });
@@ -64,17 +73,17 @@ function CheckinsPage() {
           <TableHeader>
             <TableRow>
               <TableHead>
-                <button className="inline-flex items-center gap-1" onClick={() => toggleSort("checkin")}>
-                  Check in <ArrowUpDown className="h-3 w-3" />
-                </button>
+                <SortHeader label="Check in" active={sortKey === "checkin"} dir={sortDir} onClick={() => toggleSort("checkin")} />
               </TableHead>
-              <TableHead>Hora (KB)</TableHead>
-              <TableHead>Hora (conf.)</TableHead>
+              <TableHead>
+                <SortHeader label="Hora (KB)" active={sortKey === "horaKB"} dir={sortDir} onClick={() => toggleSort("horaKB")} />
+              </TableHead>
+              <TableHead>
+                <SortHeader label="Hora (conf.)" active={sortKey === "horaConf"} dir={sortDir} onClick={() => toggleSort("horaConf")} />
+              </TableHead>
               <TableHead>Huésped</TableHead>
               <TableHead>
-                <button className="inline-flex items-center gap-1" onClick={() => toggleSort("habitaciones")}>
-                  Apartamento <ArrowUpDown className="h-3 w-3" />
-                </button>
+                <SortHeader label="Apartamento" active={sortKey === "habitaciones"} dir={sortDir} onClick={() => toggleSort("habitaciones")} />
               </TableHead>
               <TableHead>Pers.</TableHead>
               <TableHead>Teléfono</TableHead>
@@ -89,9 +98,9 @@ function CheckinsPage() {
             )}
             {sorted.map((r) => (
               <TableRow key={r["Número"]} className="cursor-pointer" onClick={() => setSelected(r["Número"])}>
-                <TableCell>{r["Check in"] ?? "—"}</TableCell>
-                <TableCell className="font-mono text-xs">{r["Hora estimada de llegada"] ?? "—"}</TableCell>
-                <TableCell className="font-mono text-xs">{r.gestio?.HCheckInConf ?? "—"}</TableCell>
+                <TableCell>{fmtDate(r["Check in"])}</TableCell>
+                <TableCell className="font-mono text-xs">{fmtTime(r["Hora estimada de llegada"])}</TableCell>
+                <TableCell className="font-mono text-xs">{fmtTime(r.gestio?.HCheckInConf)}</TableCell>
                 <TableCell className="font-medium">{r["Referencia"] ?? "—"}</TableCell>
                 <TableCell>{r["Habitaciones"] ?? "—"}</TableCell>
                 <TableCell>{r["Huéspedes"] ?? "—"}</TableCell>

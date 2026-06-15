@@ -12,6 +12,7 @@ import { fetchAgentes, fetchLimpiadores } from "@/lib/catalogos";
 import { fullName, type Reserva, type ReservaGestio } from "@/lib/types";
 import { toast } from "sonner";
 import { useQuery } from "@tanstack/react-query";
+import { fmtDate, fmtTime } from "@/lib/format";
 
 export function ReservaDetail({
   numero,
@@ -59,9 +60,11 @@ export function ReservaDetail({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Reserva {numero}</DialogTitle>
-          <DialogDescription>
-            {reserva?.["Referencia"] ?? ""} · {reserva?.["Habitaciones"] ?? ""}
+          <DialogTitle className="text-sm font-normal text-muted-foreground">
+            Reserva <span className="font-mono">{numero}</span>
+          </DialogTitle>
+          <DialogDescription className="sr-only">
+            Detalle de la reserva {numero}
           </DialogDescription>
         </DialogHeader>
 
@@ -69,15 +72,33 @@ export function ReservaDetail({
           <div className="py-8 text-center text-sm text-muted-foreground">Cargando…</div>
         ) : (
           <div className="space-y-6">
+            <div className="rounded-lg border bg-primary/5 px-4 py-3">
+              <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Apartamento</div>
+              <div className="text-lg font-bold text-foreground">{reserva["Habitaciones"] ?? "—"}</div>
+              <div className="mt-2 text-[11px] uppercase tracking-wide text-muted-foreground">Huésped</div>
+              <div className="text-base font-semibold">{reserva["Referencia"] ?? "—"}</div>
+              <div className="mt-1 flex flex-wrap gap-x-4 gap-y-0.5 text-sm text-muted-foreground">
+                {reserva["Email"] && <span>{reserva["Email"]}</span>}
+                {reserva["Teléfono"] && <span>{reserva["Teléfono"]}</span>}
+              </div>
+            </div>
+
             <section className="grid grid-cols-2 gap-3 text-sm">
-              <Info label="Check-in" value={reserva["Check in"]} />
-              <Info label="Check-out" value={reserva["Check-out"]} />
+              <Info label="Check-in" value={fmtDate(reserva["Check in"])} />
+              <Info label="Check-out" value={fmtDate(reserva["Check-out"])} />
+              <Info label="Hora llegada (KB)" value={fmtTime(reserva["Hora estimada de llegada"])} />
+              <Info label="Hora salida (KB)" value={fmtTime(reserva["Hora estimada de salida"])} />
               <Info label="Huéspedes" value={reserva["Huéspedes"]} />
               <Info label="Portal" value={reserva["Portal"]} />
-              <Info label="Estado" value={<EstadoBadge estado={reserva["Estado"]} enLimpieza={reserva.gestio?.EnLimpieza} />} />
-              <Info label="Email" value={reserva["Email"]} />
-              <Info label="Teléfono" value={reserva["Teléfono"]} />
+              <Info label="Estado" value={<EstadoBadge estado={reserva["Estado"]} enLimpieza={reserva.gestio?.EnLimpieza} full />} />
             </section>
+
+            {reserva["Notas internas"] && (
+              <section className="rounded-md border bg-muted/30 p-3 text-sm">
+                <div className="text-[11px] uppercase tracking-wide text-muted-foreground mb-1">Notas internas (KB)</div>
+                <div className="whitespace-pre-wrap">{reserva["Notas internas"]}</div>
+              </section>
+            )}
 
             <section className="space-y-4 border-t pt-4">
               <h3 className="font-medium text-sm">Gestión interna</h3>

@@ -9,6 +9,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Card } from "@/components/ui/card";
 import { ReservaDetail } from "@/components/reserva-detail";
 import { EstadoBadge } from "@/components/estado-badge";
+import { DateRangePicker, nextWeekRange } from "@/components/date-range-picker";
+import { fmtDate } from "@/lib/format";
 
 export const Route = createFileRoute("/reservas")({
   component: ReservasPage,
@@ -18,10 +20,17 @@ function ReservasPage() {
   const [search, setSearch] = useState("");
   const [estado, setEstado] = useState<string>("Confirmada");
   const [selected, setSelected] = useState<string | null>(null);
+  const [range, setRange] = useState(nextWeekRange);
 
   const q = useQuery({
-    queryKey: ["reservas", { estado }],
-    queryFn: () => fetchReservas({ estado: estado === "all" ? undefined : estado }),
+    queryKey: ["reservas", { estado, from: range.from, to: range.to }],
+    queryFn: () =>
+      fetchReservas({
+        estado: estado === "all" ? undefined : estado,
+        from: range.from,
+        to: range.to,
+        dateField: "Check in",
+      }),
   });
 
   const filtered = useMemo(() => {
@@ -36,6 +45,7 @@ function ReservasPage() {
   return (
     <AppShell title="Reservas">
       <div className="flex flex-col sm:flex-row gap-3 mb-4">
+        <DateRangePicker value={range} onChange={setRange} />
         <Input
           placeholder="Buscar por huésped, número o apartamento…"
           value={search}
@@ -88,8 +98,8 @@ function ReservasPage() {
                 <TableCell className="font-mono text-xs">{r["Número"]}</TableCell>
                 <TableCell className="font-medium">{r["Referencia"] ?? "—"}</TableCell>
                 <TableCell>{r["Habitaciones"] ?? "—"}</TableCell>
-                <TableCell>{r["Check in"] ?? "—"}</TableCell>
-                <TableCell>{r["Check-out"] ?? "—"}</TableCell>
+                <TableCell>{fmtDate(r["Check in"])}</TableCell>
+                <TableCell>{fmtDate(r["Check-out"])}</TableCell>
                 <TableCell>{r["Huéspedes"] ?? "—"}</TableCell>
                 <TableCell>{r["Portal"] ?? "—"}</TableCell>
                 <TableCell><EstadoBadge estado={r["Estado"]} enLimpieza={r.gestio?.EnLimpieza} /></TableCell>
