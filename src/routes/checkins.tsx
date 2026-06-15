@@ -1,34 +1,81 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
-import { useState } from "react";
-import { fetchReservas, todayISO } from "@/lib/reservas";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { useState, useMemo } from "react";
+import { fetchReservas, upsertGestio } from "@/lib/reservas";
 import { AppShell } from "@/components/app-shell";
 import { Card } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ReservaDetail } from "@/components/reserva-detail";
 import { EstadoBadge } from "@/components/estado-badge";
+import { Switch } from "@/components/ui/switch";
+import { DateRangePicker, todayRange } from "@/components/date-range-picker";
+import { toast } from "sonner";
+import { ArrowUpDown } from "lucide-react";
 
 export const Route = createFileRoute("/checkins")({
   component: CheckinsPage,
 });
 
+type SortKey = "checkin" | "habitaciones";
+
 function CheckinsPage() {
-  const today = todayISO();
   const [selected, setSelected] = useState<string | null>(null);
+  const [range, setRange] = useState(todayRange);
+  const [sortKey, setSortKey] = useState<SortKey>("checkin");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+
   const q = useQuery({
-    queryKey: ["checkins", today],
-    queryFn: () => fetchReservas({ from: today, to: today, estado: "Confirmada" }),
+    queryKey: ["checkins", range.from, range.to],
+    queryFn: () =>
+      fetchReservas({ from: range.from, to: range.to, estado: "Confirmada", dateField: "Check in" }),
   });
 
+  const toggleM = useMutation({
+    mutationFn: async ({ numero, value }: { numero: string; value: boolean }) =>
+      upsertGestio({ "Número": numero, ReadyCheckIn: value }),
+    onSuccess: () => { q.refetch(); },
+    onError: (e) => toast.error("Error: " + (e as Error).message),
+  });
+
+  const sorted = useMemo(() => {
+    const arr = [...(q.data ?? [])];
+    arr.sort((a, b) => {
+      const av = (sortKey === "checkin" ? a["Check in"] : a["Habitaciones"]) ?? "";
+      const bv = (sortKey === "checkin" ? b["Check in"] : b["Habitaciones"]) ?? "";
+      const c = String(av).localeCompare(String(bv));
+      return sortDir === "asc" ? c : -c;
+    });
+    return arr;
+  }, [q.data, sortKey, sortDir]);
+
+  const toggleSort = (k: SortKey) => {
+    if (sortKey === k) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    else { setSortKey(k); setSortDir("asc"); }
+  };
+
   return (
-    <AppShell title={`Check-ins de hoy · ${today}`}>
+    <AppShell title="Check-ins">
+      <div className="mb-4 flex items-center gap-3">
+        <DateRangePicker value={range} onChange={setRange} />
+        <span className="text-sm text-muted-foreground">{q.data?.length ?? 0} llegada(s)</span>
+      </div>
       <Card className="overflow-hidden bg-white">
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Hora</TableHead>
+              <TableHead>
+                <button className="inline-flex items-center gap-1" onClick={() => toggleSort("checkin")}>
+                  Check in <ArrowUpDown className="h-3 w-3" />
+                </button>
+              </TableHead>
+              <TableHead>Hora (KB)</TableHead>
+              <TableHead>Hora (conf.)</TableHead>
               <TableHead>Huésped</TableHead>
-              <TableHead>Apartamento</TableHead>
+              <TableHead>
+                <button className="inline-flex items-center gap-1" onClick={() => toggleSort("habitaciones")}>
+                  Apartamento <ArrowUpDown className="h-3 w-3" />
+                </button>
+              </TableHead>
               <TableHead>Pers.</TableHead>
               <TableHead>Teléfono</TableHead>
               <TableHead>Listo</TableHead>
@@ -36,21 +83,25 @@ function CheckinsPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {q.isLoading && <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">Cargando…</TableCell></TableRow>}
-            {!q.isLoading && (q.data?.length ?? 0) === 0 && (
-              <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">No hay check-ins hoy</TableCell></TableRow>
+            {q.isLoading && <TableRow><TableCell colSpan={9} className="text-center py-8 text-muted-foreground">Cargando…</TableCell></TableRow>}
+            {!q.isLoading && sorted.length === 0 && (
+              <TableRow><TableCell colSpan={9} className="text-center py-8 text-muted-foreground">No hay check-ins en el rango</TableCell></TableRow>
             )}
-            {q.data?.map((r) => (
+            {sorted.map((r) => (
               <TableRow key={r["Número"]} className="cursor-pointer" onClick={() => setSelected(r["Número"])}>
-                <TableCell className="font-mono">{r.gestio?.HCheckInConf ?? "—"}</TableCell>
+                <TableCell>{r["Check in"] ?? "—"}</TableCell>
+                <TableCell className="font-mono text-xs">{r["Hora estimada de llegada"] ?? "—"}</TableCell>
+                <TableCell className="font-mono text-xs">{r.gestio?.HCheckInConf ?? "—"}</TableCell>
                 <TableCell className="font-medium">{r["Referencia"] ?? "—"}</TableCell>
                 <TableCell>{r["Habitaciones"] ?? "—"}</TableCell>
                 <TableCell>{r["Huéspedes"] ?? "—"}</TableCell>
                 <TableCell>{r["Teléfono"] ?? "—"}</TableCell>
-                <TableCell>
-                  {r.gestio?.ReadyCheckIn
-                    ? <span className="text-xs font-medium text-green-700">Listo</span>
-                    : <span className="text-xs text-muted-foreground">Pendiente</span>}
+                <TableCell onClick={(e) => e.stopPropagation()}>
+                  <Switch
+                    checked={!!r.gestio?.ReadyCheckIn}
+                    disabled={toggleM.isPending}
+                    onCheckedChange={(v) => toggleM.mutate({ numero: r["Número"], value: v })}
+                  />
                 </TableCell>
                 <TableCell><EstadoBadge estado={r["Estado"]} enLimpieza={r.gestio?.EnLimpieza} /></TableCell>
               </TableRow>
