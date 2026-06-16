@@ -129,7 +129,7 @@ export function ReservaDetail({
                     <SelectContent>
                       <SelectItem value="none">Sin asignar</SelectItem>
                       {agentesQ.data?.map((a) => (
-                        <SelectItem key={a.id_agente} value={String(a.id_agente)}>{fullName(a)}</SelectItem>
+                        <SelectItem key={a.id_persona} value={String(a.id_persona)}>{fullName(a)}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
