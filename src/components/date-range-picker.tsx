@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { CalendarIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
@@ -49,13 +49,23 @@ export function DateRangePicker({
       ? fmtDate(fromD)
       : `${fmtDate(fromD)} → ${fmtDate(toD)}`;
 
+  // Local draft during selection. `undefined` means "show committed value".
+  const [draft, setDraft] = useState<DateRange | undefined>(undefined);
+
+  // Reset draft whenever the popover opens/closes.
+  useEffect(() => {
+    if (!open) setDraft(undefined);
+  }, [open]);
+
   const setPreset = (days: number) => {
     const today = new Date();
+    setDraft(undefined);
     onChange({ from: toISO(today), to: toISO(addDays(today, days - 1)) });
     setOpen(false);
   };
 
-  const range: DateRange = { from: fromD, to: toD };
+  const committed: DateRange = { from: fromD, to: toD };
+  const displayed: DateRange = draft ?? committed;
 
   return (
     <Popover open={open} onOpenChange={setOpen}>

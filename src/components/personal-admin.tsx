@@ -185,7 +185,12 @@ function PersonaDialog({
         if (error) throw error;
         id_persona = persona.id_persona;
       } else {
-        const { data, error } = await supabase.from("personal").insert(payload).select("id_persona").single();
+        const today = new Date().toISOString().split("T")[0];
+        const { data, error } = await supabase
+          .from("personal")
+          .insert({ ...payload, fecha_alta: today })
+          .select("id_persona")
+          .single();
         if (error) throw error;
         id_persona = (data as { id_persona: number }).id_persona;
       }
