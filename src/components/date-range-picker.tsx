@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { CalendarIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
@@ -49,13 +49,23 @@ export function DateRangePicker({
       ? fmtDate(fromD)
       : `${fmtDate(fromD)} → ${fmtDate(toD)}`;
 
+  // Local draft during selection. `undefined` means "show committed value".
+  const [draft, setDraft] = useState<DateRange | undefined>(undefined);
+
+  // Reset draft whenever the popover opens/closes.
+  useEffect(() => {
+    if (!open) setDraft(undefined);
+  }, [open]);
+
   const setPreset = (days: number) => {
     const today = new Date();
+    setDraft(undefined);
     onChange({ from: toISO(today), to: toISO(addDays(today, days - 1)) });
     setOpen(false);
   };
 
-  const range: DateRange = { from: fromD, to: toD };
+  const committed: DateRange = { from: fromD, to: toD };
+  const displayed: DateRange = draft ?? committed;
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -74,14 +84,23 @@ export function DateRangePicker({
           </div>
           <Calendar
             mode="range"
-            selected={range}
+            selected={displayed}
             onSelect={(r) => {
-              if (!r?.from) return;
-              if (r.to) {
-                onChange({ from: toISO(r.from), to: toISO(r.to) });
+              // If user hasn't started a fresh selection yet, treat this click
+              // as the start of a new range (ignore the committed value).
+              if (!draft) {
+                if (r?.from) setDraft({ from: r.from, to: undefined });
+                return;
+              }
+              // Mid-selection: react-day-picker may give us {from,to} once
+              // the second date is picked. Wait until both are set, then commit.
+              if (r?.from && r?.to) {
+                const [a, b] = r.from <= r.to ? [r.from, r.to] : [r.to, r.from];
+                onChange({ from: toISO(a), to: toISO(b) });
+                setDraft(undefined);
                 setOpen(false);
-              } else {
-                onChange({ from: toISO(r.from), to: toISO(r.from) });
+              } else if (r?.from) {
+                setDraft({ from: r.from, to: undefined });
               }
             }}
             numberOfMonths={1}
