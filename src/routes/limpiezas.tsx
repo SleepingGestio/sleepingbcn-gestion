@@ -30,6 +30,7 @@ function LimpiezasPage() {
   const [range, setRange] = useState(todayRange);
   const [sortKey, setSortKey] = useState<SortKey>("checkout");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+  const [openPop, setOpenPop] = useState<string | null>(null);
 
   const q = useQuery({
     queryKey: ["limpiezas", range.from, range.to],
@@ -132,7 +133,7 @@ function LimpiezasPage() {
                 <TableCell className="font-mono text-xs">{fmtTime(r.gestio?.HCheckOutConf)}</TableCell>
                 <TableCell>{r["Referencia"] ?? "—"}</TableCell>
                 <TableCell onClick={(e) => e.stopPropagation()}>
-                  <Popover>
+                  <Popover open={openPop === r["Número"]} onOpenChange={(o) => setOpenPop(o ? r["Número"] : null)}>
                     <PopoverTrigger asChild>
                       <button className="rounded px-2 py-1 -mx-2 text-left hover:bg-muted transition-colors w-full">
                         {nombreLimp(r.gestio?.PersLImpAsig) ?? <span className="text-muted-foreground">Sin asignar</span>}
@@ -146,7 +147,7 @@ function LimpiezasPage() {
                           <CommandGroup>
                             <CommandItem
                               value="__none__"
-                              onSelect={() => asignarM.mutate({ numero: r["Número"], id: null })}
+                              onSelect={() => { asignarM.mutate({ numero: r["Número"], id: null }); setOpenPop(null); }}
                             >
                               <Check className={cn("mr-2 h-4 w-4", r.gestio?.PersLImpAsig == null ? "opacity-100" : "opacity-0")} />
                               Sin asignar
@@ -155,7 +156,7 @@ function LimpiezasPage() {
                               <CommandItem
                                 key={p.id_persona}
                                 value={fullName(p)}
-                                onSelect={() => asignarM.mutate({ numero: r["Número"], id: p.id_persona })}
+                                onSelect={() => { asignarM.mutate({ numero: r["Número"], id: p.id_persona }); setOpenPop(null); }}
                               >
                                 <Check className={cn("mr-2 h-4 w-4", r.gestio?.PersLImpAsig === p.id_persona ? "opacity-100" : "opacity-0")} />
                                 {fullName(p)}
