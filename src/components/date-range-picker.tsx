@@ -84,14 +84,23 @@ export function DateRangePicker({
           </div>
           <Calendar
             mode="range"
-            selected={range}
+            selected={displayed}
             onSelect={(r) => {
-              if (!r?.from) return;
-              if (r.to) {
-                onChange({ from: toISO(r.from), to: toISO(r.to) });
+              // If user hasn't started a fresh selection yet, treat this click
+              // as the start of a new range (ignore the committed value).
+              if (!draft) {
+                if (r?.from) setDraft({ from: r.from, to: undefined });
+                return;
+              }
+              // Mid-selection: react-day-picker may give us {from,to} once
+              // the second date is picked. Wait until both are set, then commit.
+              if (r?.from && r?.to) {
+                const [a, b] = r.from <= r.to ? [r.from, r.to] : [r.to, r.from];
+                onChange({ from: toISO(a), to: toISO(b) });
+                setDraft(undefined);
                 setOpen(false);
-              } else {
-                onChange({ from: toISO(r.from), to: toISO(r.from) });
+              } else if (r?.from) {
+                setDraft({ from: r.from, to: undefined });
               }
             }}
             numberOfMonths={1}
