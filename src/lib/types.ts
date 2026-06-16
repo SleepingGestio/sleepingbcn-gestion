@@ -44,7 +44,7 @@ export type ReservaGestio = {
   NotasGestio: string | null;
 };
 
-export type AgCheckIn = { id_agente: number; nombre: string | null; apellidos: string | null };
+export type AgCheckIn = { id_persona: number; nombre: string | null; apellidos: string | null };
 export type PersLimp = { id_persona: number; nombre: string | null; apellidos: string | null };
 
 export const fullName = (p: { nombre: string | null; apellidos: string | null } | null | undefined) =>

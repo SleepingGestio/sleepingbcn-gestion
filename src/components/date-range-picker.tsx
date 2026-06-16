@@ -76,10 +76,12 @@ export function DateRangePicker({
             mode="range"
             selected={range}
             onSelect={(r) => {
-              if (r?.from) {
-                const from = toISO(r.from);
-                const to = toISO(r.to ?? r.from);
-                onChange({ from, to });
+              if (!r?.from) return;
+              if (r.to) {
+                onChange({ from: toISO(r.from), to: toISO(r.to) });
+                setOpen(false);
+              } else {
+                onChange({ from: toISO(r.from), to: toISO(r.from) });
               }
             }}
             numberOfMonths={1}
