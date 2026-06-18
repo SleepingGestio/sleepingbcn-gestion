@@ -28,7 +28,7 @@ function CheckinsPage() {
   const q = useQuery({
     queryKey: ["checkins", range.from, range.to],
     queryFn: () =>
-      fetchReservas({ from: range.from, to: range.to, estado: "Confirmada", dateField: "Check in" }),
+      fetchReservas({ from: range.from, to: range.to, dateField: "Check in" }),
   });
 
   const toggleM = useMutation({
@@ -99,8 +99,8 @@ function CheckinsPage() {
             {sorted.map((r) => (
               <TableRow key={r["Número"]} className="cursor-pointer" onClick={() => setSelected(r["Número"])}>
                 <TableCell>{fmtDate(r["Check in"])}</TableCell>
-                <TableCell className="font-mono text-xs">{fmtTime(r["Hora estimada de llegada"])}</TableCell>
-                <TableCell className="font-mono text-xs">{fmtTime(r.gestio?.HCheckInConf)}</TableCell>
+                <TableCell>{fmtTime(r["Hora estimada de llegada"])}</TableCell>
+                <TableCell>{fmtTime(r.gestio?.HCheckInConf)}</TableCell>
                 <TableCell className="font-medium">{r["Referencia"] ?? "—"}</TableCell>
                 <TableCell>{r["Habitaciones"] ?? "—"}</TableCell>
                 <TableCell>{r["Huéspedes"] ?? "—"}</TableCell>
