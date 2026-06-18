@@ -40,7 +40,10 @@ function CheckinsPage() {
 
   const sorted = useMemo(() => {
     const arr = [...(q.data ?? [])];
-    arr.sort((a, b) => {
+    const filtered = arr.filter(
+      (r) => r["Estado"] !== "Cancelada" && r["Estado"] !== "No show"
+    );
+    filtered.sort((a, b) => {
       const pick = (r: typeof a) => {
         switch (sortKey) {
           case "checkin": return r["Check in"] ?? "";
@@ -54,7 +57,7 @@ function CheckinsPage() {
       const c = String(av).localeCompare(String(bv));
       return sortDir === "asc" ? c : -c;
     });
-    return arr;
+    return filtered;
   }, [q.data, sortKey, sortDir]);
 
   const toggleSort = (k: SortKey) => {

@@ -58,7 +58,10 @@ function LimpiezasPage() {
 
   const sorted = useMemo(() => {
     const arr = [...(q.data ?? [])];
-    arr.sort((a, b) => {
+    const filtered = arr.filter(
+      (r) => r["Estado"] !== "Cancelada" && r["Estado"] !== "No show"
+    );
+    filtered.sort((a, b) => {
       let av = "", bv = "";
       switch (sortKey) {
         case "checkout":
@@ -74,7 +77,7 @@ function LimpiezasPage() {
       const c = av.localeCompare(bv);
       return sortDir === "asc" ? c : -c;
     });
-    return arr;
+    return filtered;
   }, [q.data, sortKey, sortDir, limpiadoresQ.data]);
   const asignarM = useMutation({
     mutationFn: async ({ numero, id }: { numero: string; id: number | null }) =>
