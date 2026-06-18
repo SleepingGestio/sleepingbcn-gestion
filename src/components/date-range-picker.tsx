@@ -85,24 +85,22 @@ export function DateRangePicker({
           <Calendar
             mode="range"
             selected={displayed}
-            onSelect={(r) => {
-              // If user hasn't started a fresh selection yet, treat this click
-              // as the start of a new range (ignore the committed value).
-              if (!draft) {
-                if (r?.from) setDraft({ from: r.from, to: undefined });
+            onDayClick={(day) => {
+              // If no draft selection in progress, this click starts a brand
+              // new range — ignore any committed value (even if it's a full range).
+              if (!draft || (draft.from && draft.to)) {
+                setDraft({ from: day, to: undefined });
                 return;
               }
-              // Mid-selection: react-day-picker may give us {from,to} once
-              // the second date is picked. Wait until both are set, then commit.
-              if (r?.from && r?.to) {
-                const [a, b] = r.from <= r.to ? [r.from, r.to] : [r.to, r.from];
-                onChange({ from: toISO(a), to: toISO(b) });
-                setDraft(undefined);
-                setOpen(false);
-              } else if (r?.from) {
-                setDraft({ from: r.from, to: undefined });
-              }
+              // Mid-selection: we already have a start, this click is the end.
+              const a = draft.from!;
+              const b = day;
+              const [from, to] = a <= b ? [a, b] : [b, a];
+              onChange({ from: toISO(from), to: toISO(to) });
+              setDraft(undefined);
+              setOpen(false);
             }}
+            onSelect={() => { /* handled by onDayClick */ }}
             numberOfMonths={1}
             locale={es}
             className="p-3 pointer-events-auto"

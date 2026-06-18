@@ -11,16 +11,21 @@ import { ReservaDetail } from "@/components/reserva-detail";
 import { EstadoBadge } from "@/components/estado-badge";
 import { DateRangePicker, nextWeekRange } from "@/components/date-range-picker";
 import { fmtDate } from "@/lib/format";
+import { SortHeader } from "@/components/sort-header";
 
 export const Route = createFileRoute("/reservas")({
   component: ReservasPage,
 });
+
+type SortKey = "numero" | "referencia" | "habitaciones" | "checkin" | "checkout" | "huespedes" | "portal" | "estado";
 
 function ReservasPage() {
   const [search, setSearch] = useState("");
   const [estado, setEstado] = useState<string>("Confirmada");
   const [selected, setSelected] = useState<string | null>(null);
   const [range, setRange] = useState(nextWeekRange);
+  const [sortKey, setSortKey] = useState<SortKey>("checkin");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
 
   const q = useQuery({
     queryKey: ["reservas", { estado, from: range.from, to: range.to }],
@@ -36,11 +41,41 @@ function ReservasPage() {
   const filtered = useMemo(() => {
     if (!q.data) return [];
     const s = search.trim().toLowerCase();
-    if (!s) return q.data;
-    return q.data.filter((r) =>
-      [r["Referencia"], r["Número"], r["Habitaciones"]].some((v) => v && String(v).toLowerCase().includes(s)),
-    );
-  }, [q.data, search]);
+    const base = !s
+      ? q.data
+      : q.data.filter((r) =>
+          [r["Referencia"], r["Número"], r["Habitaciones"]].some(
+            (v) => v && String(v).toLowerCase().includes(s),
+          ),
+        );
+    const arr = [...base];
+    const pick = (r: (typeof base)[number]) => {
+      switch (sortKey) {
+        case "numero": return r["Número"] ?? "";
+        case "referencia": return r["Referencia"] ?? "";
+        case "habitaciones": return r["Habitaciones"] ?? "";
+        case "checkin": return r["Check in"] ?? "";
+        case "checkout": return r["Check-out"] ?? "";
+        case "huespedes": return r["Huéspedes"] ?? "";
+        case "portal": return r["Portal"] ?? "";
+        case "estado": return r["Estado"] ?? "";
+      }
+    };
+    arr.sort((a, b) => {
+      const av = pick(a), bv = pick(b);
+      if (typeof av === "number" && typeof bv === "number") {
+        return sortDir === "asc" ? av - bv : bv - av;
+      }
+      const c = String(av).localeCompare(String(bv));
+      return sortDir === "asc" ? c : -c;
+    });
+    return arr;
+  }, [q.data, search, sortKey, sortDir]);
+
+  const toggleSort = (k: SortKey) => {
+    if (sortKey === k) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    else { setSortKey(k); setSortDir("asc"); }
+  };
 
   return (
     <AppShell title="Reservas">
@@ -69,14 +104,14 @@ function ReservasPage() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Número</TableHead>
-              <TableHead>Referencia</TableHead>
-              <TableHead>Habitación</TableHead>
-              <TableHead>Check-in</TableHead>
-              <TableHead>Check-out</TableHead>
-              <TableHead>Pers.</TableHead>
-              <TableHead>Portal</TableHead>
-              <TableHead>Estado</TableHead>
+              <TableHead><SortHeader label="Número" active={sortKey === "numero"} dir={sortDir} onClick={() => toggleSort("numero")} /></TableHead>
+              <TableHead><SortHeader label="Referencia" active={sortKey === "referencia"} dir={sortDir} onClick={() => toggleSort("referencia")} /></TableHead>
+              <TableHead><SortHeader label="Habitación" active={sortKey === "habitaciones"} dir={sortDir} onClick={() => toggleSort("habitaciones")} /></TableHead>
+              <TableHead><SortHeader label="Check-in" active={sortKey === "checkin"} dir={sortDir} onClick={() => toggleSort("checkin")} /></TableHead>
+              <TableHead><SortHeader label="Check-out" active={sortKey === "checkout"} dir={sortDir} onClick={() => toggleSort("checkout")} /></TableHead>
+              <TableHead><SortHeader label="Pers." active={sortKey === "huespedes"} dir={sortDir} onClick={() => toggleSort("huespedes")} /></TableHead>
+              <TableHead><SortHeader label="Portal" active={sortKey === "portal"} dir={sortDir} onClick={() => toggleSort("portal")} /></TableHead>
+              <TableHead><SortHeader label="Estado" active={sortKey === "estado"} dir={sortDir} onClick={() => toggleSort("estado")} /></TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
