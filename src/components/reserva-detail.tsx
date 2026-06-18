@@ -72,6 +72,7 @@ export function ReservaDetail({
           <div className="py-8 text-center text-sm text-muted-foreground">Cargando…</div>
         ) : (
           <div className="space-y-6">
+            {/* ── Header card ── */}
             <div className="rounded-lg border bg-primary/5 px-4 py-3">
               <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Apartamento</div>
               <div className="text-lg font-bold text-foreground">{reserva["Habitaciones"] ?? "—"}</div>
@@ -81,30 +82,30 @@ export function ReservaDetail({
                 {reserva["Email"] && <span>{reserva["Email"]}</span>}
                 {reserva["Teléfono"] && <span>{reserva["Teléfono"]}</span>}
               </div>
+
+              <div className="mt-3 flex gap-6 border-t border-primary/10 pt-3">
+                <InfoSmall label="Huéspedes" value={reserva["Huéspedes"]} />
+                <InfoSmall label="Portal" value={reserva["Portal"]} />
+                <InfoSmall
+                  label="Estado"
+                  value={<EstadoBadge estado={reserva["Estado"]} enLimpieza={reserva.gestio?.EnLimpieza} full />}
+                />
+              </div>
             </div>
 
-            <section className="grid grid-cols-2 gap-3 text-sm">
-              <Info label="Check-in" value={fmtDate(reserva["Check in"])} />
-              <Info label="Check-out" value={fmtDate(reserva["Check-out"])} />
-              <Info label="Hora llegada (KB)" value={fmtTime(reserva["Hora estimada de llegada"])} />
-              <Info label="Hora salida (KB)" value={fmtTime(reserva["Hora estimada de salida"])} />
-              <Info label="Huéspedes" value={reserva["Huéspedes"]} />
-              <Info label="Portal" value={reserva["Portal"]} />
-              <Info label="Estado" value={<EstadoBadge estado={reserva["Estado"]} enLimpieza={reserva.gestio?.EnLimpieza} full />} />
-            </section>
-
-            {reserva["Notas internas"] && (
-              <section className="rounded-md border bg-muted/30 p-3 text-sm">
-                <div className="text-[11px] uppercase tracking-wide text-muted-foreground mb-1">Notas internas (KB)</div>
-                <div className="whitespace-pre-wrap">{reserva["Notas internas"]}</div>
-              </section>
-            )}
-
-            <section className="space-y-4 border-t pt-4">
-              <h3 className="font-medium text-sm">Gestión interna</h3>
+            {/* ── Dates & times ── */}
+            <section className="space-y-2 text-sm">
+              <div className="grid grid-cols-2 gap-3">
+                <InfoReadOnly label="Check-in" value={fmtDate(reserva["Check in"])} />
+                <InfoReadOnly label="Check-out" value={fmtDate(reserva["Check-out"])} />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <InfoReadOnly label="Hora llegada (KB)" value={fmtTime(reserva["Hora estimada de llegada"])} />
+                <InfoReadOnly label="Hora salida (KB)" value={fmtTime(reserva["Hora estimada de salida"])} />
+              </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label>Hora check-in confirmada</Label>
+                  <Label className="text-xs uppercase tracking-wide text-muted-foreground">Hora check-in confirmada</Label>
                   <Input
                     type="time"
                     value={g.HCheckInConf ?? ""}
@@ -112,13 +113,28 @@ export function ReservaDetail({
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label>Hora check-out confirmada</Label>
+                  <Label className="text-xs uppercase tracking-wide text-muted-foreground">Hora check-out confirmada</Label>
                   <Input
                     type="time"
                     value={g.HCheckOutConf ?? ""}
                     onChange={(e) => setG({ ...g, HCheckOutConf: e.target.value || null })}
                   />
                 </div>
+              </div>
+            </section>
+
+            {/* ── Notas internas (KB) ── */}
+            {reserva["Notas internas"] && (
+              <section className="rounded-md border bg-muted/30 p-3 text-sm">
+                <div className="text-[11px] uppercase tracking-wide text-muted-foreground mb-1">Notas internas (KB)</div>
+                <div className="whitespace-pre-wrap">{reserva["Notas internas"]}</div>
+              </section>
+            )}
+
+            {/* ── Gestión interna ── */}
+            <section className="bg-muted/20 rounded-lg p-4 space-y-4">
+              <h3 className="font-medium text-sm">Gestión interna</h3>
+              <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Agente check-in</Label>
                   <Select
@@ -149,9 +165,6 @@ export function ReservaDetail({
                     </SelectContent>
                   </Select>
                 </div>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <Check label="Listo para check-in" checked={!!g.ReadyCheckIn} onChange={(v) => setG({ ...g, ReadyCheckIn: v })} />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
@@ -197,9 +210,13 @@ export function ReservaDetail({
               </div>
             </section>
 
-            <div className="flex justify-end gap-2 border-t pt-4">
-              <Button variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
-              <Button onClick={save} disabled={saving}>{saving ? "Guardando…" : "Guardar"}</Button>
+            {/* ── Footer ── */}
+            <div className="flex items-center justify-between border-t pt-4">
+              <Check label="Listo para check-in" checked={!!g.ReadyCheckIn} onChange={(v) => setG({ ...g, ReadyCheckIn: v })} />
+              <div className="flex gap-2">
+                <Button variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
+                <Button onClick={save} disabled={saving}>{saving ? "Guardando…" : "Guardar"}</Button>
+              </div>
             </div>
           </div>
         )}
@@ -211,6 +228,24 @@ export function ReservaDetail({
 function Info({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div>
+      <div className="text-xs uppercase tracking-wide text-muted-foreground">{label}</div>
+      <div className="font-medium">{value ?? "—"}</div>
+    </div>
+  );
+}
+
+function InfoSmall({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div>
+      <div className="text-[11px] uppercase tracking-wide text-muted-foreground">{label}</div>
+      <div className="font-medium">{value ?? "—"}</div>
+    </div>
+  );
+}
+
+function InfoReadOnly({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div className="border-l-2 border-muted pl-2">
       <div className="text-xs uppercase tracking-wide text-muted-foreground">{label}</div>
       <div className="font-medium">{value ?? "—"}</div>
     </div>
