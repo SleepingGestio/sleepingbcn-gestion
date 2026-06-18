@@ -38,7 +38,6 @@ function LimpiezasPage() {
       fetchReservas({
         from: range.from,
         to: range.to,
-        estado: "Check-in realizado",
         dateField: "Check-out",
       }),
   });
@@ -129,8 +128,8 @@ function LimpiezasPage() {
               <TableRow key={r["Número"]} className="cursor-pointer" onClick={() => setSelected(r["Número"])}>
                 <TableCell className="font-medium">{r["Habitaciones"] ?? "—"}</TableCell>
                 <TableCell>{fmtDate(r["Check-out"])}</TableCell>
-                <TableCell className="font-mono text-xs">{fmtTime(r["Hora estimada de salida"])}</TableCell>
-                <TableCell className="font-mono text-xs">{fmtTime(r.gestio?.HCheckOutConf)}</TableCell>
+                <TableCell>{fmtTime(r["Hora estimada de salida"])}</TableCell>
+                <TableCell>{fmtTime(r.gestio?.HCheckOutConf)}</TableCell>
                 <TableCell>{r["Referencia"] ?? "—"}</TableCell>
                 <TableCell onClick={(e) => e.stopPropagation()}>
                   <Popover open={openPop === r["Número"]} onOpenChange={(o) => setOpenPop(o ? r["Número"] : null)}>
