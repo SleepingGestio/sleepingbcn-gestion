@@ -7,6 +7,13 @@ import { Card } from "@/components/ui/card";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 import { ChevronLeft, ChevronRight } from "lucide-react";
+import {
+  HoverCard,
+  HoverCardContent,
+  HoverCardTrigger,
+} from "@/components/ui/hover-card";
+import { Link2, Sofa } from "lucide-react";
+import { fmtDate } from "@/lib/format";
 
 export const Route = createFileRoute("/programacion-limpiezas")({
   component: ProgramacionLimpiezasPage,
@@ -27,6 +34,23 @@ type Apartamento = {
   tiene_sofa_cama: boolean | null;
   orden: number | null;
   activo: boolean;
+};
+
+type ReservaRow = {
+  Número: string;
+  "Check in": string | null;
+  "Check-out": string | null;
+  id_apt: number | null;
+  Huéspedes: number | null;
+  Estado: string | null;
+  "Hora estimada de llegada": string | null;
+  "Hora estimada de salida": string | null;
+  Portal: string | null;
+  es_reserva_compartida: boolean | null;
+  habitaciones_original: string | null;
+  referencia: string | null;
+  hCheckInConf: string | null;
+  hCheckOutConf: string | null;
 };
 
 const DOW = ["D", "L", "M", "X", "J", "V", "S"];
@@ -69,6 +93,73 @@ async function fetchApartamentos(): Promise<Apartamento[]> {
   return (data ?? []) as Apartamento[];
 }
 
+async function fetchReservas(fromISO: string, toExclusiveISO: string): Promise<ReservaRow[]> {
+  const { data: vres, error } = await supabase
+    .from("v_reservas_por_apartamento")
+    .select("*")
+    .lt("Check in", toExclusiveISO)
+    .gt("Check-out", fromISO);
+  if (error) throw error;
+  const rows = (vres ?? []) as any[];
+  if (rows.length === 0) return [];
+  const numeros = Array.from(new Set(rows.map((r) => r["Número"]).filter(Boolean)));
+  const [kbRes, gestRes] = await Promise.all([
+    supabase.from("reservas_kb").select("Número, Referencia").in("Número", numeros),
+    supabase
+      .from("reservas_gestio")
+      .select("Número, HCheckInConf, HCheckOutConf")
+      .in("Número", numeros),
+  ]);
+  const kbMap = new Map((kbRes.data ?? []).map((r: any) => [r["Número"], r["Referencia"]]));
+  const gestMap = new Map((gestRes.data ?? []).map((r: any) => [r["Número"], r]));
+  return rows.map((r) => ({
+    Número: r["Número"],
+    "Check in": r["Check in"],
+    "Check-out": r["Check-out"],
+    id_apt: r.id_apt,
+    Huéspedes: r["Huéspedes"],
+    Estado: r["Estado"],
+    "Hora estimada de llegada": r["Hora estimada de llegada"],
+    "Hora estimada de salida": r["Hora estimada de salida"],
+    Portal: r["Portal"],
+    es_reserva_compartida: r.es_reserva_compartida,
+    habitaciones_original: r.habitaciones_original,
+    referencia: kbMap.get(r["Número"]) ?? null,
+    hCheckInConf: gestMap.get(r["Número"])?.HCheckInConf ?? null,
+    hCheckOutConf: gestMap.get(r["Número"])?.HCheckOutConf ?? null,
+  }));
+}
+
+// Estado → bar background color (mirror of EstadoBadge palette)
+const ESTADO_BAR: Record<string, string> = {
+  "Confirmada": "bg-green-600 text-white",
+  "En espera de confirmación": "bg-orange-500 text-white",
+  "En espera de confirmación (Caducadas)": "bg-orange-200 text-orange-900",
+  "Check-out realizado": "bg-gray-400 text-white",
+  "No show": "bg-neutral-800 text-white",
+  "Check-in realizado": "bg-blue-600 text-white",
+  "En salida": "bg-pink-500 text-white",
+  "En limpieza": "bg-teal-500 text-white",
+  "Cancelada": "bg-red-600 text-white",
+};
+
+function trimHM(s: string | null | undefined): string | null {
+  if (!s) return null;
+  const m = String(s).match(/(\d{1,2}):(\d{2})/);
+  return m ? `${m[1].padStart(2, "0")}:${m[2]}` : null;
+}
+
+function resolveTime(
+  conf: string | null,
+  estimada: string | null,
+  defaultVal: string,
+): { value: string; informed: boolean } {
+  const c = trimHM(conf);
+  if (c) return { value: c, informed: true };
+  const e = trimHM(estimada);
+  if (e) return { value: e, informed: true };
+  return { value: defaultVal, informed: false };
+}
 type FilterMode = "default" | "all" | "custom";
 
 function ProgramacionLimpiezasPage() {
@@ -88,6 +179,35 @@ function ProgramacionLimpiezasPage() {
   }, [range]);
 
   const todayISO = toISO(new Date());
+
+  const fetchFromISO = toISO(addDays(range.from, -1));
+  const fetchToExclusiveISO = toISO(addDays(range.to, 2));
+  const reservasQ = useQuery({
+    queryKey: ["v_reservas_por_apartamento", fetchFromISO, fetchToExclusiveISO],
+    queryFn: () => fetchReservas(fetchFromISO, fetchToExclusiveISO),
+  });
+
+  const reservasByApt = useMemo(() => {
+    const m = new Map<number, ReservaRow[]>();
+    for (const r of reservasQ.data ?? []) {
+      if (r.id_apt == null) continue;
+      const arr = m.get(r.id_apt) ?? [];
+      arr.push(r);
+      m.set(r.id_apt, arr);
+    }
+    return m;
+  }, [reservasQ.data]);
+
+  const sharedByNumero = useMemo(() => {
+    const m = new Map<string, ReservaRow[]>();
+    for (const r of reservasQ.data ?? []) {
+      if (!r.es_reserva_compartida) continue;
+      const arr = m.get(r.Número) ?? [];
+      arr.push(r);
+      m.set(r.Número, arr);
+    }
+    return m;
+  }, [reservasQ.data]);
 
   const shiftDays = (n: number) =>
     setRange((r) => ({ from: addDays(r.from, n), to: addDays(r.to, n) }));
@@ -271,20 +391,42 @@ function ProgramacionLimpiezasPage() {
                           )}
                         </div>
                       </div>
-                      {days.map((d) => {
-                        const iso = toISO(d);
-                        const isToday = iso === todayISO;
-                        return (
-                          <div
-                            key={iso}
-                            className={cn(
-                              "shrink-0 border-r",
-                              isToday && "bg-primary/5",
-                            )}
-                            style={{ width: DAY_COL_W }}
+                      <div
+                        className="relative"
+                        style={{ width: DAY_COL_W * days.length, height: 70 }}
+                      >
+                        <div className="flex h-full">
+                          {days.map((d) => {
+                            const iso = toISO(d);
+                            const isToday = iso === todayISO;
+                            return (
+                              <div
+                                key={iso}
+                                className={cn(
+                                  "shrink-0 border-r h-full",
+                                  isToday && "bg-primary/5",
+                                )}
+                                style={{ width: DAY_COL_W }}
+                              />
+                            );
+                          })}
+                        </div>
+                        {(reservasByApt.get(a.id_apt) ?? []).map((r) => (
+                          <ReservaBar
+                            key={r.Número + "-" + a.id_apt}
+                            r={r}
+                            apt={a}
+                            days={days}
+                            sharedOthers={
+                              r.es_reserva_compartida
+                                ? (sharedByNumero.get(r.Número) ?? []).filter(
+                                    (x) => x.id_apt !== a.id_apt,
+                                  )
+                                : []
+                            }
                           />
-                        );
-                      })}
+                        ))}
+                      </div>
                     </div>
                   ))}
                   {apts.length === 0 && (
