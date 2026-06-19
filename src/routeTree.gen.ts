@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as ReservasRouteImport } from './routes/reservas'
+import { Route as ProgramacionLimpiezasRouteImport } from './routes/programacion-limpiezas'
 import { Route as LimpiezasRouteImport } from './routes/limpiezas'
 import { Route as ConfiguracionRouteImport } from './routes/configuracion'
 import { Route as CheckinsRouteImport } from './routes/checkins'
@@ -18,6 +19,11 @@ import { Route as IndexRouteImport } from './routes/index'
 const ReservasRoute = ReservasRouteImport.update({
   id: '/reservas',
   path: '/reservas',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ProgramacionLimpiezasRoute = ProgramacionLimpiezasRouteImport.update({
+  id: '/programacion-limpiezas',
+  path: '/programacion-limpiezas',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LimpiezasRoute = LimpiezasRouteImport.update({
@@ -46,6 +52,7 @@ export interface FileRoutesByFullPath {
   '/checkins': typeof CheckinsRoute
   '/configuracion': typeof ConfiguracionRoute
   '/limpiezas': typeof LimpiezasRoute
+  '/programacion-limpiezas': typeof ProgramacionLimpiezasRoute
   '/reservas': typeof ReservasRoute
 }
 export interface FileRoutesByTo {
@@ -53,6 +60,7 @@ export interface FileRoutesByTo {
   '/checkins': typeof CheckinsRoute
   '/configuracion': typeof ConfiguracionRoute
   '/limpiezas': typeof LimpiezasRoute
+  '/programacion-limpiezas': typeof ProgramacionLimpiezasRoute
   '/reservas': typeof ReservasRoute
 }
 export interface FileRoutesById {
@@ -61,19 +69,33 @@ export interface FileRoutesById {
   '/checkins': typeof CheckinsRoute
   '/configuracion': typeof ConfiguracionRoute
   '/limpiezas': typeof LimpiezasRoute
+  '/programacion-limpiezas': typeof ProgramacionLimpiezasRoute
   '/reservas': typeof ReservasRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/checkins' | '/configuracion' | '/limpiezas' | '/reservas'
+  fullPaths:
+    | '/'
+    | '/checkins'
+    | '/configuracion'
+    | '/limpiezas'
+    | '/programacion-limpiezas'
+    | '/reservas'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/checkins' | '/configuracion' | '/limpiezas' | '/reservas'
+  to:
+    | '/'
+    | '/checkins'
+    | '/configuracion'
+    | '/limpiezas'
+    | '/programacion-limpiezas'
+    | '/reservas'
   id:
     | '__root__'
     | '/'
     | '/checkins'
     | '/configuracion'
     | '/limpiezas'
+    | '/programacion-limpiezas'
     | '/reservas'
   fileRoutesById: FileRoutesById
 }
@@ -82,6 +104,7 @@ export interface RootRouteChildren {
   CheckinsRoute: typeof CheckinsRoute
   ConfiguracionRoute: typeof ConfiguracionRoute
   LimpiezasRoute: typeof LimpiezasRoute
+  ProgramacionLimpiezasRoute: typeof ProgramacionLimpiezasRoute
   ReservasRoute: typeof ReservasRoute
 }
 
@@ -92,6 +115,13 @@ declare module '@tanstack/react-router' {
       path: '/reservas'
       fullPath: '/reservas'
       preLoaderRoute: typeof ReservasRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/programacion-limpiezas': {
+      id: '/programacion-limpiezas'
+      path: '/programacion-limpiezas'
+      fullPath: '/programacion-limpiezas'
+      preLoaderRoute: typeof ProgramacionLimpiezasRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/limpiezas': {
@@ -130,6 +160,7 @@ const rootRouteChildren: RootRouteChildren = {
   CheckinsRoute: CheckinsRoute,
   ConfiguracionRoute: ConfiguracionRoute,
   LimpiezasRoute: LimpiezasRoute,
+  ProgramacionLimpiezasRoute: ProgramacionLimpiezasRoute,
   ReservasRoute: ReservasRoute,
 }
 export const routeTree = rootRouteImport
