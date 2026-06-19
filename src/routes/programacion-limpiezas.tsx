@@ -7,6 +7,13 @@ import { Card } from "@/components/ui/card";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 import { ChevronLeft, ChevronRight } from "lucide-react";
+import {
+  HoverCard,
+  HoverCardContent,
+  HoverCardTrigger,
+} from "@/components/ui/hover-card";
+import { Link2, Sofa } from "lucide-react";
+import { fmtDate } from "@/lib/format";
 
 export const Route = createFileRoute("/programacion-limpiezas")({
   component: ProgramacionLimpiezasPage,
@@ -27,6 +34,23 @@ type Apartamento = {
   tiene_sofa_cama: boolean | null;
   orden: number | null;
   activo: boolean;
+};
+
+type ReservaRow = {
+  Número: string;
+  "Check in": string | null;
+  "Check-out": string | null;
+  id_apt: number | null;
+  Huéspedes: number | null;
+  Estado: string | null;
+  "Hora estimada de llegada": string | null;
+  "Hora estimada de salida": string | null;
+  Portal: string | null;
+  es_reserva_compartida: boolean | null;
+  habitaciones_original: string | null;
+  referencia: string | null;
+  hCheckInConf: string | null;
+  hCheckOutConf: string | null;
 };
 
 const DOW = ["D", "L", "M", "X", "J", "V", "S"];
@@ -69,6 +93,73 @@ async function fetchApartamentos(): Promise<Apartamento[]> {
   return (data ?? []) as Apartamento[];
 }
 
+async function fetchReservas(fromISO: string, toExclusiveISO: string): Promise<ReservaRow[]> {
+  const { data: vres, error } = await supabase
+    .from("v_reservas_por_apartamento")
+    .select("*")
+    .lt("Check in", toExclusiveISO)
+    .gt("Check-out", fromISO);
+  if (error) throw error;
+  const rows = (vres ?? []) as any[];
+  if (rows.length === 0) return [];
+  const numeros = Array.from(new Set(rows.map((r) => r["Número"]).filter(Boolean)));
+  const [kbRes, gestRes] = await Promise.all([
+    supabase.from("reservas_kb").select("Número, Referencia").in("Número", numeros),
+    supabase
+      .from("reservas_gestio")
+      .select("Número, HCheckInConf, HCheckOutConf")
+      .in("Número", numeros),
+  ]);
+  const kbMap = new Map((kbRes.data ?? []).map((r: any) => [r["Número"], r["Referencia"]]));
+  const gestMap = new Map((gestRes.data ?? []).map((r: any) => [r["Número"], r]));
+  return rows.map((r) => ({
+    Número: r["Número"],
+    "Check in": r["Check in"],
+    "Check-out": r["Check-out"],
+    id_apt: r.id_apt,
+    Huéspedes: r["Huéspedes"],
+    Estado: r["Estado"],
+    "Hora estimada de llegada": r["Hora estimada de llegada"],
+    "Hora estimada de salida": r["Hora estimada de salida"],
+    Portal: r["Portal"],
+    es_reserva_compartida: r.es_reserva_compartida,
+    habitaciones_original: r.habitaciones_original,
+    referencia: kbMap.get(r["Número"]) ?? null,
+    hCheckInConf: gestMap.get(r["Número"])?.HCheckInConf ?? null,
+    hCheckOutConf: gestMap.get(r["Número"])?.HCheckOutConf ?? null,
+  }));
+}
+
+// Estado → bar background color (mirror of EstadoBadge palette)
+const ESTADO_BAR: Record<string, string> = {
+  "Confirmada": "bg-green-600 text-white",
+  "En espera de confirmación": "bg-orange-500 text-white",
+  "En espera de confirmación (Caducadas)": "bg-orange-200 text-orange-900",
+  "Check-out realizado": "bg-gray-400 text-white",
+  "No show": "bg-neutral-800 text-white",
+  "Check-in realizado": "bg-blue-600 text-white",
+  "En salida": "bg-pink-500 text-white",
+  "En limpieza": "bg-teal-500 text-white",
+  "Cancelada": "bg-red-600 text-white",
+};
+
+function trimHM(s: string | null | undefined): string | null {
+  if (!s) return null;
+  const m = String(s).match(/(\d{1,2}):(\d{2})/);
+  return m ? `${m[1].padStart(2, "0")}:${m[2]}` : null;
+}
+
+function resolveTime(
+  conf: string | null,
+  estimada: string | null,
+  defaultVal: string,
+): { value: string; informed: boolean } {
+  const c = trimHM(conf);
+  if (c) return { value: c, informed: true };
+  const e = trimHM(estimada);
+  if (e) return { value: e, informed: true };
+  return { value: defaultVal, informed: false };
+}
 type FilterMode = "default" | "all" | "custom";
 
 function ProgramacionLimpiezasPage() {
@@ -88,6 +179,35 @@ function ProgramacionLimpiezasPage() {
   }, [range]);
 
   const todayISO = toISO(new Date());
+
+  const fetchFromISO = toISO(addDays(range.from, -1));
+  const fetchToExclusiveISO = toISO(addDays(range.to, 2));
+  const reservasQ = useQuery({
+    queryKey: ["v_reservas_por_apartamento", fetchFromISO, fetchToExclusiveISO],
+    queryFn: () => fetchReservas(fetchFromISO, fetchToExclusiveISO),
+  });
+
+  const reservasByApt = useMemo(() => {
+    const m = new Map<number, ReservaRow[]>();
+    for (const r of reservasQ.data ?? []) {
+      if (r.id_apt == null) continue;
+      const arr = m.get(r.id_apt) ?? [];
+      arr.push(r);
+      m.set(r.id_apt, arr);
+    }
+    return m;
+  }, [reservasQ.data]);
+
+  const sharedByNumero = useMemo(() => {
+    const m = new Map<string, ReservaRow[]>();
+    for (const r of reservasQ.data ?? []) {
+      if (!r.es_reserva_compartida) continue;
+      const arr = m.get(r.Número) ?? [];
+      arr.push(r);
+      m.set(r.Número, arr);
+    }
+    return m;
+  }, [reservasQ.data]);
 
   const shiftDays = (n: number) =>
     setRange((r) => ({ from: addDays(r.from, n), to: addDays(r.to, n) }));
@@ -271,20 +391,42 @@ function ProgramacionLimpiezasPage() {
                           )}
                         </div>
                       </div>
-                      {days.map((d) => {
-                        const iso = toISO(d);
-                        const isToday = iso === todayISO;
-                        return (
-                          <div
-                            key={iso}
-                            className={cn(
-                              "shrink-0 border-r",
-                              isToday && "bg-primary/5",
-                            )}
-                            style={{ width: DAY_COL_W }}
+                      <div
+                        className="relative"
+                        style={{ width: DAY_COL_W * days.length, height: 70 }}
+                      >
+                        <div className="flex h-full">
+                          {days.map((d) => {
+                            const iso = toISO(d);
+                            const isToday = iso === todayISO;
+                            return (
+                              <div
+                                key={iso}
+                                className={cn(
+                                  "shrink-0 border-r h-full",
+                                  isToday && "bg-primary/5",
+                                )}
+                                style={{ width: DAY_COL_W }}
+                              />
+                            );
+                          })}
+                        </div>
+                        {(reservasByApt.get(a.id_apt) ?? []).map((r) => (
+                          <ReservaBar
+                            key={r.Número + "-" + a.id_apt}
+                            r={r}
+                            apt={a}
+                            days={days}
+                            sharedOthers={
+                              r.es_reserva_compartida
+                                ? (sharedByNumero.get(r.Número) ?? []).filter(
+                                    (x) => x.id_apt !== a.id_apt,
+                                  )
+                                : []
+                            }
                           />
-                        );
-                      })}
+                        ))}
+                      </div>
                     </div>
                   ))}
                   {apts.length === 0 && (
@@ -299,5 +441,131 @@ function ProgramacionLimpiezasPage() {
         </div>
       </Card>
     </AppShell>
+  );
+}
+
+function ReservaBar({
+  r,
+  apt,
+  days,
+  sharedOthers,
+}: {
+  r: ReservaRow;
+  apt: Apartamento;
+  days: Date[];
+  sharedOthers: ReservaRow[];
+}) {
+  const ciISO = r["Check in"];
+  const coISO = r["Check-out"];
+  if (!ciISO || !coISO) return null;
+
+  const dayISOs = days.map(toISO);
+  let ciIdx = dayISOs.indexOf(ciISO);
+  let coIdx = dayISOs.indexOf(coISO);
+
+  // Clamp out-of-range to visible edges
+  const ciVisible = ciIdx >= 0;
+  const coVisible = coIdx >= 0;
+  if (!ciVisible) ciIdx = ciISO < dayISOs[0] ? -1 : days.length;
+  if (!coVisible) coIdx = coISO < dayISOs[0] ? -1 : days.length;
+
+  const left =
+    ciVisible ? ciIdx * DAY_COL_W + 0.62 * DAY_COL_W : ciIdx < 0 ? 0 : days.length * DAY_COL_W;
+  const right =
+    coVisible ? coIdx * DAY_COL_W + 0.2 * DAY_COL_W : coIdx < 0 ? 0 : days.length * DAY_COL_W;
+  const width = right - left;
+  if (width <= 2) return null;
+
+  const colorClass =
+    ESTADO_BAR[r.Estado ?? ""] ?? "bg-secondary text-secondary-foreground";
+
+  // Per spec: LEFT badge = checkout time; RIGHT badge = checkin time
+  const leftTime = resolveTime(r.hCheckOutConf, r["Hora estimada de salida"], "11:00");
+  const rightTime = resolveTime(r.hCheckInConf, r["Hora estimada de llegada"], "15:00");
+
+  const guestCount = r["Huéspedes"] ?? 0;
+  const overCapacity =
+    !r.es_reserva_compartida &&
+    apt.camas_fijas != null &&
+    guestCount > (apt.camas_fijas ?? 0);
+
+  const guestLabel = r.es_reserva_compartida ? "Reserva compartida" : r.referencia ?? "—";
+
+  return (
+    <HoverCard openDelay={150} closeDelay={50}>
+      <HoverCardTrigger asChild>
+        <div
+          className={cn(
+            "absolute rounded-md shadow-sm flex items-center gap-1 px-1 text-[11px] font-medium overflow-hidden cursor-default",
+            colorClass,
+          )}
+          style={{ left, width, top: 24, height: 22 }}
+        >
+          <TimeBadge {...leftTime} />
+          <span className="flex-1 truncate flex items-center gap-1 min-w-0">
+            {r.es_reserva_compartida && (
+              <Link2 className="h-3 w-3 shrink-0 opacity-90" />
+            )}
+            <span className="truncate">{guestLabel}</span>
+          </span>
+          {!r.es_reserva_compartida && (
+            <span className="shrink-0 rounded-full bg-black/25 px-1.5 py-px text-[10px] leading-4 flex items-center gap-0.5">
+              {guestCount}p
+              {overCapacity && <Sofa className="h-3 w-3" />}
+            </span>
+          )}
+          <TimeBadge {...rightTime} />
+        </div>
+      </HoverCardTrigger>
+      <HoverCardContent className="w-72 text-xs" align="center">
+        <div className="font-semibold text-sm mb-1 flex items-center gap-1">
+          {r.es_reserva_compartida && <Link2 className="h-3.5 w-3.5" />}
+          {guestLabel}
+        </div>
+        <div className="text-muted-foreground space-y-0.5">
+          <div>
+            <span className="font-medium text-foreground">Check-in:</span> {fmtDate(ciISO)}
+          </div>
+          <div>
+            <span className="font-medium text-foreground">Check-out:</span> {fmtDate(coISO)}
+          </div>
+          <div>
+            <span className="font-medium text-foreground">Huéspedes:</span> {guestCount}
+          </div>
+          <div>
+            <span className="font-medium text-foreground">Estado:</span> {r.Estado ?? "—"}
+          </div>
+          {r.Portal && (
+            <div>
+              <span className="font-medium text-foreground">Portal:</span> {r.Portal}
+            </div>
+          )}
+          {r.es_reserva_compartida && (
+            <div className="pt-1 border-t mt-1">
+              <div className="font-medium text-foreground">Otros apartamentos:</div>
+              <div>{r.habitaciones_original ?? "—"}</div>
+              {sharedOthers.length > 0 && (
+                <div className="text-[11px] mt-0.5">
+                  {sharedOthers.length} apartamento(s) más en esta reserva
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </HoverCardContent>
+    </HoverCard>
+  );
+}
+
+function TimeBadge({ value, informed }: { value: string; informed: boolean }) {
+  return (
+    <span
+      className={cn(
+        "shrink-0 rounded px-1 py-px text-[10px] leading-4 font-semibold",
+        informed ? "bg-emerald-500 text-white" : "bg-gray-300 text-gray-700",
+      )}
+    >
+      {value}
+    </span>
   );
 }
