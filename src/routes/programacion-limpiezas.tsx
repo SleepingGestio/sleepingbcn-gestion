@@ -443,3 +443,129 @@ function ProgramacionLimpiezasPage() {
     </AppShell>
   );
 }
+
+function ReservaBar({
+  r,
+  apt,
+  days,
+  sharedOthers,
+}: {
+  r: ReservaRow;
+  apt: Apartamento;
+  days: Date[];
+  sharedOthers: ReservaRow[];
+}) {
+  const ciISO = r["Check in"];
+  const coISO = r["Check-out"];
+  if (!ciISO || !coISO) return null;
+
+  const dayISOs = days.map(toISO);
+  let ciIdx = dayISOs.indexOf(ciISO);
+  let coIdx = dayISOs.indexOf(coISO);
+
+  // Clamp out-of-range to visible edges
+  const ciVisible = ciIdx >= 0;
+  const coVisible = coIdx >= 0;
+  if (!ciVisible) ciIdx = ciISO < dayISOs[0] ? -1 : days.length;
+  if (!coVisible) coIdx = coISO < dayISOs[0] ? -1 : days.length;
+
+  const left =
+    ciVisible ? ciIdx * DAY_COL_W + 0.62 * DAY_COL_W : ciIdx < 0 ? 0 : days.length * DAY_COL_W;
+  const right =
+    coVisible ? coIdx * DAY_COL_W + 0.2 * DAY_COL_W : coIdx < 0 ? 0 : days.length * DAY_COL_W;
+  const width = right - left;
+  if (width <= 2) return null;
+
+  const colorClass =
+    ESTADO_BAR[r.Estado ?? ""] ?? "bg-secondary text-secondary-foreground";
+
+  // Per spec: LEFT badge = checkout time; RIGHT badge = checkin time
+  const leftTime = resolveTime(r.hCheckOutConf, r["Hora estimada de salida"], "11:00");
+  const rightTime = resolveTime(r.hCheckInConf, r["Hora estimada de llegada"], "15:00");
+
+  const guestCount = r["Huéspedes"] ?? 0;
+  const overCapacity =
+    !r.es_reserva_compartida &&
+    apt.camas_fijas != null &&
+    guestCount > (apt.camas_fijas ?? 0);
+
+  const guestLabel = r.es_reserva_compartida ? "Reserva compartida" : r.referencia ?? "—";
+
+  return (
+    <HoverCard openDelay={150} closeDelay={50}>
+      <HoverCardTrigger asChild>
+        <div
+          className={cn(
+            "absolute rounded-md shadow-sm flex items-center gap-1 px-1 text-[11px] font-medium overflow-hidden cursor-default",
+            colorClass,
+          )}
+          style={{ left, width, top: 24, height: 22 }}
+        >
+          <TimeBadge {...leftTime} />
+          <span className="flex-1 truncate flex items-center gap-1 min-w-0">
+            {r.es_reserva_compartida && (
+              <Link2 className="h-3 w-3 shrink-0 opacity-90" />
+            )}
+            <span className="truncate">{guestLabel}</span>
+          </span>
+          {!r.es_reserva_compartida && (
+            <span className="shrink-0 rounded-full bg-black/25 px-1.5 py-px text-[10px] leading-4 flex items-center gap-0.5">
+              {guestCount}p
+              {overCapacity && <Sofa className="h-3 w-3" />}
+            </span>
+          )}
+          <TimeBadge {...rightTime} />
+        </div>
+      </HoverCardTrigger>
+      <HoverCardContent className="w-72 text-xs" align="center">
+        <div className="font-semibold text-sm mb-1 flex items-center gap-1">
+          {r.es_reserva_compartida && <Link2 className="h-3.5 w-3.5" />}
+          {guestLabel}
+        </div>
+        <div className="text-muted-foreground space-y-0.5">
+          <div>
+            <span className="font-medium text-foreground">Check-in:</span> {fmtDate(ciISO)}
+          </div>
+          <div>
+            <span className="font-medium text-foreground">Check-out:</span> {fmtDate(coISO)}
+          </div>
+          <div>
+            <span className="font-medium text-foreground">Huéspedes:</span> {guestCount}
+          </div>
+          <div>
+            <span className="font-medium text-foreground">Estado:</span> {r.Estado ?? "—"}
+          </div>
+          {r.Portal && (
+            <div>
+              <span className="font-medium text-foreground">Portal:</span> {r.Portal}
+            </div>
+          )}
+          {r.es_reserva_compartida && (
+            <div className="pt-1 border-t mt-1">
+              <div className="font-medium text-foreground">Otros apartamentos:</div>
+              <div>{r.habitaciones_original ?? "—"}</div>
+              {sharedOthers.length > 0 && (
+                <div className="text-[11px] mt-0.5">
+                  {sharedOthers.length} apartamento(s) más en esta reserva
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </HoverCardContent>
+    </HoverCard>
+  );
+}
+
+function TimeBadge({ value, informed }: { value: string; informed: boolean }) {
+  return (
+    <span
+      className={cn(
+        "shrink-0 rounded px-1 py-px text-[10px] leading-4 font-semibold",
+        informed ? "bg-emerald-500 text-white" : "bg-gray-300 text-gray-700",
+      )}
+    >
+      {value}
+    </span>
+  );
+}
