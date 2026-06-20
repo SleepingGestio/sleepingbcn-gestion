@@ -426,14 +426,14 @@ function ProgramacionLimpiezasPage() {
                     </div>
                   </div>
                   {apts.map((a) => (
-                    <div key={a.id_apt} className="flex border-b relative" style={{ height: 70 }}>
+                    <div key={a.id_apt} className="flex border-b relative" style={{ height: ROW_H }}>
                       <div
-                        className="shrink-0 sticky left-0 z-10 bg-white border-r px-3 py-2 flex flex-col justify-center"
+                        className="shrink-0 sticky left-0 z-10 bg-white border-r px-3 py-1 flex flex-col justify-center"
                         style={{ width: APT_COL_W }}
                       >
-                        <div className="text-sm font-medium truncate">{a.nombre}</div>
-                        <div className="text-[11px] text-muted-foreground">
-                          {a.camas_fijas ?? 0} camas
+                        <div className="text-sm font-medium truncate leading-tight">{a.nombre}</div>
+                        <div className="text-[11px] text-muted-foreground leading-tight">
+                          {bedLabel(a.camas_fijas)}
                           {a.tiene_sofa_cama && (
                             <span className="ml-1 inline-block px-1 py-px rounded bg-slate-200 text-slate-700 text-[10px] font-medium">
                               SFC
@@ -443,7 +443,7 @@ function ProgramacionLimpiezasPage() {
                       </div>
                       <div
                         className="relative"
-                        style={{ width: DAY_COL_W * days.length, height: 70 }}
+                        style={{ width: DAY_COL_W * days.length, height: ROW_H }}
                       >
                         <div className="flex h-full">
                           {days.map((d) => {
@@ -462,7 +462,7 @@ function ProgramacionLimpiezasPage() {
                                 {/* Bottom-half click target for empty cells / wraps the bar */}
                                 <button
                                   type="button"
-                                  className="absolute inset-x-0 bottom-0 h-[55%] hover:bg-muted/40 transition-colors"
+                                  className="absolute inset-x-0 bottom-0 h-[50%] hover:bg-muted/40 transition-colors"
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     setPopover({
@@ -470,6 +470,7 @@ function ProgramacionLimpiezasPage() {
                                         id_apt: a.id_apt,
                                         nombre: a.nombre,
                                         grupo_nombre: grupoNombreById(a.id_grupo),
+                                        camas_fijas: a.camas_fijas,
                                       },
                                       fecha: iso,
                                       existing,
