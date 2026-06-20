@@ -725,7 +725,7 @@ function SalidaLabel({
   } else if (hasWorker && isPriority) {
     cls = "bg-amber-500/85 text-white";
   } else if (hasWorker) {
-    cls = "bg-emerald-500/85 text-white";
+    cls = "bg-purple-700/90 text-white";
   }
   if (affected && !anulada) {
     cls = "bg-orange-100 text-orange-900 border border-dashed border-orange-500";
@@ -748,7 +748,7 @@ function SalidaLabel({
         "absolute z-20 rounded flex items-center justify-center gap-1 px-1 text-[10px] font-semibold overflow-hidden shadow-sm",
         cls,
       )}
-      style={{ left, width, top: "50%", transform: "translateY(-50%)", height: 18 }}
+      style={{ left, width, top: 3, height: 20 }}
       title={`Salida · ${l.fecha_limpieza}`}
     >
       {hasWorker && l.orden_trabajo != null && !anulada && (
