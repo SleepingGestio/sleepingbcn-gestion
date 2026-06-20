@@ -17,6 +17,7 @@ type Apt = {
   id_apt: number;
   camas_fijas: number | null;
   tiene_sofa_cama: boolean | null;
+  requiere_limpieza_intermedia: boolean | null;
 };
 
 type Gestio = {
@@ -145,7 +146,7 @@ export async function generarLimpiezas(fromISO: string, toISO: string): Promise<
     aptIds.length
       ? supabase
           .from("apartamentos")
-          .select("id_apt, camas_fijas, tiene_sofa_cama")
+          .select("id_apt, camas_fijas, tiene_sofa_cama, requiere_limpieza_intermedia")
           .in("id_apt", aptIds)
       : Promise.resolve({ data: [] as Apt[], error: null }),
     numeros.length
@@ -260,6 +261,8 @@ export async function generarLimpiezas(fromISO: string, toISO: string): Promise<
 
     // ---- INTERMEDIA: skip for shared reservations
     if (r.es_reserva_compartida) continue;
+    // Skip if the apartment opts out of intermediate cleanings.
+    if (apt && apt.requiere_limpieza_intermedia === false) continue;
     const noches = r["Noches"] ?? 0;
     const offsets = intermediaOffsets(noches);
     if (offsets.length === 0) continue;
