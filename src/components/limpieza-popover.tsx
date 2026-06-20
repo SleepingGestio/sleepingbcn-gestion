@@ -15,6 +15,7 @@ import { fetchLimpiadores } from "@/lib/catalogos";
 import { fullName } from "@/lib/types";
 import { Link2, Minus, Plus, RotateCcw, Trash2, X, Zap } from "lucide-react";
 import { bedLabel } from "@/routes/programacion-limpiezas";
+import { fmtTime } from "@/lib/format";
 
 export type Limpieza = {
   id_limpieza: number;
@@ -158,7 +159,38 @@ export function LimpiezaPopover({ open, onOpenChange, apt, fecha, existing, onSa
   });
 
   const winMins = minsBetween(form.hora_out_time, form.hora_in_time);
-  const winCritical = winMins != null && winMins < 150;
+  // Negative result means "next check-in is on a later day" — add 24h.
+  const winMinsAdj =
+    winMins == null ? null : winMins < 0 ? winMins + 24 * 60 : winMins;
+  const winCritical = winMinsAdj != null && winMinsAdj < 150;
+
+  // Look up the actual next reservation's check-in date so we can show it
+  // next to the "Entra" row instead of reusing the checkout date.
+  const nextResQ = useQuery({
+    queryKey: ["limp-next-res", apt.id_apt, form.fecha_limpieza],
+    enabled: !!form.fecha_limpieza && !!apt.id_apt,
+    queryFn: async () => {
+      const fecha = form.fecha_limpieza;
+      const end = new Date(fecha + "T00:00:00");
+      end.setDate(end.getDate() + 14);
+      const tz = end.getTimezoneOffset() * 60000;
+      const endISO = new Date(end.getTime() - tz).toISOString().slice(0, 10);
+      const { data, error } = await supabase
+        .from("v_reservas_por_apartamento")
+        .select(`"Número","Check in"`)
+        .eq("id_apt", apt.id_apt)
+        .not("Estado", "in", '("Cancelada","No show")')
+        .gte("Check in", fecha)
+        .lte("Check in", endISO)
+        .order("Check in", { ascending: true })
+        .limit(2);
+      if (error) throw error;
+      const rows = (data ?? []) as Array<{ "Número": string; "Check in": string }>;
+      // Skip the current reservation if present
+      const next = rows.find((r) => r["Número"] !== form.numero_reserva) ?? null;
+      return next;
+    },
+  });
 
   const set = <K extends keyof Limpieza>(k: K, v: Limpieza[K]) => setForm((f) => ({ ...f, [k]: v }));
 
@@ -318,7 +350,11 @@ export function LimpiezaPopover({ open, onOpenChange, apt, fecha, existing, onSa
                 />
                 <HoraRow
                   label="Entra (próx. reserva)"
-                  dateLabel={fmtDate(form.fecha_limpieza)}
+                  dateLabel={
+                    nextResQ.data?.["Check in"]
+                      ? fmtDate(nextResQ.data["Check in"])
+                      : "—"
+                  }
                   time={form.hora_in_time}
                   informed={!!form.hora_in_informed}
                   emptyText="— sin reserva en 7 días"
@@ -331,15 +367,17 @@ export function LimpiezaPopover({ open, onOpenChange, apt, fecha, existing, onSa
               <Label className="text-xs uppercase tracking-wide text-muted-foreground">Ventana de limpieza</Label>
               <div
                 className={cn(
-                  "mt-2 rounded-md p-2 text-sm font-medium",
-                  winMins == null
+                  "mt-2 block w-full rounded-md px-3 py-2 text-sm font-semibold text-center",
+                  winMinsAdj == null
                     ? "bg-muted text-muted-foreground"
                     : winCritical
-                      ? "bg-orange-100 text-orange-900"
-                      : "bg-teal-100 text-teal-900",
+                      ? "bg-amber-200 text-amber-900"
+                      : "bg-teal-200 text-teal-900",
                 )}
               >
-                {winMins == null ? "Sin próxima entrada en 7 días" : fmtHours(winMins)}
+                {winMinsAdj == null
+                  ? "Sin próxima entrada en 7 días"
+                  : fmtHours(winMinsAdj)}
               </div>
             </section>
 
