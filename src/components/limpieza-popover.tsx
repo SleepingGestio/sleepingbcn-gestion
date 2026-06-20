@@ -398,6 +398,7 @@ export function LimpiezaPopover({ open, onOpenChange, apt, fecha, existing, onSa
             )}
 
             {/* Horarios */}
+            {form.tipo !== "intermedia" && (
             <section>
               <Label className="text-xs uppercase tracking-wide text-muted-foreground">Horarios</Label>
               <div className="mt-2 space-y-1.5">
@@ -420,8 +421,10 @@ export function LimpiezaPopover({ open, onOpenChange, apt, fecha, existing, onSa
                 />
               </div>
             </section>
+            )}
 
             {/* Ventana */}
+            {form.tipo !== "intermedia" && (
             <section>
               <Label className="text-xs uppercase tracking-wide text-muted-foreground">Ventana de limpieza</Label>
               <div
@@ -439,6 +442,7 @@ export function LimpiezaPopover({ open, onOpenChange, apt, fecha, existing, onSa
                   : fmtWindow(winMinsAdj)}
               </div>
             </section>
+            )}
 
             {/* Fecha + prioritaria */}
             <section>
