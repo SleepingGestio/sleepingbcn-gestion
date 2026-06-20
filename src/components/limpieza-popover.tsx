@@ -13,7 +13,7 @@ import { cn } from "@/lib/utils";
 import { fmtDate } from "@/lib/format";
 import { fetchLimpiadores } from "@/lib/catalogos";
 import { fullName } from "@/lib/types";
-import { Link2, Minus, Plus, RotateCcw, X, Zap } from "lucide-react";
+import { Link2, Minus, Plus, RotateCcw, Trash2, X, Zap } from "lucide-react";
 import { bedLabel } from "@/routes/programacion-limpiezas";
 
 export type Limpieza = {
@@ -273,6 +273,18 @@ export function LimpiezaPopover({ open, onOpenChange, apt, fecha, existing, onSa
           </DialogHeader>
 
           <div className="overflow-y-auto px-4 py-3 space-y-4">
+            {/* Cancellation reason (read-only) */}
+            {form.estado === "anulada" && (
+              <div className="rounded-md border border-muted bg-muted/40 p-3 text-xs">
+                <div className="font-semibold text-muted-foreground uppercase tracking-wide text-[10px] mb-1">
+                  Limpieza anulada
+                </div>
+                <div className="text-foreground">
+                  <span className="text-muted-foreground">Motivo de anulación:</span>{" "}
+                  {form.motivo_anulacion ?? "—"}
+                </div>
+              </div>
+            )}
             {/* Shared reservation warning */}
             {sharedQ.data?.shared && (
               <div className="rounded-md border border-orange-300 bg-orange-50 p-3 text-xs space-y-2">
@@ -457,30 +469,57 @@ export function LimpiezaPopover({ open, onOpenChange, apt, fecha, existing, onSa
 
           <DialogFooter className="px-4 py-3 border-t flex-row sm:justify-between gap-2">
             {form.estado === "anulada" ? (
-              <Button
-                variant="outline"
-                className="border-emerald-300 text-emerald-700 hover:bg-emerald-50"
-                disabled={saving || form.id_limpieza === 0}
-                onClick={async () => {
-                  setSaving(true);
-                  try {
-                    const { error } = await supabase
-                      .from("limpiezas")
-                      .update({ estado: "activa", motivo_anulacion: null })
-                      .eq("id_limpieza", form.id_limpieza);
-                    if (error) throw error;
-                    setForm((f) => ({ ...f, estado: "activa", motivo_anulacion: null }));
-                    toast.success("Limpieza reactivada");
-                    onSaved();
-                  } catch (e) {
-                    toast.error("Error: " + (e as Error).message);
-                  } finally {
-                    setSaving(false);
-                  }
-                }}
-              >
-                <RotateCcw className="h-4 w-4 mr-1" /> Reactivar limpieza
-              </Button>
+              <>
+                <Button
+                  variant="outline"
+                  className="border-red-300 text-red-700 hover:bg-red-50"
+                  disabled={saving || form.id_limpieza === 0}
+                  onClick={async () => {
+                    if (!window.confirm("¿Borrar definitivamente esta limpieza? Esta acción no se puede deshacer.")) return;
+                    setSaving(true);
+                    try {
+                      const { error } = await supabase
+                        .from("limpiezas")
+                        .delete()
+                        .eq("id_limpieza", form.id_limpieza);
+                      if (error) throw error;
+                      toast.success("Limpieza borrada");
+                      onSaved();
+                      onOpenChange(false);
+                    } catch (e) {
+                      toast.error("Error: " + (e as Error).message);
+                    } finally {
+                      setSaving(false);
+                    }
+                  }}
+                >
+                  <Trash2 className="h-4 w-4 mr-1" /> Borrar
+                </Button>
+                <Button
+                  variant="outline"
+                  className="border-emerald-300 text-emerald-700 hover:bg-emerald-50"
+                  disabled={saving || form.id_limpieza === 0}
+                  onClick={async () => {
+                    setSaving(true);
+                    try {
+                      const { error } = await supabase
+                        .from("limpiezas")
+                        .update({ estado: "activa", motivo_anulacion: null })
+                        .eq("id_limpieza", form.id_limpieza);
+                      if (error) throw error;
+                      setForm((f) => ({ ...f, estado: "activa", motivo_anulacion: null }));
+                      toast.success("Limpieza reactivada");
+                      onSaved();
+                    } catch (e) {
+                      toast.error("Error: " + (e as Error).message);
+                    } finally {
+                      setSaving(false);
+                    }
+                  }}
+                >
+                  <RotateCcw className="h-4 w-4 mr-1" /> Reactivar limpieza
+                </Button>
+              </>
             ) : (
               <>
                 <Button

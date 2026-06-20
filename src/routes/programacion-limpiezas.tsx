@@ -725,7 +725,7 @@ function SalidaLabel({
   } else if (hasWorker && isPriority) {
     cls = "bg-amber-500/85 text-white";
   } else if (hasWorker) {
-    cls = "bg-emerald-500/85 text-white";
+    cls = "bg-purple-700/90 text-white";
   }
   if (affected && !anulada) {
     cls = "bg-orange-100 text-orange-900 border border-dashed border-orange-500";
@@ -748,7 +748,7 @@ function SalidaLabel({
         "absolute z-20 rounded flex items-center justify-center gap-1 px-1 text-[10px] font-semibold overflow-hidden shadow-sm",
         cls,
       )}
-      style={{ left, width, top: "50%", transform: "translateY(-50%)", height: 18 }}
+      style={{ left, width, top: 3, height: 20 }}
       title={`Salida · ${l.fecha_limpieza}`}
     >
       {hasWorker && l.orden_trabajo != null && !anulada && (
@@ -773,9 +773,9 @@ function IntermediaOverlay({
   onClick: () => void;
 }) {
   const { anulada, hasWorker, affected, isPriority, enCurso } = cleaningState(l);
-  // base: teal translucent overlay on top of reservation bar
+  // base: dark purple translucent overlay on top of reservation bar
   let cls =
-    "bg-teal-500/55 text-white border border-dashed border-teal-200/90 backdrop-blur-[1px]";
+    "bg-purple-700/60 text-white border border-dashed border-purple-200/90 backdrop-blur-[1px]";
   if (anulada) {
     cls =
       "bg-gray-400/60 text-white line-through bg-[repeating-linear-gradient(45deg,transparent_0_4px,rgba(0,0,0,0.15)_4px_8px)] border border-dashed border-gray-500";
