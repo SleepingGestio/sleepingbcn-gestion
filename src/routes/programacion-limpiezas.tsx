@@ -16,6 +16,12 @@ import { Link2, Sofa } from "lucide-react";
 import { fmtDate } from "@/lib/format";
 import { LimpiezaPopover, type Limpieza } from "@/components/limpieza-popover";
 import { fetchLimpiadores } from "@/lib/catalogos";
+import { generarLimpiezas } from "@/lib/generar-limpiezas";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Sparkles } from "lucide-react";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/programacion-limpiezas")({
   component: ProgramacionLimpiezasPage,
@@ -197,6 +203,7 @@ function ProgramacionLimpiezasPage() {
         existing: LimpiezaRow | null;
       }
   >(null);
+  const [genOpen, setGenOpen] = useState(false);
 
   const gruposQ = useQuery({ queryKey: ["grupos_apartamentos"], queryFn: fetchGrupos });
   const aptsQ = useQuery({ queryKey: ["apartamentos_activos"], queryFn: fetchApartamentos });
@@ -337,6 +344,10 @@ function ProgramacionLimpiezasPage() {
         </Button>
         <Button variant="secondary" size="sm" onClick={resetToday}>
           Hoy
+        </Button>
+        <div className="ml-auto" />
+        <Button size="sm" onClick={() => setGenOpen(true)}>
+          <Sparkles className="h-4 w-4" /> Generar limpiezas
         </Button>
       </div>
 
@@ -562,7 +573,107 @@ function ProgramacionLimpiezasPage() {
           onSaved={() => limpiezasQ.refetch()}
         />
       )}
+      <GenerarDialog
+        open={genOpen}
+        onOpenChange={setGenOpen}
+        onDone={() => limpiezasQ.refetch()}
+      />
     </AppShell>
+  );
+}
+
+function GenerarDialog({
+  open,
+  onOpenChange,
+  onDone,
+}: {
+  open: boolean;
+  onOpenChange: (o: boolean) => void;
+  onDone: () => void;
+}) {
+  const today = toISO(new Date());
+  const [mode, setMode] = useState<"hoy" | "3d" | "5d" | "custom">("hoy");
+  const [from, setFrom] = useState(today);
+  const [to, setTo] = useState(today);
+  const [running, setRunning] = useState(false);
+
+  function effectiveRange(): { from: string; to: string } {
+    if (mode === "hoy") return { from: today, to: today };
+    if (mode === "3d") return { from: today, to: toISO(addDays(new Date(), 3)) };
+    if (mode === "5d") return { from: today, to: toISO(addDays(new Date(), 5)) };
+    return { from, to };
+  }
+
+  const run = async () => {
+    setRunning(true);
+    try {
+      const r = effectiveRange();
+      const res = await generarLimpiezas(r.from, r.to);
+      toast.success(`${res.created} limpiezas generadas`);
+      onDone();
+      onOpenChange(false);
+    } catch (e) {
+      toast.error("Error: " + (e as Error).message);
+    } finally {
+      setRunning(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle>Generar limpiezas</DialogTitle>
+          <DialogDescription className="text-xs">
+            Crea las limpiezas (salida e intermedias) que faltan para el rango seleccionado. No se sobreescriben campos editados manualmente.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-3">
+          <div className="grid grid-cols-2 gap-2">
+            {[
+              { id: "hoy", label: "Hoy" },
+              { id: "3d", label: "Próximos 3 días" },
+              { id: "5d", label: "Próximos 5 días" },
+              { id: "custom", label: "Personalizar" },
+            ].map((opt) => (
+              <button
+                key={opt.id}
+                type="button"
+                onClick={() => setMode(opt.id as typeof mode)}
+                className={cn(
+                  "rounded-md border px-3 py-2 text-xs font-medium transition-colors",
+                  mode === opt.id
+                    ? "bg-primary text-primary-foreground border-primary"
+                    : "bg-white hover:bg-muted",
+                )}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+          {mode === "custom" && (
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <Label className="text-xs">Desde</Label>
+                <Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
+              </div>
+              <div>
+                <Label className="text-xs">Hasta</Label>
+                <Input type="date" value={to} onChange={(e) => setTo(e.target.value)} />
+              </div>
+            </div>
+          )}
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={running}>
+            Cancelar
+          </Button>
+          <Button onClick={run} disabled={running}>
+            {running ? "Generando…" : "Generar"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
