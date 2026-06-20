@@ -294,6 +294,10 @@ export async function generarLimpiezas(fromISO: string, toISO: string): Promise<
         sfc_desmontar: false,
         prioritaria: false,
         estado: "activa",
+        check_toallas: true,
+        check_sabanas: true,
+        check_limpieza_basica: true,
+        check_limpieza_completa: false,
       });
       existingFechas.add(fecha);
       existingIntermediaByPair.set(key, existingFechas);

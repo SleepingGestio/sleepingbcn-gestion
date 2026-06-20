@@ -39,6 +39,10 @@ export type Limpieza = {
   sfc_desmontar_manual: boolean | null;
   check_checkin: boolean | null;
   check_tasas: boolean | null;
+  check_toallas: boolean | null;
+  check_sabanas: boolean | null;
+  check_limpieza_basica: boolean | null;
+  check_limpieza_completa: boolean | null;
   observaciones: string | null;
   estado: string | null;
   motivo_anulacion: string | null;
@@ -83,6 +87,10 @@ function emptyLimpieza(apt: AptInfo, fecha: string): Limpieza {
     sfc_desmontar_manual: null,
     check_checkin: false,
     check_tasas: false,
+    check_toallas: false,
+    check_sabanas: false,
+    check_limpieza_basica: false,
+    check_limpieza_completa: false,
     observaciones: null,
     estado: "activa",
     motivo_anulacion: null,
@@ -306,6 +314,10 @@ export function LimpiezaPopover({ open, onOpenChange, apt, fecha, existing, onSa
         sfc_desmontar_manual: form.sfc_desmontar_manual,
         check_checkin: form.check_checkin,
         check_tasas: form.check_tasas,
+        check_toallas: form.check_toallas,
+        check_sabanas: form.check_sabanas,
+        check_limpieza_basica: form.check_limpieza_basica,
+        check_limpieza_completa: form.check_limpieza_completa,
         observaciones: form.observaciones,
         estado: form.estado ?? "activa",
       };
@@ -386,6 +398,7 @@ export function LimpiezaPopover({ open, onOpenChange, apt, fecha, existing, onSa
             )}
 
             {/* Horarios */}
+            {form.tipo !== "intermedia" && (
             <section>
               <Label className="text-xs uppercase tracking-wide text-muted-foreground">Horarios</Label>
               <div className="mt-2 space-y-1.5">
@@ -408,8 +421,10 @@ export function LimpiezaPopover({ open, onOpenChange, apt, fecha, existing, onSa
                 />
               </div>
             </section>
+            )}
 
             {/* Ventana */}
+            {form.tipo !== "intermedia" && (
             <section>
               <Label className="text-xs uppercase tracking-wide text-muted-foreground">Ventana de limpieza</Label>
               <div
@@ -427,6 +442,7 @@ export function LimpiezaPopover({ open, onOpenChange, apt, fecha, existing, onSa
                   : fmtWindow(winMinsAdj)}
               </div>
             </section>
+            )}
 
             {/* Fecha + prioritaria */}
             <section>
@@ -485,6 +501,45 @@ export function LimpiezaPopover({ open, onOpenChange, apt, fecha, existing, onSa
             )}
 
             {/* Tareas */}
+            {form.tipo === "intermedia" ? (
+            <section>
+              <Label className="text-xs uppercase tracking-wide text-muted-foreground">Tareas</Label>
+              <div className="mt-2 space-y-2">
+                <TaskRow
+                  label="Cambiar toallas"
+                  checked={!!form.check_toallas}
+                  onChange={(v) => set("check_toallas", v)}
+                />
+                <TaskRow
+                  label="Cambiar sábanas"
+                  checked={!!form.check_sabanas}
+                  onChange={(v) => set("check_sabanas", v)}
+                />
+                <TaskRow
+                  label="Limpieza básica"
+                  checked={!!form.check_limpieza_basica}
+                  onChange={(v) =>
+                    setForm((f) => ({
+                      ...f,
+                      check_limpieza_basica: v,
+                      check_limpieza_completa: v ? false : f.check_limpieza_completa,
+                    }))
+                  }
+                />
+                <TaskRow
+                  label="Limpieza completa"
+                  checked={!!form.check_limpieza_completa}
+                  onChange={(v) =>
+                    setForm((f) => ({
+                      ...f,
+                      check_limpieza_completa: v,
+                      check_limpieza_basica: v ? false : f.check_limpieza_basica,
+                    }))
+                  }
+                />
+              </div>
+            </section>
+            ) : (
             <section>
               <Label className="text-xs uppercase tracking-wide text-muted-foreground">Tareas</Label>
               <div className="mt-2 space-y-2">
@@ -512,6 +567,7 @@ export function LimpiezaPopover({ open, onOpenChange, apt, fecha, existing, onSa
                 />
               </div>
             </section>
+            )}
 
             {/* Asignar limpiador */}
             <section>

@@ -570,6 +570,7 @@ function ProgramacionLimpiezasPage() {
 
       {popover && (
         <LimpiezaPopover
+          key={`${popover.apt.id_apt}|${popover.fecha}|${popover.existing?.id_limpieza ?? 0}`}
           open={!!popover}
           onOpenChange={(o) => !o && setPopover(null)}
           apt={popover.apt}
