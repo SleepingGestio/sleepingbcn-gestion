@@ -60,7 +60,7 @@ type LimpiezaRow = Limpieza;
 const DOW = ["D", "L", "M", "X", "J", "V", "S"];
 const DAY_COL_W = 112; // px per day column
 const APT_COL_W = 160; // px for left apartment column
-const ROW_H = 52; // px per apartment row
+const ROW_H = 38; // px per apartment row (compact: one reservation lane)
 
 export function bedLabel(camas: number | null | undefined): string {
   const pax = camas ?? 0;
@@ -242,6 +242,16 @@ function ProgramacionLimpiezasPage() {
     return m;
   }, [limpiezasQ.data]);
 
+  const limpiezasByApt = useMemo(() => {
+    const m = new Map<number, LimpiezaRow[]>();
+    for (const l of limpiezasQ.data ?? []) {
+      const arr = m.get(l.id_apt) ?? [];
+      arr.push(l);
+      m.set(l.id_apt, arr);
+    }
+    return m;
+  }, [limpiezasQ.data]);
+
   const sharedByNumero = useMemo(() => {
     const m = new Map<string, ReservaRow[]>();
     for (const r of reservasQ.data ?? []) {
@@ -298,6 +308,7 @@ function ProgramacionLimpiezasPage() {
   const rangeLabel = `${fmtShort(range.from)} – ${fmtShort(range.to)}`;
 
   const gridWidth = APT_COL_W + DAY_COL_W * days.length;
+  const dayISOs = useMemo(() => days.map(toISO), [days]);
 
   const grupoNombreById = (id: number) =>
     (gruposQ.data ?? []).find((g) => g.id_grupo === id)?.nombre ?? null;
@@ -451,40 +462,28 @@ function ProgramacionLimpiezasPage() {
                             const isToday = iso === todayISO;
                             const existing = limpiezasByAptDay.get(`${a.id_apt}|${iso}`) ?? null;
                             return (
-                              <div
+                              <button
                                 key={iso}
+                                type="button"
                                 className={cn(
-                                  "shrink-0 border-r h-full relative",
+                                  "shrink-0 border-r h-full hover:bg-muted/40 transition-colors",
                                   isToday && "bg-primary/5",
                                 )}
                                 style={{ width: DAY_COL_W }}
-                              >
-                                {/* Bottom-half click target for empty cells / wraps the bar */}
-                                <button
-                                  type="button"
-                                  className="absolute inset-x-0 bottom-0 h-[50%] hover:bg-muted/40 transition-colors"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setPopover({
-                                      apt: {
-                                        id_apt: a.id_apt,
-                                        nombre: a.nombre,
-                                        grupo_nombre: grupoNombreById(a.id_grupo),
-                                        camas_fijas: a.camas_fijas,
-                                      },
-                                      fecha: iso,
-                                      existing,
-                                    });
-                                  }}
-                                >
-                                  {existing && (
-                                    <CleaningBar
-                                      l={existing}
-                                      codigo={workerCodigo(existing.worker)}
-                                    />
-                                  )}
-                                </button>
-                              </div>
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setPopover({
+                                    apt: {
+                                      id_apt: a.id_apt,
+                                      nombre: a.nombre,
+                                      grupo_nombre: grupoNombreById(a.id_grupo),
+                                      camas_fijas: a.camas_fijas,
+                                    },
+                                    fecha: iso,
+                                    existing,
+                                  });
+                                }}
+                              />
                             );
                           })}
                         </div>
@@ -503,6 +502,41 @@ function ProgramacionLimpiezasPage() {
                             }
                           />
                         ))}
+                        {(limpiezasByApt.get(a.id_apt) ?? []).map((l) => {
+                          const idx = dayISOs.indexOf(l.fecha_limpieza);
+                          if (idx < 0) return null;
+                          const onOpen = () =>
+                            setPopover({
+                              apt: {
+                                id_apt: a.id_apt,
+                                nombre: a.nombre,
+                                grupo_nombre: grupoNombreById(a.id_grupo),
+                                camas_fijas: a.camas_fijas,
+                              },
+                              fecha: l.fecha_limpieza,
+                              existing: l,
+                            });
+                          if (l.tipo === "intermedia") {
+                            return (
+                              <IntermediaOverlay
+                                key={l.id}
+                                l={l}
+                                codigo={workerCodigo(l.worker)}
+                                dayIdx={idx}
+                                onClick={onOpen}
+                              />
+                            );
+                          }
+                          return (
+                            <SalidaLabel
+                              key={l.id}
+                              l={l}
+                              codigo={workerCodigo(l.worker)}
+                              dayIdx={idx}
+                              onClick={onOpen}
+                            />
+                          );
+                        })}
                       </div>
                     </div>
                   ))}
