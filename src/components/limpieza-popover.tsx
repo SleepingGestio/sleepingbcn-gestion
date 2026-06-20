@@ -141,6 +141,18 @@ function parseHM(s: string | null | undefined): { h: number; m: number } | null 
   return m ? { h: Number(m[1]), m: Number(m[2]) } : null;
 }
 
+function resolveTime(
+  conf: string | null,
+  estimada: string | null,
+  defaultVal: string,
+): { value: string; informed: boolean } {
+  const c = parseHM(conf);
+  if (c) return { value: `${String(c.h).padStart(2, "0")}:${String(c.m).padStart(2, "0")}:00`, informed: true };
+  const e = parseHM(estimada);
+  if (e) return { value: `${String(e.h).padStart(2, "0")}:${String(e.m).padStart(2, "0")}:00`, informed: true };
+  return { value: defaultVal, informed: false };
+}
+
 // Combine an ISO date (YYYY-MM-DD) and HH:MM[:SS] into a UTC-anchored Date
 // (we only ever subtract two such Dates, so the tz anchor is irrelevant).
 function combineDateTime(dateISO: string | null, time: string | null): Date | null {
@@ -533,8 +545,8 @@ export function LimpiezaPopover({ open, onOpenChange, apt, fecha, existing, onSa
                 <HoraRow
                   label="Entra (próx. reserva)"
                   dateLabel={
-                    nextResQ.data?.["Check in"]
-                      ? fmtDate(nextResQ.data["Check in"])
+                    nextReservation?.["Check in"]
+                      ? fmtDate(nextReservation["Check in"])
                       : "—"
                   }
                   time={form.hora_in_time}
