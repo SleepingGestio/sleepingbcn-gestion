@@ -200,7 +200,7 @@ function ProgramacionLimpiezasPage() {
     | null
     | {
         loadKey: number;
-        apt: { id_apt: number; nombre: string; grupo_nombre?: string | null; camas_fijas?: number | null };
+        apt: { id_apt: number; nombre: string; grupo_nombre?: string | null; camas_fijas?: number | null; tiene_sofa_cama?: boolean | null };
         fecha: string;
         existing: LimpiezaRow | null;
       }
@@ -498,6 +498,7 @@ function ProgramacionLimpiezasPage() {
                                       nombre: a.nombre,
                                       grupo_nombre: grupoNombreById(a.id_grupo),
                                       camas_fijas: a.camas_fijas,
+                                      tiene_sofa_cama: a.tiene_sofa_cama,
                                     },
                                     fecha: iso,
                                     existing,
@@ -534,6 +535,7 @@ function ProgramacionLimpiezasPage() {
                                 nombre: a.nombre,
                                 grupo_nombre: grupoNombreById(a.id_grupo),
                                 camas_fijas: a.camas_fijas,
+                                tiene_sofa_cama: a.tiene_sofa_cama,
                               },
                               fecha: l.fecha_limpieza,
                               existing: l,
