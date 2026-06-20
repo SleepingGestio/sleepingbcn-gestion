@@ -16,6 +16,7 @@ import { fullName } from "@/lib/types";
 import { Link2, Minus, Plus, RotateCcw, Trash2, X, Zap } from "lucide-react";
 import { bedLabel } from "@/routes/programacion-limpiezas";
 import { fmtTime } from "@/lib/format";
+import { recalcOrdenesTrabajo } from "@/lib/recalc-ordenes";
 
 export type Limpieza = {
   id_limpieza: number;
@@ -269,6 +270,8 @@ export function LimpiezaPopover({ open, onOpenChange, apt, fecha, existing, onSa
   const save = async () => {
     setSaving(true);
     try {
+      const prevWorker = existing?.worker ?? null;
+      const prevFecha = existing?.fecha_limpieza ?? null;
       const payload: any = {
         numero_reserva: form.numero_reserva,
         id_apt: form.id_apt,
@@ -298,6 +301,14 @@ export function LimpiezaPopover({ open, onOpenChange, apt, fecha, existing, onSa
       } else {
         const { error } = await supabase.from("limpiezas").insert(payload);
         if (error) throw error;
+      }
+      // Recompute orden_trabajo for affected worker+date buckets.
+      const buckets = new Set<string>();
+      if (form.worker != null) buckets.add(`${form.worker}|${form.fecha_limpieza}`);
+      if (prevWorker != null && prevFecha) buckets.add(`${prevWorker}|${prevFecha}`);
+      for (const key of buckets) {
+        const [w, f] = key.split("|");
+        try { await recalcOrdenesTrabajo(Number(w), f); } catch { /* non-blocking */ }
       }
       toast.success("Limpieza guardada");
       onSaved();
