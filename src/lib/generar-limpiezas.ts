@@ -33,11 +33,11 @@ type ExistingLimp = {
   tipo: string | null;
 };
 
-// We only want to skip non-effective reservations. Anything else
-// (Confirmada, Check-in realizado, En salida, Check-out realizado,
-// En espera de confirmación, etc.) can legitimately produce a salida
-// limpieza or be the next reservation for a turnover.
+// Reservations whose stay actually happened / will happen — used to find both
+// "checkouts that need a salida limpieza" and the "next incoming reservation"
+// that drives hora_in_time. Explicitly excludes Cancelada and No show.
 const ESTADOS_EXCLUDED = ["Cancelada", "No show"];
+const ESTADOS_EXCLUDED_FILTER = `(${ESTADOS_EXCLUDED.map((e) => `"${e}"`).join(",")})`;
 
 function addDaysISO(iso: string, n: number): string {
   const d = new Date(iso + "T00:00:00");
@@ -109,7 +109,7 @@ export async function generarLimpiezas(fromISO: string, toISO: string): Promise<
     .select(
       `"Número","Check in","Check-out","Noches","Huéspedes","Estado","Hora estimada de llegada","Hora estimada de salida",id_apt,es_reserva_compartida`,
     )
-    .not("Estado", "in", `(${ESTADOS_EXCLUDED.map((e) => `"${e}"`).join(",")})`)
+    .not("Estado", "in", ESTADOS_EXCLUDED_FILTER)
     .lte("Check in", toISO)
     .gte("Check-out", fromISO);
   if (e1) throw e1;
@@ -120,7 +120,7 @@ export async function generarLimpiezas(fromISO: string, toISO: string): Promise<
   const { data: vresFuture, error: e2 } = await supabase
     .from("v_reservas_por_apartamento")
     .select(`"Número","Check in","Check-out","Huéspedes","Estado",id_apt`)
-    .not("Estado", "in", `(${ESTADOS_EXCLUDED.map((e) => `"${e}"`).join(",")})`)
+    .not("Estado", "in", ESTADOS_EXCLUDED_FILTER)
     .gte("Check in", fromISO)
     .lte("Check in", widerTo);
   if (e2) throw e2;
