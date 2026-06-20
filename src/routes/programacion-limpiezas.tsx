@@ -64,7 +64,7 @@ type ReservaRow = {
 type LimpiezaRow = Limpieza;
 
 const DOW = ["D", "L", "M", "X", "J", "V", "S"];
-const DAY_COL_W = 84; // px per day column (compact: fits 12 days on typical desktop)
+const DAY_COL_W = 112; // px per day column — legible worker codes / times at 12-day default
 const APT_COL_W = 160; // px for left apartment column
 const ROW_H = 38; // px per apartment row (compact: one reservation lane)
 
@@ -867,11 +867,6 @@ function SalidaLabel({
       style={{ left, width, top: 3, height: 20 }}
       title={`Salida · ${l.fecha_limpieza}`}
     >
-      {hasWorker && l.orden_trabajo != null && !anulada && (
-        <span className="shrink-0 h-3.5 min-w-[14px] rounded-full bg-black/25 px-1 text-[9px] leading-[14px] text-center">
-          {l.orden_trabajo}
-        </span>
-      )}
       <span className="truncate">{label}</span>
     </button>
   );
