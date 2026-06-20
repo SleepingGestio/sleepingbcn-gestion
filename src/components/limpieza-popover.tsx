@@ -829,7 +829,7 @@ export function LimpiezaPopover({ open, loadKey, onOpenChange, apt, fecha, exist
                 >
                   <X className="h-4 w-4 mr-1" /> Anular limpieza
                 </Button>
-                <Button onClick={save} disabled={saving} className="bg-emerald-600 hover:bg-emerald-700">
+                <Button onClick={save} disabled={saving || !loaded || popoverDataQ.isError} className="bg-emerald-600 hover:bg-emerald-700">
                   {saving ? "Guardando…" : "Guardar"}
                 </Button>
               </>
