@@ -5,6 +5,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PersonalAdmin } from "@/components/personal-admin";
+import { ApartamentosAdmin } from "@/components/apartamentos-admin";
 
 export const Route = createFileRoute("/configuracion")({
   component: ConfigPage,
@@ -18,6 +19,7 @@ function ConfigPage() {
         <TabsList>
           <TabsTrigger value="general">General</TabsTrigger>
           <TabsTrigger value="personal">Personal</TabsTrigger>
+          <TabsTrigger value="apartamentos">Apartamentos</TabsTrigger>
         </TabsList>
         <TabsContent value="general" className="max-w-2xl space-y-4">
           <Card>
@@ -46,6 +48,9 @@ function ConfigPage() {
         </TabsContent>
         <TabsContent value="personal">
           <PersonalAdmin />
+        </TabsContent>
+        <TabsContent value="apartamentos">
+          <ApartamentosAdmin />
         </TabsContent>
       </Tabs>
     </AppShell>
