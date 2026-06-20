@@ -14,6 +14,8 @@ import {
 } from "@/components/ui/hover-card";
 import { Link2, Sofa } from "lucide-react";
 import { fmtDate } from "@/lib/format";
+import { LimpiezaPopover, type Limpieza } from "@/components/limpieza-popover";
+import { fetchLimpiadores } from "@/lib/catalogos";
 
 export const Route = createFileRoute("/programacion-limpiezas")({
   component: ProgramacionLimpiezasPage,
@@ -52,6 +54,8 @@ type ReservaRow = {
   hCheckInConf: string | null;
   hCheckOutConf: string | null;
 };
+
+type LimpiezaRow = Limpieza;
 
 const DOW = ["D", "L", "M", "X", "J", "V", "S"];
 const DAY_COL_W = 96; // px per day column
@@ -130,6 +134,16 @@ async function fetchReservas(fromISO: string, toExclusiveISO: string): Promise<R
   }));
 }
 
+async function fetchLimpiezas(fromISO: string, toExclusiveISO: string): Promise<LimpiezaRow[]> {
+  const { data, error } = await supabase
+    .from("limpiezas")
+    .select("*")
+    .gte("fecha_limpieza", fromISO)
+    .lt("fecha_limpieza", toExclusiveISO);
+  if (error) throw error;
+  return (data ?? []) as LimpiezaRow[];
+}
+
 // Estado → bar background color (mirror of EstadoBadge palette)
 const ESTADO_BAR: Record<string, string> = {
   "Confirmada": "bg-green-600 text-white",
@@ -166,9 +180,18 @@ function ProgramacionLimpiezasPage() {
   const [range, setRange] = useState(defaultRange);
   const [filterMode, setFilterMode] = useState<FilterMode>("default");
   const [customGroups, setCustomGroups] = useState<Set<number>>(new Set());
+  const [popover, setPopover] = useState<
+    | null
+    | {
+        apt: { id_apt: number; nombre: string; grupo_nombre?: string | null };
+        fecha: string;
+        existing: LimpiezaRow | null;
+      }
+  >(null);
 
   const gruposQ = useQuery({ queryKey: ["grupos_apartamentos"], queryFn: fetchGrupos });
   const aptsQ = useQuery({ queryKey: ["apartamentos_activos"], queryFn: fetchApartamentos });
+  const limpiadoresQ = useQuery({ queryKey: ["limpiadores"], queryFn: fetchLimpiadores });
 
   const days = useMemo(() => {
     const out: Date[] = [];
@@ -186,6 +209,10 @@ function ProgramacionLimpiezasPage() {
     queryKey: ["v_reservas_por_apartamento", fetchFromISO, fetchToExclusiveISO],
     queryFn: () => fetchReservas(fetchFromISO, fetchToExclusiveISO),
   });
+  const limpiezasQ = useQuery({
+    queryKey: ["limpiezas-grid", fetchFromISO, fetchToExclusiveISO],
+    queryFn: () => fetchLimpiezas(fetchFromISO, fetchToExclusiveISO),
+  });
 
   const reservasByApt = useMemo(() => {
     const m = new Map<number, ReservaRow[]>();
@@ -197,6 +224,14 @@ function ProgramacionLimpiezasPage() {
     }
     return m;
   }, [reservasQ.data]);
+
+  const limpiezasByAptDay = useMemo(() => {
+    const m = new Map<string, LimpiezaRow>();
+    for (const l of limpiezasQ.data ?? []) {
+      m.set(`${l.id_apt}|${l.fecha_limpieza}`, l);
+    }
+    return m;
+  }, [limpiezasQ.data]);
 
   const sharedByNumero = useMemo(() => {
     const m = new Map<string, ReservaRow[]>();
@@ -254,6 +289,12 @@ function ProgramacionLimpiezasPage() {
   const rangeLabel = `${fmtShort(range.from)} – ${fmtShort(range.to)}`;
 
   const gridWidth = APT_COL_W + DAY_COL_W * days.length;
+
+  const grupoNombreById = (id: number) =>
+    (gruposQ.data ?? []).find((g) => g.id_grupo === id)?.nombre ?? null;
+
+  const workerCodigo = (id: number | null) =>
+    id == null ? null : limpiadoresQ.data?.find((p) => p.id_persona === id)?.codigo ?? null;
 
   return (
     <AppShell title="Programación de limpiezas">
@@ -399,15 +440,41 @@ function ProgramacionLimpiezasPage() {
                           {days.map((d) => {
                             const iso = toISO(d);
                             const isToday = iso === todayISO;
+                            const existing = limpiezasByAptDay.get(`${a.id_apt}|${iso}`) ?? null;
                             return (
                               <div
                                 key={iso}
                                 className={cn(
-                                  "shrink-0 border-r h-full",
+                                  "shrink-0 border-r h-full relative",
                                   isToday && "bg-primary/5",
                                 )}
                                 style={{ width: DAY_COL_W }}
-                              />
+                              >
+                                {/* Bottom-half click target for empty cells / wraps the bar */}
+                                <button
+                                  type="button"
+                                  className="absolute inset-x-0 bottom-0 h-[55%] hover:bg-muted/40 transition-colors"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setPopover({
+                                      apt: {
+                                        id_apt: a.id_apt,
+                                        nombre: a.nombre,
+                                        grupo_nombre: grupoNombreById(a.id_grupo),
+                                      },
+                                      fecha: iso,
+                                      existing,
+                                    });
+                                  }}
+                                >
+                                  {existing && (
+                                    <CleaningBar
+                                      l={existing}
+                                      codigo={workerCodigo(existing.worker)}
+                                    />
+                                  )}
+                                </button>
+                              </div>
                             );
                           })}
                         </div>
@@ -440,6 +507,17 @@ function ProgramacionLimpiezasPage() {
           </div>
         </div>
       </Card>
+
+      {popover && (
+        <LimpiezaPopover
+          open={!!popover}
+          onOpenChange={(o) => !o && setPopover(null)}
+          apt={popover.apt}
+          fecha={popover.fecha}
+          existing={popover.existing}
+          onSaved={() => limpiezasQ.refetch()}
+        />
+      )}
     </AppShell>
   );
 }
