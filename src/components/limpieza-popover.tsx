@@ -76,6 +76,7 @@ type GestioTimes = {
 
 type Props = {
   open: boolean;
+  loadKey: number;
   onOpenChange: (o: boolean) => void;
   apt: AptInfo;
   fecha: string; // YYYY-MM-DD
@@ -174,7 +175,7 @@ function fmtWindow(mins: number): string {
   return days > 0 ? `${days}d ${hm}` : hm;
 }
 
-export function LimpiezaPopover({ open, onOpenChange, apt, fecha, existing, onSaved }: Props) {
+export function LimpiezaPopover({ open, loadKey, onOpenChange, apt, fecha, existing, onSaved }: Props) {
   const [form, setForm] = useState<Limpieza>(() => emptyLimpieza(apt, fecha));
   const [loaded, setLoaded] = useState(false);
   const [realCheckoutDate, setRealCheckoutDate] = useState<string | null>(null);
@@ -190,7 +191,7 @@ export function LimpiezaPopover({ open, onOpenChange, apt, fecha, existing, onSa
     setSaving(false);
     setAnularOpen(false);
     setLoaded(false);
-  }, [open, apt.id_apt, fecha, existing?.id_limpieza]);
+  }, [open, loadKey, apt.id_apt, fecha, existing?.id_limpieza]);
 
   const popoverDataQ = useQuery({
     queryKey: [
@@ -200,8 +201,13 @@ export function LimpiezaPopover({ open, onOpenChange, apt, fecha, existing, onSa
       existing?.id_limpieza ?? 0,
       existing?.numero_reserva ?? null,
       existing?.tipo ?? "salida",
+      loadKey,
     ],
     enabled: open,
+    staleTime: 0,
+    gcTime: 0,
+    refetchOnMount: "always",
+    refetchOnWindowFocus: false,
     queryFn: async () => {
       const persisted = normalizeLimpieza(existing, apt, fecha);
       if (persisted.tipo === "intermedia") {
