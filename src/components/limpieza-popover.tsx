@@ -200,19 +200,21 @@ export function LimpiezaPopover({ open, onOpenChange, apt, fecha, existing, onSa
       end.setDate(end.getDate() + 14);
       const tz = end.getTimezoneOffset() * 60000;
       const endISO = new Date(end.getTime() - tz).toISOString().slice(0, 10);
-      const { data, error } = await supabase
+      let q = supabase
         .from("v_reservas_por_apartamento")
-        .select(`"Número","Check in"`)
+        .select(`"Número","Check in","Hora estimada de llegada"`)
         .eq("id_apt", apt.id_apt)
         .not("Estado", "in", '("Cancelada","No show")')
-        .gt("Check in", fecha)
-        .lte("Check in", endISO)
+        .gte("Check in", fecha)
+        .lte("Check in", endISO);
+      if (form.numero_reserva) q = q.neq("Número", form.numero_reserva);
+      const { data, error } = await q
         .order("Check in", { ascending: true })
-        .limit(2);
+        .order("Hora estimada de llegada", { ascending: true, nullsFirst: true })
+        .limit(1);
       if (error) throw error;
       const rows = (data ?? []) as Array<{ "Número": string; "Check in": string }>;
-      const next = rows.find((r) => r["Número"] !== form.numero_reserva) ?? null;
-      return next;
+      return rows[0] ?? null;
     },
   });
 
