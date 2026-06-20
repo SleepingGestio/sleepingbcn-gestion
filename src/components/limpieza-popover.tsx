@@ -13,7 +13,7 @@ import { cn } from "@/lib/utils";
 import { fmtDate } from "@/lib/format";
 import { fetchLimpiadores } from "@/lib/catalogos";
 import { fullName } from "@/lib/types";
-import { Link2, Minus, Plus, RotateCcw, X, Zap } from "lucide-react";
+import { Link2, Minus, Plus, RotateCcw, Trash2, X, Zap } from "lucide-react";
 import { bedLabel } from "@/routes/programacion-limpiezas";
 
 export type Limpieza = {
@@ -273,6 +273,18 @@ export function LimpiezaPopover({ open, onOpenChange, apt, fecha, existing, onSa
           </DialogHeader>
 
           <div className="overflow-y-auto px-4 py-3 space-y-4">
+            {/* Cancellation reason (read-only) */}
+            {form.estado === "anulada" && (
+              <div className="rounded-md border border-muted bg-muted/40 p-3 text-xs">
+                <div className="font-semibold text-muted-foreground uppercase tracking-wide text-[10px] mb-1">
+                  Limpieza anulada
+                </div>
+                <div className="text-foreground">
+                  <span className="text-muted-foreground">Motivo de anulación:</span>{" "}
+                  {form.motivo_anulacion ?? "—"}
+                </div>
+              </div>
+            )}
             {/* Shared reservation warning */}
             {sharedQ.data?.shared && (
               <div className="rounded-md border border-orange-300 bg-orange-50 p-3 text-xs space-y-2">
