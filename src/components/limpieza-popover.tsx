@@ -163,13 +163,144 @@ function fmtWindow(mins: number): string {
 }
 
 export function LimpiezaPopover({ open, onOpenChange, apt, fecha, existing, onSaved }: Props) {
-  const [form, setForm] = useState<Limpieza>(() => existing ?? emptyLimpieza(apt, fecha));
+  const [form, setForm] = useState<Limpieza>(() => emptyLimpieza(apt, fecha));
+  const [loaded, setLoaded] = useState(false);
+  const [realCheckoutDate, setRealCheckoutDate] = useState<string | null>(null);
+  const [nextReservation, setNextReservation] = useState<ReservaPopoverRow | null>(null);
   const [saving, setSaving] = useState(false);
   const [anularOpen, setAnularOpen] = useState(false);
 
   useEffect(() => {
-    if (open) setForm(existing ?? emptyLimpieza(apt, fecha));
-  }, [open, existing, apt, fecha]);
+    if (!open) return;
+    setForm(emptyLimpieza(apt, fecha));
+    setRealCheckoutDate(null);
+    setNextReservation(null);
+    setSaving(false);
+    setAnularOpen(false);
+    setLoaded(false);
+  }, [open, apt.id_apt, fecha, existing?.id_limpieza]);
+
+  const popoverDataQ = useQuery({
+    queryKey: [
+      "limpieza-popover-data",
+      apt.id_apt,
+      fecha,
+      existing?.id_limpieza ?? 0,
+      existing?.numero_reserva ?? null,
+      existing?.tipo ?? "salida",
+    ],
+    enabled: open,
+    queryFn: async () => {
+      const persisted = normalizeLimpieza(existing, apt, fecha);
+      if (persisted.tipo === "intermedia") {
+        return {
+          form: {
+            ...persisted,
+            tipo: "intermedia",
+            check_toallas: persisted.check_toallas ?? true,
+            check_sabanas: persisted.check_sabanas ?? true,
+            check_limpieza_basica: persisted.check_limpieza_basica ?? true,
+            check_limpieza_completa: persisted.check_limpieza_completa ?? false,
+          },
+          realCheckoutDate: null,
+          nextReservation: null,
+        };
+      }
+
+      let current: ReservaPopoverRow | null = null;
+      if (persisted.numero_reserva) {
+        const { data, error } = await supabase
+          .from("v_reservas_por_apartamento")
+          .select(`"Número","Check in","Check-out","Huéspedes","Estado","Hora estimada de llegada","Hora estimada de salida",id_apt,es_reserva_compartida`)
+          .eq("id_apt", apt.id_apt)
+          .eq("Número", persisted.numero_reserva)
+          .maybeSingle();
+        if (error) throw error;
+        current = (data ?? null) as ReservaPopoverRow | null;
+      } else {
+        const { data, error } = await supabase
+          .from("v_reservas_por_apartamento")
+          .select(`"Número","Check in","Check-out","Huéspedes","Estado","Hora estimada de llegada","Hora estimada de salida",id_apt,es_reserva_compartida`)
+          .eq("id_apt", apt.id_apt)
+          .not("Estado", "in", ESTADOS_EXCLUDED_FILTER)
+          .eq("Check-out", fecha)
+          .order("Check in", { ascending: true })
+          .limit(1);
+        if (error) throw error;
+        current = ((data ?? [])[0] ?? null) as ReservaPopoverRow | null;
+      }
+
+      let checkoutDate = current?.["Check-out"] ?? null;
+      if (!checkoutDate && persisted.numero_reserva) {
+        const { data, error } = await supabase
+          .from("reservas_kb")
+          .select('"Número","Check-out"')
+          .eq("Número", persisted.numero_reserva)
+          .maybeSingle();
+        if (error) throw error;
+        checkoutDate = ((data as any)?.["Check-out"] as string | null | undefined) ?? null;
+      }
+      checkoutDate = checkoutDate ?? fecha;
+      const currentNumero = current?.["Número"] ?? persisted.numero_reserva ?? null;
+
+      let next: ReservaPopoverRow | null = null;
+      const { data: nextRows, error: nextError } = await supabase
+        .from("v_reservas_por_apartamento")
+        .select(`"Número","Check in","Check-out","Huéspedes","Estado","Hora estimada de llegada","Hora estimada de salida",id_apt,es_reserva_compartida`)
+        .eq("id_apt", apt.id_apt)
+        .not("Estado", "in", ESTADOS_EXCLUDED_FILTER)
+        .gte("Check in", checkoutDate)
+        .lte("Check in", addDaysISO(checkoutDate, 7))
+        .order("Check in", { ascending: true })
+        .order("Hora estimada de llegada", { ascending: true, nullsFirst: true });
+      if (nextError) throw nextError;
+      next = ((nextRows ?? []) as ReservaPopoverRow[]).find((r) => r["Número"] !== currentNumero) ?? null;
+
+      const numeros = Array.from(new Set([currentNumero, next?.["Número"]].filter(Boolean))) as string[];
+      const gestRows = numeros.length
+        ? await supabase.from("reservas_gestio").select('"Número",HCheckInConf,HCheckOutConf').in("Número", numeros)
+        : { data: [] as GestioTimes[], error: null };
+      if (gestRows.error) throw gestRows.error;
+      const gestMap = new Map<string, GestioTimes>(
+        ((gestRows.data ?? []) as GestioTimes[]).map((g) => [g["Número"], g]),
+      );
+
+      const currentGest = currentNumero ? gestMap.get(currentNumero) : null;
+      const nextGest = next?.["Número"] ? gestMap.get(next["Número"]) : null;
+      const out = current
+        ? resolveTime(currentGest?.HCheckOutConf ?? null, current["Hora estimada de salida"], "11:00:00")
+        : { value: persisted.hora_out_time ?? "11:00:00", informed: persisted.hora_out_informed ?? false };
+      const inRes = next
+        ? resolveTime(nextGest?.HCheckInConf ?? null, next["Hora estimada de llegada"], "15:00:00")
+        : null;
+      const checkoutDT = combineDateTime(checkoutDate, out.value);
+      const checkinDT = combineDateTime(next?.["Check in"] ?? null, inRes?.value ?? null);
+      const winMins = checkoutDT && checkinDT ? Math.round((checkinDT.getTime() - checkoutDT.getTime()) / 60000) : null;
+
+      return {
+        form: {
+          ...persisted,
+          numero_reserva: currentNumero,
+          tipo: "salida",
+          hora_out_time: out.value,
+          hora_out_informed: out.informed,
+          hora_in_time: inRes?.value ?? null,
+          hora_in_informed: inRes?.informed ?? false,
+          prioritaria: winMins != null && winMins >= 0 && winMins < 150,
+        },
+        realCheckoutDate: checkoutDate,
+        nextReservation: next,
+      };
+    },
+  });
+
+  useEffect(() => {
+    if (!open || !popoverDataQ.data) return;
+    setForm(popoverDataQ.data.form);
+    setRealCheckoutDate(popoverDataQ.data.realCheckoutDate);
+    setNextReservation(popoverDataQ.data.nextReservation);
+    setLoaded(true);
+  }, [open, popoverDataQ.data]);
 
   const limpiadoresQ = useQuery({ queryKey: ["limpiadores"], queryFn: fetchLimpiadores });
 
@@ -217,55 +348,9 @@ export function LimpiezaPopover({ open, onOpenChange, apt, fecha, existing, onSa
     },
   });
 
-  // The reservation's REAL checkout date is a fact about the reservation and
-  // must NOT change when the gestor reschedules the cleaning (fecha_limpieza).
-  const reservaQ = useQuery({
-    queryKey: ["limp-reserva-kb", form.numero_reserva],
-    enabled: !!form.numero_reserva,
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("reservas_kb")
-        .select('"Número","Check-out"')
-        .eq("Número", form.numero_reserva!)
-        .maybeSingle();
-      if (error) throw error;
-      return (data ?? null) as { "Número": string; "Check-out": string | null } | null;
-    },
-  });
-  const realCheckoutDate =
-    reservaQ.data?.["Check-out"] ?? (form.tipo === "salida" ? form.fecha_limpieza : null);
-
-  // Look up the genuinely NEXT reservation (strictly after the real checkout).
-  const nextResQ = useQuery({
-    queryKey: ["limp-next-res", apt.id_apt, realCheckoutDate, form.numero_reserva],
-    enabled: !!realCheckoutDate && !!apt.id_apt,
-    queryFn: async () => {
-      const fecha = realCheckoutDate!;
-      const end = new Date(fecha + "T00:00:00");
-      end.setDate(end.getDate() + 14);
-      const tz = end.getTimezoneOffset() * 60000;
-      const endISO = new Date(end.getTime() - tz).toISOString().slice(0, 10);
-      let q = supabase
-        .from("v_reservas_por_apartamento")
-        .select(`"Número","Check in","Hora estimada de llegada"`)
-        .eq("id_apt", apt.id_apt)
-        .not("Estado", "in", '("Cancelada","No show")')
-        .gte("Check in", fecha)
-        .lte("Check in", endISO);
-      if (form.numero_reserva) q = q.neq("Número", form.numero_reserva);
-      const { data, error } = await q
-        .order("Check in", { ascending: true })
-        .order("Hora estimada de llegada", { ascending: true, nullsFirst: true })
-        .limit(1);
-      if (error) throw error;
-      const rows = (data ?? []) as Array<{ "Número": string; "Check in": string }>;
-      return rows[0] ?? null;
-    },
-  });
-
   const checkoutDT = combineDateTime(realCheckoutDate, form.hora_out_time);
   const checkinDT = combineDateTime(
-    nextResQ.data?.["Check in"] ?? null,
+    nextReservation?.["Check in"] ?? null,
     form.hora_in_time,
   );
   const winMinsAdj =
