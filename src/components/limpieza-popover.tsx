@@ -626,7 +626,7 @@ function HoraRow({
             informed ? "bg-emerald-500 text-white" : "bg-gray-300 text-gray-700",
           )}
         >
-          {time}
+          {fmtTime(time)}
         </span>
       ) : (
         <span className="text-xs text-muted-foreground italic">{emptyText ?? "—"}</span>
