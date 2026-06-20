@@ -54,6 +54,7 @@ type AptInfo = {
   nombre: string;
   grupo_nombre?: string | null;
   camas_fijas?: number | null;
+  tiene_sofa_cama?: boolean | null;
 };
 
 type ReservaPopoverRow = {
@@ -240,9 +241,9 @@ export function LimpiezaPopover({ open, loadKey, onOpenChange, apt, fecha, exist
           .select(`"Número","Check in","Check-out","Huéspedes","Estado","Hora estimada de llegada","Hora estimada de salida",id_apt,es_reserva_compartida`)
           .eq("id_apt", apt.id_apt)
           .eq("Número", persisted.numero_reserva)
-          .maybeSingle();
+          .limit(1);
         if (error) throw error;
-        current = (data ?? null) as ReservaPopoverRow | null;
+        current = ((data ?? [])[0] ?? null) as ReservaPopoverRow | null;
       } else {
         const { data, error } = await supabase
           .from("v_reservas_por_apartamento")
@@ -302,6 +303,8 @@ export function LimpiezaPopover({ open, loadKey, onOpenChange, apt, fecha, exist
       const checkoutDT = combineDateTime(checkoutDate, out.value);
       const checkinDT = combineDateTime(next?.["Check in"] ?? null, inRes?.value ?? null);
       const winMins = checkoutDT && checkinDT ? Math.round((checkinDT.getTime() - checkoutDT.getTime()) / 60000) : null;
+      const autoSfcMontar = !!next && !current?.es_reserva_compartida && !!apt.tiene_sofa_cama && (next["Huéspedes"] ?? 0) > (apt.camas_fijas ?? 0);
+      const autoSfcDesmontar = !current?.es_reserva_compartida && !!apt.tiene_sofa_cama && (current?.["Huéspedes"] ?? 0) > (apt.camas_fijas ?? 0) && !autoSfcMontar;
 
       return {
         form: {
@@ -313,6 +316,8 @@ export function LimpiezaPopover({ open, loadKey, onOpenChange, apt, fecha, exist
           hora_in_time: inRes?.value ?? null,
           hora_in_informed: inRes?.informed ?? false,
           prioritaria: winMins != null && winMins >= 0 && winMins < 150,
+          sfc_montar: persisted.sfc_montar_manual ?? autoSfcMontar,
+          sfc_desmontar: persisted.sfc_desmontar_manual ?? autoSfcDesmontar,
         },
         realCheckoutDate: checkoutDate,
         nextReservation: next,
