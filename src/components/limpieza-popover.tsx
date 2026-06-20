@@ -501,6 +501,45 @@ export function LimpiezaPopover({ open, onOpenChange, apt, fecha, existing, onSa
             )}
 
             {/* Tareas */}
+            {form.tipo === "intermedia" ? (
+            <section>
+              <Label className="text-xs uppercase tracking-wide text-muted-foreground">Tareas</Label>
+              <div className="mt-2 space-y-2">
+                <TaskRow
+                  label="Cambiar toallas"
+                  checked={!!form.check_toallas}
+                  onChange={(v) => set("check_toallas", v)}
+                />
+                <TaskRow
+                  label="Cambiar sábanas"
+                  checked={!!form.check_sabanas}
+                  onChange={(v) => set("check_sabanas", v)}
+                />
+                <TaskRow
+                  label="Limpieza básica"
+                  checked={!!form.check_limpieza_basica}
+                  onChange={(v) =>
+                    setForm((f) => ({
+                      ...f,
+                      check_limpieza_basica: v,
+                      check_limpieza_completa: v ? false : f.check_limpieza_completa,
+                    }))
+                  }
+                />
+                <TaskRow
+                  label="Limpieza completa"
+                  checked={!!form.check_limpieza_completa}
+                  onChange={(v) =>
+                    setForm((f) => ({
+                      ...f,
+                      check_limpieza_completa: v,
+                      check_limpieza_basica: v ? false : f.check_limpieza_basica,
+                    }))
+                  }
+                />
+              </div>
+            </section>
+            ) : (
             <section>
               <Label className="text-xs uppercase tracking-wide text-muted-foreground">Tareas</Label>
               <div className="mt-2 space-y-2">
@@ -528,6 +567,7 @@ export function LimpiezaPopover({ open, onOpenChange, apt, fecha, existing, onSa
                 />
               </div>
             </section>
+            )}
 
             {/* Asignar limpiador */}
             <section>
