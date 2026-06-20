@@ -58,8 +58,16 @@ type ReservaRow = {
 type LimpiezaRow = Limpieza;
 
 const DOW = ["D", "L", "M", "X", "J", "V", "S"];
-const DAY_COL_W = 96; // px per day column
+const DAY_COL_W = 112; // px per day column
 const APT_COL_W = 160; // px for left apartment column
+const ROW_H = 52; // px per apartment row
+
+export function bedLabel(camas: number | null | undefined): string {
+  const pax = camas ?? 0;
+  if (pax <= 0) return "—";
+  const beds = Math.ceil(pax / 2);
+  return `${beds} ${beds === 1 ? "cama" : "camas"} · ${pax} pax`;
+}
 
 function toISO(d: Date) {
   const tz = d.getTimezoneOffset() * 60000;
@@ -75,7 +83,7 @@ function addDays(d: Date, n: number) {
 function defaultRange(): { from: Date; to: Date } {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  return { from: addDays(today, -2), to: addDays(today, 7) };
+  return { from: addDays(today, -1), to: addDays(today, 8) };
 }
 
 async function fetchGrupos(): Promise<Grupo[]> {
@@ -101,6 +109,7 @@ async function fetchReservas(fromISO: string, toExclusiveISO: string): Promise<R
   const { data: vres, error } = await supabase
     .from("v_reservas_por_apartamento")
     .select("*")
+    .neq("Estado", "Cancelada")
     .lt("Check in", toExclusiveISO)
     .gt("Check-out", fromISO);
   if (error) throw error;
@@ -146,15 +155,15 @@ async function fetchLimpiezas(fromISO: string, toExclusiveISO: string): Promise<
 
 // Estado → bar background color (mirror of EstadoBadge palette)
 const ESTADO_BAR: Record<string, string> = {
-  "Confirmada": "bg-green-600 text-white",
-  "En espera de confirmación": "bg-orange-500 text-white",
-  "En espera de confirmación (Caducadas)": "bg-orange-200 text-orange-900",
-  "Check-out realizado": "bg-gray-400 text-white",
-  "No show": "bg-neutral-800 text-white",
-  "Check-in realizado": "bg-blue-600 text-white",
-  "En salida": "bg-pink-500 text-white",
-  "En limpieza": "bg-teal-500 text-white",
-  "Cancelada": "bg-red-600 text-white",
+  "Confirmada": "bg-emerald-500/85 text-white",
+  "En espera de confirmación": "bg-amber-500/80 text-white",
+  "En espera de confirmación (Caducadas)": "bg-amber-200 text-amber-900",
+  "Check-out realizado": "bg-slate-400/80 text-white",
+  "No show": "bg-slate-600/80 text-white",
+  "Check-in realizado": "bg-sky-500/85 text-white",
+  "En salida": "bg-rose-400/85 text-white",
+  "En limpieza": "bg-teal-400/85 text-white",
+  "Cancelada": "bg-rose-500/80 text-white",
 };
 
 function trimHM(s: string | null | undefined): string | null {
@@ -183,7 +192,7 @@ function ProgramacionLimpiezasPage() {
   const [popover, setPopover] = useState<
     | null
     | {
-        apt: { id_apt: number; nombre: string; grupo_nombre?: string | null };
+        apt: { id_apt: number; nombre: string; grupo_nombre?: string | null; camas_fijas?: number | null };
         fecha: string;
         existing: LimpiezaRow | null;
       }
@@ -417,14 +426,14 @@ function ProgramacionLimpiezasPage() {
                     </div>
                   </div>
                   {apts.map((a) => (
-                    <div key={a.id_apt} className="flex border-b relative" style={{ height: 70 }}>
+                    <div key={a.id_apt} className="flex border-b relative" style={{ height: ROW_H }}>
                       <div
-                        className="shrink-0 sticky left-0 z-10 bg-white border-r px-3 py-2 flex flex-col justify-center"
+                        className="shrink-0 sticky left-0 z-10 bg-white border-r px-3 py-1 flex flex-col justify-center"
                         style={{ width: APT_COL_W }}
                       >
-                        <div className="text-sm font-medium truncate">{a.nombre}</div>
-                        <div className="text-[11px] text-muted-foreground">
-                          {a.camas_fijas ?? 0} camas
+                        <div className="text-sm font-medium truncate leading-tight">{a.nombre}</div>
+                        <div className="text-[11px] text-muted-foreground leading-tight">
+                          {bedLabel(a.camas_fijas)}
                           {a.tiene_sofa_cama && (
                             <span className="ml-1 inline-block px-1 py-px rounded bg-slate-200 text-slate-700 text-[10px] font-medium">
                               SFC
@@ -434,7 +443,7 @@ function ProgramacionLimpiezasPage() {
                       </div>
                       <div
                         className="relative"
-                        style={{ width: DAY_COL_W * days.length, height: 70 }}
+                        style={{ width: DAY_COL_W * days.length, height: ROW_H }}
                       >
                         <div className="flex h-full">
                           {days.map((d) => {
@@ -453,7 +462,7 @@ function ProgramacionLimpiezasPage() {
                                 {/* Bottom-half click target for empty cells / wraps the bar */}
                                 <button
                                   type="button"
-                                  className="absolute inset-x-0 bottom-0 h-[55%] hover:bg-muted/40 transition-colors"
+                                  className="absolute inset-x-0 bottom-0 h-[50%] hover:bg-muted/40 transition-colors"
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     setPopover({
@@ -461,6 +470,7 @@ function ProgramacionLimpiezasPage() {
                                         id_apt: a.id_apt,
                                         nombre: a.nombre,
                                         grupo_nombre: grupoNombreById(a.id_grupo),
+                                        camas_fijas: a.camas_fijas,
                                       },
                                       fecha: iso,
                                       existing,
@@ -577,7 +587,7 @@ function ReservaBar({
             "absolute rounded-md shadow-sm flex items-center gap-1 px-1 text-[11px] font-medium overflow-hidden cursor-default",
             colorClass,
           )}
-          style={{ left, width, top: 24, height: 22 }}
+          style={{ left, width, top: 3, height: 20 }}
         >
           <TimeBadge {...leftTime} />
           <span className="flex-1 truncate flex items-center gap-1 min-w-0">
@@ -659,19 +669,19 @@ function CleaningBar({ l, codigo }: { l: Limpieza; codigo: string | null }) {
   const hasWorker = l.worker != null;
   const affected = !!l.affected_by_kb_change;
 
-  let cls = "bg-red-500 text-white border border-dashed border-red-700"; // sin asignar
+  let cls = "bg-rose-400/85 text-white border border-dashed border-rose-500"; // sin asignar
   if (anulada) {
     cls =
       "bg-gray-300 text-gray-600 line-through bg-[repeating-linear-gradient(45deg,transparent_0_4px,rgba(0,0,0,0.08)_4px_8px)]";
   } else if (enCurso) {
-    cls = "bg-purple-600 text-white";
+    cls = "bg-violet-500/85 text-white";
   } else if (hasWorker && isPriority) {
-    cls = "bg-orange-500 text-white";
+    cls = "bg-amber-500/85 text-white";
   } else if (hasWorker) {
-    cls = "bg-green-600 text-white";
+    cls = "bg-emerald-500/85 text-white";
   }
   if (intermedia && !anulada) {
-    cls += " border border-dashed border-teal-500";
+    cls += " border border-dashed border-teal-400";
   }
   if (affected && !anulada) {
     cls = "bg-orange-100 text-orange-900 border border-dashed border-orange-500";

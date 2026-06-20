@@ -13,7 +13,8 @@ import { cn } from "@/lib/utils";
 import { fmtDate } from "@/lib/format";
 import { fetchLimpiadores } from "@/lib/catalogos";
 import { fullName } from "@/lib/types";
-import { Link2, Minus, Plus, X, Zap } from "lucide-react";
+import { Link2, Minus, Plus, RotateCcw, X, Zap } from "lucide-react";
+import { bedLabel } from "@/routes/programacion-limpiezas";
 
 export type Limpieza = {
   id_limpieza: number;
@@ -42,7 +43,12 @@ export type Limpieza = {
   affected_by_kb_change: boolean | null;
 };
 
-type AptInfo = { id_apt: number; nombre: string; grupo_nombre?: string | null };
+type AptInfo = {
+  id_apt: number;
+  nombre: string;
+  grupo_nombre?: string | null;
+  camas_fijas?: number | null;
+};
 
 type Props = {
   open: boolean;
@@ -257,8 +263,12 @@ export function LimpiezaPopover({ open, onOpenChange, apt, fecha, existing, onSa
         <DialogContent className="max-w-md p-0 gap-0 max-h-[90vh] overflow-hidden flex flex-col">
           <DialogHeader className="px-4 py-3 border-b">
             <DialogTitle className="text-base">{apt.nombre}</DialogTitle>
-            {apt.grupo_nombre && (
-              <DialogDescription className="text-xs">{apt.grupo_nombre}</DialogDescription>
+            {(apt.grupo_nombre || apt.camas_fijas != null) && (
+              <DialogDescription className="text-xs">
+                {apt.grupo_nombre}
+                {apt.grupo_nombre && apt.camas_fijas != null ? " · " : ""}
+                {apt.camas_fijas != null ? bedLabel(apt.camas_fijas) : ""}
+              </DialogDescription>
             )}
           </DialogHeader>
 
@@ -446,17 +456,46 @@ export function LimpiezaPopover({ open, onOpenChange, apt, fecha, existing, onSa
           </div>
 
           <DialogFooter className="px-4 py-3 border-t flex-row sm:justify-between gap-2">
-            <Button
-              variant="outline"
-              className="border-red-300 text-red-700 hover:bg-red-50"
-              onClick={() => setAnularOpen(true)}
-              disabled={form.id_limpieza === 0 || form.estado === "anulada"}
-            >
-              <X className="h-4 w-4 mr-1" /> Anular limpieza
-            </Button>
-            <Button onClick={save} disabled={saving} className="bg-green-600 hover:bg-green-700">
-              {saving ? "Guardando…" : "Guardar"}
-            </Button>
+            {form.estado === "anulada" ? (
+              <Button
+                variant="outline"
+                className="border-emerald-300 text-emerald-700 hover:bg-emerald-50"
+                disabled={saving || form.id_limpieza === 0}
+                onClick={async () => {
+                  setSaving(true);
+                  try {
+                    const { error } = await supabase
+                      .from("limpiezas")
+                      .update({ estado: "activa", motivo_anulacion: null })
+                      .eq("id_limpieza", form.id_limpieza);
+                    if (error) throw error;
+                    setForm((f) => ({ ...f, estado: "activa", motivo_anulacion: null }));
+                    toast.success("Limpieza reactivada");
+                    onSaved();
+                  } catch (e) {
+                    toast.error("Error: " + (e as Error).message);
+                  } finally {
+                    setSaving(false);
+                  }
+                }}
+              >
+                <RotateCcw className="h-4 w-4 mr-1" /> Reactivar limpieza
+              </Button>
+            ) : (
+              <>
+                <Button
+                  variant="outline"
+                  className="border-red-300 text-red-700 hover:bg-red-50"
+                  onClick={() => setAnularOpen(true)}
+                  disabled={form.id_limpieza === 0}
+                >
+                  <X className="h-4 w-4 mr-1" /> Anular limpieza
+                </Button>
+                <Button onClick={save} disabled={saving} className="bg-emerald-600 hover:bg-emerald-700">
+                  {saving ? "Guardando…" : "Guardar"}
+                </Button>
+              </>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>
