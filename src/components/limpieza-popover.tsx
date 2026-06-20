@@ -172,17 +172,30 @@ export function LimpiezaPopover({ open, onOpenChange, apt, fecha, existing, onSa
     },
   });
 
-  // Full datetime window: checkout (fecha_limpieza + hora_out) vs
-  // next reservation's checkin date + hora_in. Falls back to same-day if the
-  // next-reservation lookup hasn't resolved yet.
-
-  // Look up the actual next reservation's check-in date so we can show it
-  // next to the "Entra" row instead of reusing the checkout date.
-  const nextResQ = useQuery({
-    queryKey: ["limp-next-res", apt.id_apt, form.fecha_limpieza],
-    enabled: !!form.fecha_limpieza && !!apt.id_apt,
+  // The reservation's REAL checkout date is a fact about the reservation and
+  // must NOT change when the gestor reschedules the cleaning (fecha_limpieza).
+  const reservaQ = useQuery({
+    queryKey: ["limp-reserva-kb", form.numero_reserva],
+    enabled: !!form.numero_reserva,
     queryFn: async () => {
-      const fecha = form.fecha_limpieza;
+      const { data, error } = await supabase
+        .from("reservas_kb")
+        .select('"Número","Check-out"')
+        .eq("Número", form.numero_reserva!)
+        .maybeSingle();
+      if (error) throw error;
+      return (data ?? null) as { "Número": string; "Check-out": string | null } | null;
+    },
+  });
+  const realCheckoutDate =
+    reservaQ.data?.["Check-out"] ?? (form.tipo === "salida" ? form.fecha_limpieza : null);
+
+  // Look up the genuinely NEXT reservation (strictly after the real checkout).
+  const nextResQ = useQuery({
+    queryKey: ["limp-next-res", apt.id_apt, realCheckoutDate, form.numero_reserva],
+    enabled: !!realCheckoutDate && !!apt.id_apt,
+    queryFn: async () => {
+      const fecha = realCheckoutDate!;
       const end = new Date(fecha + "T00:00:00");
       end.setDate(end.getDate() + 14);
       const tz = end.getTimezoneOffset() * 60000;
@@ -192,19 +205,18 @@ export function LimpiezaPopover({ open, onOpenChange, apt, fecha, existing, onSa
         .select(`"Número","Check in"`)
         .eq("id_apt", apt.id_apt)
         .not("Estado", "in", '("Cancelada","No show")')
-        .gte("Check in", fecha)
+        .gt("Check in", fecha)
         .lte("Check in", endISO)
         .order("Check in", { ascending: true })
         .limit(2);
       if (error) throw error;
       const rows = (data ?? []) as Array<{ "Número": string; "Check in": string }>;
-      // Skip the current reservation if present
       const next = rows.find((r) => r["Número"] !== form.numero_reserva) ?? null;
       return next;
     },
   });
 
-  const checkoutDT = combineDateTime(form.fecha_limpieza, form.hora_out_time);
+  const checkoutDT = combineDateTime(realCheckoutDate, form.hora_out_time);
   const checkinDT = combineDateTime(
     nextResQ.data?.["Check in"] ?? null,
     form.hora_in_time,
@@ -377,7 +389,7 @@ export function LimpiezaPopover({ open, onOpenChange, apt, fecha, existing, onSa
               <div className="mt-2 space-y-1.5">
                 <HoraRow
                   label="Sale (checkout)"
-                  dateLabel={fmtDate(form.fecha_limpieza)}
+                  dateLabel={realCheckoutDate ? fmtDate(realCheckoutDate) : fmtDate(form.fecha_limpieza)}
                   time={form.hora_out_time}
                   informed={!!form.hora_out_informed}
                 />
