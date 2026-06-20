@@ -60,7 +60,7 @@ type LimpiezaRow = Limpieza;
 const DOW = ["D", "L", "M", "X", "J", "V", "S"];
 const DAY_COL_W = 112; // px per day column
 const APT_COL_W = 160; // px for left apartment column
-const ROW_H = 52; // px per apartment row
+const ROW_H = 38; // px per apartment row (compact: one reservation lane)
 
 export function bedLabel(camas: number | null | undefined): string {
   const pax = camas ?? 0;
@@ -242,6 +242,16 @@ function ProgramacionLimpiezasPage() {
     return m;
   }, [limpiezasQ.data]);
 
+  const limpiezasByApt = useMemo(() => {
+    const m = new Map<number, LimpiezaRow[]>();
+    for (const l of limpiezasQ.data ?? []) {
+      const arr = m.get(l.id_apt) ?? [];
+      arr.push(l);
+      m.set(l.id_apt, arr);
+    }
+    return m;
+  }, [limpiezasQ.data]);
+
   const sharedByNumero = useMemo(() => {
     const m = new Map<string, ReservaRow[]>();
     for (const r of reservasQ.data ?? []) {
@@ -298,6 +308,7 @@ function ProgramacionLimpiezasPage() {
   const rangeLabel = `${fmtShort(range.from)} – ${fmtShort(range.to)}`;
 
   const gridWidth = APT_COL_W + DAY_COL_W * days.length;
+  const dayISOs = useMemo(() => days.map(toISO), [days]);
 
   const grupoNombreById = (id: number) =>
     (gruposQ.data ?? []).find((g) => g.id_grupo === id)?.nombre ?? null;
@@ -451,40 +462,28 @@ function ProgramacionLimpiezasPage() {
                             const isToday = iso === todayISO;
                             const existing = limpiezasByAptDay.get(`${a.id_apt}|${iso}`) ?? null;
                             return (
-                              <div
+                              <button
                                 key={iso}
+                                type="button"
                                 className={cn(
-                                  "shrink-0 border-r h-full relative",
+                                  "shrink-0 border-r h-full hover:bg-muted/40 transition-colors",
                                   isToday && "bg-primary/5",
                                 )}
                                 style={{ width: DAY_COL_W }}
-                              >
-                                {/* Bottom-half click target for empty cells / wraps the bar */}
-                                <button
-                                  type="button"
-                                  className="absolute inset-x-0 bottom-0 h-[50%] hover:bg-muted/40 transition-colors"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setPopover({
-                                      apt: {
-                                        id_apt: a.id_apt,
-                                        nombre: a.nombre,
-                                        grupo_nombre: grupoNombreById(a.id_grupo),
-                                        camas_fijas: a.camas_fijas,
-                                      },
-                                      fecha: iso,
-                                      existing,
-                                    });
-                                  }}
-                                >
-                                  {existing && (
-                                    <CleaningBar
-                                      l={existing}
-                                      codigo={workerCodigo(existing.worker)}
-                                    />
-                                  )}
-                                </button>
-                              </div>
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setPopover({
+                                    apt: {
+                                      id_apt: a.id_apt,
+                                      nombre: a.nombre,
+                                      grupo_nombre: grupoNombreById(a.id_grupo),
+                                      camas_fijas: a.camas_fijas,
+                                    },
+                                    fecha: iso,
+                                    existing,
+                                  });
+                                }}
+                              />
                             );
                           })}
                         </div>
@@ -503,6 +502,41 @@ function ProgramacionLimpiezasPage() {
                             }
                           />
                         ))}
+                        {(limpiezasByApt.get(a.id_apt) ?? []).map((l) => {
+                          const idx = dayISOs.indexOf(l.fecha_limpieza);
+                          if (idx < 0) return null;
+                          const onOpen = () =>
+                            setPopover({
+                              apt: {
+                                id_apt: a.id_apt,
+                                nombre: a.nombre,
+                                grupo_nombre: grupoNombreById(a.id_grupo),
+                                camas_fijas: a.camas_fijas,
+                              },
+                              fecha: l.fecha_limpieza,
+                              existing: l,
+                            });
+                          if (l.tipo === "intermedia") {
+                            return (
+                              <IntermediaOverlay
+                                key={l.id_limpieza}
+                                l={l}
+                                codigo={workerCodigo(l.worker)}
+                                dayIdx={idx}
+                                onClick={onOpen}
+                              />
+                            );
+                          }
+                          return (
+                            <SalidaLabel
+                              key={l.id_limpieza}
+                              l={l}
+                              codigo={workerCodigo(l.worker)}
+                              dayIdx={idx}
+                              onClick={onOpen}
+                            />
+                          );
+                        })}
                       </div>
                     </div>
                   ))}
@@ -658,18 +692,31 @@ function TimeBadge({ value, informed }: { value: string; informed: boolean }) {
   );
 }
 
-function CleaningBar({ l, codigo }: { l: Limpieza; codigo: string | null }) {
+function cleaningState(l: Limpieza) {
   const anulada = l.estado === "anulada";
   const enCurso = l.estado === "en_curso";
   const isPriority =
     l.prioritaria_manual !== null && l.prioritaria_manual !== undefined
       ? l.prioritaria_manual
       : !!l.prioritaria;
-  const intermedia = l.tipo === "intermedia";
   const hasWorker = l.worker != null;
   const affected = !!l.affected_by_kb_change;
+  return { anulada, enCurso, isPriority, hasWorker, affected };
+}
 
-  let cls = "bg-rose-400/85 text-white border border-dashed border-rose-500"; // sin asignar
+function SalidaLabel({
+  l,
+  codigo,
+  dayIdx,
+  onClick,
+}: {
+  l: Limpieza;
+  codigo: string | null;
+  dayIdx: number;
+  onClick: () => void;
+}) {
+  const { anulada, enCurso, isPriority, hasWorker, affected } = cleaningState(l);
+  let cls = "bg-rose-400/85 text-white border border-dashed border-rose-500";
   if (anulada) {
     cls =
       "bg-gray-300 text-gray-600 line-through bg-[repeating-linear-gradient(45deg,transparent_0_4px,rgba(0,0,0,0.08)_4px_8px)]";
@@ -680,32 +727,92 @@ function CleaningBar({ l, codigo }: { l: Limpieza; codigo: string | null }) {
   } else if (hasWorker) {
     cls = "bg-emerald-500/85 text-white";
   }
-  if (intermedia && !anulada) {
-    cls += " border border-dashed border-teal-400";
-  }
   if (affected && !anulada) {
     cls = "bg-orange-100 text-orange-900 border border-dashed border-orange-500";
   }
-
   const label = anulada
     ? "NUL"
-    : intermedia && !hasWorker
-      ? "INT"
-      : codigo ?? (hasWorker ? `#${l.worker}` : "Sin asig.");
-
+    : hasWorker
+      ? codigo ?? `#${l.worker}`
+      : "Sin asig.";
+  const left = dayIdx * DAY_COL_W + 0.25 * DAY_COL_W;
+  const width = 0.32 * DAY_COL_W;
   return (
-    <div
+    <button
+      type="button"
+      onClick={(e) => {
+        e.stopPropagation();
+        onClick();
+      }}
       className={cn(
-        "absolute left-1 right-1 bottom-1 h-5 rounded flex items-center px-1 gap-1 text-[11px] font-medium overflow-hidden",
+        "absolute z-20 rounded flex items-center justify-center gap-1 px-1 text-[10px] font-semibold overflow-hidden shadow-sm",
         cls,
       )}
+      style={{ left, width, top: "50%", transform: "translateY(-50%)", height: 18 }}
+      title={`Salida · ${l.fecha_limpieza}`}
     >
       {hasWorker && l.orden_trabajo != null && !anulada && (
-        <span className="shrink-0 h-4 min-w-4 rounded-full bg-black/25 px-1 text-[10px] leading-4 text-center">
+        <span className="shrink-0 h-3.5 min-w-[14px] rounded-full bg-black/25 px-1 text-[9px] leading-[14px] text-center">
           {l.orden_trabajo}
         </span>
       )}
       <span className="truncate">{label}</span>
-    </div>
+    </button>
   );
 }
+
+function IntermediaOverlay({
+  l,
+  codigo,
+  dayIdx,
+  onClick,
+}: {
+  l: Limpieza;
+  codigo: string | null;
+  dayIdx: number;
+  onClick: () => void;
+}) {
+  const { anulada, hasWorker, affected, isPriority, enCurso } = cleaningState(l);
+  // base: teal translucent overlay on top of reservation bar
+  let cls =
+    "bg-teal-500/55 text-white border border-dashed border-teal-200/90 backdrop-blur-[1px]";
+  if (anulada) {
+    cls =
+      "bg-gray-400/60 text-white line-through bg-[repeating-linear-gradient(45deg,transparent_0_4px,rgba(0,0,0,0.15)_4px_8px)] border border-dashed border-gray-500";
+  } else if (affected) {
+    cls = "bg-amber-500/60 text-white border border-dashed border-amber-200";
+  } else if (enCurso) {
+    cls = "bg-violet-500/60 text-white border border-dashed border-violet-200";
+  } else if (hasWorker && isPriority) {
+    cls = "bg-amber-500/55 text-white border border-dashed border-amber-200";
+  }
+  const left = dayIdx * DAY_COL_W + 0.3 * DAY_COL_W;
+  const width = 0.4 * DAY_COL_W;
+  const label = anulada ? "INT · NUL" : "INT";
+  return (
+    <button
+      type="button"
+      onClick={(e) => {
+        e.stopPropagation();
+        onClick();
+      }}
+      className={cn(
+        "absolute z-30 rounded flex items-center justify-center gap-1 px-1 text-[10px] font-semibold overflow-hidden",
+        cls,
+      )}
+      style={{ left, width, top: 3, height: 20 }}
+      title={`Intermedia · ${l.fecha_limpieza}`}
+    >
+      <span className="truncate">{label}</span>
+      {hasWorker && l.orden_trabajo != null && !anulada && (
+        <span className="shrink-0 h-3.5 min-w-[14px] rounded-full bg-black/30 px-1 text-[9px] leading-[14px] text-center">
+          {l.orden_trabajo}
+        </span>
+      )}
+      {hasWorker && codigo && !anulada && (
+        <span className="truncate text-[9px] opacity-90">{codigo}</span>
+      )}
+    </button>
+  );
+}
+
