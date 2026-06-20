@@ -39,6 +39,10 @@ export type Limpieza = {
   sfc_desmontar_manual: boolean | null;
   check_checkin: boolean | null;
   check_tasas: boolean | null;
+  check_toallas: boolean | null;
+  check_sabanas: boolean | null;
+  check_limpieza_basica: boolean | null;
+  check_limpieza_completa: boolean | null;
   observaciones: string | null;
   estado: string | null;
   motivo_anulacion: string | null;
@@ -83,6 +87,10 @@ function emptyLimpieza(apt: AptInfo, fecha: string): Limpieza {
     sfc_desmontar_manual: null,
     check_checkin: false,
     check_tasas: false,
+    check_toallas: false,
+    check_sabanas: false,
+    check_limpieza_basica: false,
+    check_limpieza_completa: false,
     observaciones: null,
     estado: "activa",
     motivo_anulacion: null,
