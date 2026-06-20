@@ -512,12 +512,12 @@ export function LimpiezaPopover({ open, loadKey, onOpenChange, apt, fecha, exist
           </DialogHeader>
 
           <div className="overflow-y-auto px-4 py-3 space-y-4">
-            {!loaded || popoverDataQ.isLoading ? (
-              <div className="py-8 text-center text-sm text-muted-foreground">Cargando limpieza…</div>
-            ) : popoverDataQ.isError ? (
+            {popoverDataQ.isError ? (
               <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">
                 Error cargando la limpieza: {(popoverDataQ.error as Error).message}
               </div>
+            ) : !loaded || popoverDataQ.isLoading ? (
+              <div className="py-8 text-center text-sm text-muted-foreground">Cargando limpieza…</div>
             ) : (
               <>
             {/* Cancellation reason (read-only) */}
