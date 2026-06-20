@@ -120,12 +120,15 @@ export async function generarLimpiezas(fromISO: string, toISO: string): Promise<
   const widerTo = addDaysISO(toISO, 8);
   const { data: vresFuture, error: e2 } = await supabase
     .from("v_reservas_por_apartamento")
-    .select(`"Número","Check in","Check-out","Huéspedes","Estado",id_apt`)
+    .select(`"Número","Check in","Check-out","Huéspedes","Estado",id_apt,"Hora estimada de llegada"`)
     .not("Estado", "in", ESTADOS_EXCLUDED_FILTER)
     .gte("Check in", fromISO)
     .lte("Check in", widerTo);
   if (e2) throw e2;
-  const futureByApt = new Map<number, { ci: string; co: string; numero: string; guests: number }[]>();
+  const futureByApt = new Map<
+    number,
+    { ci: string; co: string; numero: string; guests: number; ciTime: string }[]
+  >();
   for (const r of (vresFuture ?? []) as ResVw[]) {
     if (r.id_apt == null || !r["Check in"]) continue;
     const arr = futureByApt.get(r.id_apt) ?? [];
@@ -134,10 +137,12 @@ export async function generarLimpiezas(fromISO: string, toISO: string): Promise<
       co: r["Check-out"] ?? r["Check in"]!,
       numero: r["Número"],
       guests: r["Huéspedes"] ?? 0,
+      ciTime: trimHM(r["Hora estimada de llegada"]) ?? "99:99:99",
     });
     futureByApt.set(r.id_apt, arr);
   }
-  for (const arr of futureByApt.values()) arr.sort((a, b) => a.ci.localeCompare(b.ci));
+  for (const arr of futureByApt.values())
+    arr.sort((a, b) => a.ci.localeCompare(b.ci) || a.ciTime.localeCompare(b.ciTime));
 
   // Apartments + gestio
   const aptIds = Array.from(new Set(vres.map((r) => r.id_apt).filter((x): x is number => x != null)));
@@ -207,7 +212,9 @@ export async function generarLimpiezas(fromISO: string, toISO: string): Promise<
         );
         // find next reservation for same apt within 7 days
         const arr = futureByApt.get(r.id_apt) ?? [];
-        const next = arr.find((x) => x.ci > co && x.ci <= addDaysISO(co, 7) && x.numero !== r["Número"]);
+        const next = arr.find(
+          (x) => x.numero !== r["Número"] && x.ci >= co && x.ci <= addDaysISO(co, 7),
+        );
         let inTime: string | null = null;
         let inInformed = false;
         let sfc_montar = false;
