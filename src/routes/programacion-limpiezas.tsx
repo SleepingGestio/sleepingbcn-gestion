@@ -58,8 +58,16 @@ type ReservaRow = {
 type LimpiezaRow = Limpieza;
 
 const DOW = ["D", "L", "M", "X", "J", "V", "S"];
-const DAY_COL_W = 96; // px per day column
+const DAY_COL_W = 112; // px per day column
 const APT_COL_W = 160; // px for left apartment column
+const ROW_H = 52; // px per apartment row
+
+export function bedLabel(camas: number | null | undefined): string {
+  const pax = camas ?? 0;
+  if (pax <= 0) return "—";
+  const beds = Math.ceil(pax / 2);
+  return `${beds} ${beds === 1 ? "cama" : "camas"} · ${pax} pax`;
+}
 
 function toISO(d: Date) {
   const tz = d.getTimezoneOffset() * 60000;
@@ -75,7 +83,7 @@ function addDays(d: Date, n: number) {
 function defaultRange(): { from: Date; to: Date } {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  return { from: addDays(today, -2), to: addDays(today, 7) };
+  return { from: addDays(today, -1), to: addDays(today, 8) };
 }
 
 async function fetchGrupos(): Promise<Grupo[]> {
@@ -101,6 +109,7 @@ async function fetchReservas(fromISO: string, toExclusiveISO: string): Promise<R
   const { data: vres, error } = await supabase
     .from("v_reservas_por_apartamento")
     .select("*")
+    .neq("Estado", "Cancelada")
     .lt("Check in", toExclusiveISO)
     .gt("Check-out", fromISO);
   if (error) throw error;
@@ -146,15 +155,15 @@ async function fetchLimpiezas(fromISO: string, toExclusiveISO: string): Promise<
 
 // Estado → bar background color (mirror of EstadoBadge palette)
 const ESTADO_BAR: Record<string, string> = {
-  "Confirmada": "bg-green-600 text-white",
-  "En espera de confirmación": "bg-orange-500 text-white",
-  "En espera de confirmación (Caducadas)": "bg-orange-200 text-orange-900",
-  "Check-out realizado": "bg-gray-400 text-white",
-  "No show": "bg-neutral-800 text-white",
-  "Check-in realizado": "bg-blue-600 text-white",
-  "En salida": "bg-pink-500 text-white",
-  "En limpieza": "bg-teal-500 text-white",
-  "Cancelada": "bg-red-600 text-white",
+  "Confirmada": "bg-emerald-500/85 text-white",
+  "En espera de confirmación": "bg-amber-500/80 text-white",
+  "En espera de confirmación (Caducadas)": "bg-amber-200 text-amber-900",
+  "Check-out realizado": "bg-slate-400/80 text-white",
+  "No show": "bg-slate-600/80 text-white",
+  "Check-in realizado": "bg-sky-500/85 text-white",
+  "En salida": "bg-rose-400/85 text-white",
+  "En limpieza": "bg-teal-400/85 text-white",
+  "Cancelada": "bg-rose-500/80 text-white",
 };
 
 function trimHM(s: string | null | undefined): string | null {
