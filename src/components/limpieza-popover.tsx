@@ -512,6 +512,14 @@ export function LimpiezaPopover({ open, loadKey, onOpenChange, apt, fecha, exist
           </DialogHeader>
 
           <div className="overflow-y-auto px-4 py-3 space-y-4">
+            {!loaded || popoverDataQ.isLoading ? (
+              <div className="py-8 text-center text-sm text-muted-foreground">Cargando limpieza…</div>
+            ) : popoverDataQ.isError ? (
+              <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+                Error cargando la limpieza: {(popoverDataQ.error as Error).message}
+              </div>
+            ) : (
+              <>
             {/* Cancellation reason (read-only) */}
             {form.estado === "anulada" && (
               <div className="rounded-md border border-muted bg-muted/40 p-3 text-xs">
@@ -754,6 +762,8 @@ export function LimpiezaPopover({ open, loadKey, onOpenChange, apt, fecha, exist
                 onChange={(e) => set("observaciones", e.target.value || null)}
               />
             </section>
+              </>
+            )}
           </div>
 
           <DialogFooter className="px-4 py-3 border-t flex-row sm:justify-between gap-2">
