@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { AppShell } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
@@ -205,7 +205,7 @@ function ProgramacionLimpiezasPage() {
         existing: LimpiezaRow | null;
       }
   >(null);
-  const [popoverLoadKey, setPopoverLoadKey] = useState(0);
+  const popoverLoadSeq = useRef(0);
   const [genOpen, setGenOpen] = useState(false);
 
   const gruposQ = useQuery({ queryKey: ["grupos_apartamentos"], queryFn: fetchGrupos });
@@ -490,8 +490,7 @@ function ProgramacionLimpiezasPage() {
                                 style={{ width: DAY_COL_W }}
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  const loadKey = popoverLoadKey + 1;
-                                  setPopoverLoadKey(loadKey);
+                                  const loadKey = ++popoverLoadSeq.current;
                                   setPopover({
                                     loadKey,
                                     apt: {
@@ -527,8 +526,7 @@ function ProgramacionLimpiezasPage() {
                           const idx = dayISOs.indexOf(l.fecha_limpieza);
                           if (idx < 0) return null;
                           const onOpen = () => {
-                            const loadKey = popoverLoadKey + 1;
-                            setPopoverLoadKey(loadKey);
+                            const loadKey = ++popoverLoadSeq.current;
                             setPopover({
                               loadKey,
                               apt: {
