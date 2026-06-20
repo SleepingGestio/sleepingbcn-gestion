@@ -192,7 +192,7 @@ function ProgramacionLimpiezasPage() {
   const [popover, setPopover] = useState<
     | null
     | {
-        apt: { id_apt: number; nombre: string; grupo_nombre?: string | null };
+        apt: { id_apt: number; nombre: string; grupo_nombre?: string | null; camas_fijas?: number | null };
         fecha: string;
         existing: LimpiezaRow | null;
       }
