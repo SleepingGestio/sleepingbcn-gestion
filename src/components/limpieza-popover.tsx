@@ -314,6 +314,10 @@ export function LimpiezaPopover({ open, onOpenChange, apt, fecha, existing, onSa
         sfc_desmontar_manual: form.sfc_desmontar_manual,
         check_checkin: form.check_checkin,
         check_tasas: form.check_tasas,
+        check_toallas: form.check_toallas,
+        check_sabanas: form.check_sabanas,
+        check_limpieza_basica: form.check_limpieza_basica,
+        check_limpieza_completa: form.check_limpieza_completa,
         observaciones: form.observaciones,
         estado: form.estado ?? "activa",
       };
