@@ -332,8 +332,8 @@ export function LimpiezaPopover({ open, loadKey, onOpenChange, apt, fecha, exist
 
   // Shared-reservation detection
   const sharedQ = useQuery({
-    queryKey: ["limpieza-shared", form.numero_reserva],
-    enabled: !!form.numero_reserva,
+    queryKey: ["limpieza-shared", apt.id_apt, form.numero_reserva],
+    enabled: loaded && !!form.numero_reserva,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("v_reservas_por_apartamento")
@@ -361,7 +361,7 @@ export function LimpiezaPopover({ open, loadKey, onOpenChange, apt, fecha, exist
   // orden_trabajo siblings count
   const siblingsQ = useQuery({
     queryKey: ["limp-siblings", form.worker, form.fecha_limpieza],
-    enabled: !!form.worker && !!form.fecha_limpieza,
+    enabled: loaded && !!form.worker && !!form.fecha_limpieza,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("limpiezas")
