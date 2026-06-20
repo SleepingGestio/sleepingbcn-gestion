@@ -717,9 +717,9 @@ function ReservaBar({
   const colorClass =
     ESTADO_BAR[r.Estado ?? ""] ?? "bg-secondary text-secondary-foreground";
 
-  // Per spec: LEFT badge = checkout time; RIGHT badge = checkin time
-  const leftTime = resolveTime(r.hCheckOutConf, r["Hora estimada de salida"], "11:00");
-  const rightTime = resolveTime(r.hCheckInConf, r["Hora estimada de llegada"], "15:00");
+  // LEFT edge = check-in time; RIGHT edge = check-out time
+  const leftTime = resolveTime(r.hCheckInConf, r["Hora estimada de llegada"], "15:00");
+  const rightTime = resolveTime(r.hCheckOutConf, r["Hora estimada de salida"], "11:00");
 
   const guestCount = r["Huéspedes"] ?? 0;
   const overCapacity =
