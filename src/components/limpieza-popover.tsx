@@ -56,6 +56,24 @@ type AptInfo = {
   camas_fijas?: number | null;
 };
 
+type ReservaPopoverRow = {
+  "Número": string;
+  "Check in": string | null;
+  "Check-out": string | null;
+  "Huéspedes": number | null;
+  "Estado": string | null;
+  "Hora estimada de llegada": string | null;
+  "Hora estimada de salida": string | null;
+  id_apt: number | null;
+  es_reserva_compartida: boolean | null;
+};
+
+type GestioTimes = {
+  "Número": string;
+  HCheckInConf: string | null;
+  HCheckOutConf: string | null;
+};
+
 type Props = {
   open: boolean;
   onOpenChange: (o: boolean) => void;
@@ -95,6 +113,25 @@ function emptyLimpieza(apt: AptInfo, fecha: string): Limpieza {
     estado: "activa",
     motivo_anulacion: null,
     affected_by_kb_change: false,
+  };
+}
+
+const ESTADOS_EXCLUDED_FILTER = '("Cancelada","No show")';
+
+function addDaysISO(iso: string, n: number): string {
+  const d = new Date(iso + "T00:00:00");
+  d.setDate(d.getDate() + n);
+  const tz = d.getTimezoneOffset() * 60000;
+  return new Date(d.getTime() - tz).toISOString().slice(0, 10);
+}
+
+function normalizeLimpieza(row: Partial<Limpieza> | null | undefined, apt: AptInfo, fecha: string): Limpieza {
+  return {
+    ...emptyLimpieza(apt, fecha),
+    ...(row ?? {}),
+    id_apt: row?.id_apt ?? apt.id_apt,
+    fecha_limpieza: row?.fecha_limpieza ?? fecha,
+    tipo: row?.tipo ?? "salida",
   };
 }
 
