@@ -587,7 +587,7 @@ function ReservaBar({
             "absolute rounded-md shadow-sm flex items-center gap-1 px-1 text-[11px] font-medium overflow-hidden cursor-default",
             colorClass,
           )}
-          style={{ left, width, top: 24, height: 22 }}
+          style={{ left, width, top: 3, height: 20 }}
         >
           <TimeBadge {...leftTime} />
           <span className="flex-1 truncate flex items-center gap-1 min-w-0">
@@ -669,19 +669,19 @@ function CleaningBar({ l, codigo }: { l: Limpieza; codigo: string | null }) {
   const hasWorker = l.worker != null;
   const affected = !!l.affected_by_kb_change;
 
-  let cls = "bg-red-500 text-white border border-dashed border-red-700"; // sin asignar
+  let cls = "bg-rose-400/85 text-white border border-dashed border-rose-500"; // sin asignar
   if (anulada) {
     cls =
       "bg-gray-300 text-gray-600 line-through bg-[repeating-linear-gradient(45deg,transparent_0_4px,rgba(0,0,0,0.08)_4px_8px)]";
   } else if (enCurso) {
-    cls = "bg-purple-600 text-white";
+    cls = "bg-violet-500/85 text-white";
   } else if (hasWorker && isPriority) {
-    cls = "bg-orange-500 text-white";
+    cls = "bg-amber-500/85 text-white";
   } else if (hasWorker) {
-    cls = "bg-green-600 text-white";
+    cls = "bg-emerald-500/85 text-white";
   }
   if (intermedia && !anulada) {
-    cls += " border border-dashed border-teal-500";
+    cls += " border border-dashed border-teal-400";
   }
   if (affected && !anulada) {
     cls = "bg-orange-100 text-orange-900 border border-dashed border-orange-500";
