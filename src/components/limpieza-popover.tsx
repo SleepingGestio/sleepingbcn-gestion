@@ -209,7 +209,15 @@ export function LimpiezaPopover({ open, loadKey, onOpenChange, apt, fecha, exist
     refetchOnMount: "always",
     refetchOnWindowFocus: false,
     queryFn: async () => {
-      const persisted = normalizeLimpieza(existing, apt, fecha);
+      const freshExisting = existing?.id_limpieza
+        ? await supabase
+            .from("limpiezas")
+            .select("*")
+            .eq("id_limpieza", existing.id_limpieza)
+            .maybeSingle()
+        : { data: null, error: null };
+      if (freshExisting.error) throw freshExisting.error;
+      const persisted = normalizeLimpieza((freshExisting.data as Partial<Limpieza> | null) ?? existing, apt, fecha);
       if (persisted.tipo === "intermedia") {
         return {
           form: {
