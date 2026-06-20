@@ -89,18 +89,31 @@ function emptyLimpieza(apt: AptInfo, fecha: string): Limpieza {
   };
 }
 
-function minsBetween(a: string | null, b: string | null): number | null {
-  if (!a || !b) return null;
-  const pa = a.match(/(\d{1,2}):(\d{2})/);
-  const pb = b.match(/(\d{1,2}):(\d{2})/);
-  if (!pa || !pb) return null;
-  return Number(pb[1]) * 60 + Number(pb[2]) - (Number(pa[1]) * 60 + Number(pa[2]));
+function parseHM(s: string | null | undefined): { h: number; m: number } | null {
+  if (!s) return null;
+  const m = String(s).match(/(\d{1,2}):(\d{2})/);
+  return m ? { h: Number(m[1]), m: Number(m[2]) } : null;
 }
 
-function fmtHours(mins: number): string {
-  const h = Math.floor(mins / 60);
+// Combine an ISO date (YYYY-MM-DD) and HH:MM[:SS] into a UTC-anchored Date
+// (we only ever subtract two such Dates, so the tz anchor is irrelevant).
+function combineDateTime(dateISO: string | null, time: string | null): Date | null {
+  if (!dateISO) return null;
+  const t = parseHM(time);
+  if (!t) return null;
+  const dm = dateISO.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!dm) return null;
+  return new Date(Date.UTC(Number(dm[1]), Number(dm[2]) - 1, Number(dm[3]), t.h, t.m, 0));
+}
+
+function fmtWindow(mins: number): string {
+  if (mins < 0) return "Invalida";
+  const totalH = Math.floor(mins / 60);
+  const days = Math.floor(totalH / 24);
+  const hours = totalH % 24;
   const m = mins % 60;
-  return m === 0 ? `${h}h` : `${h}h${String(m).padStart(2, "0")}`;
+  const hm = m === 0 ? `${hours}h` : `${hours}h${String(m).padStart(2, "0")}`;
+  return days > 0 ? `${days}d ${hm}` : hm;
 }
 
 export function LimpiezaPopover({ open, onOpenChange, apt, fecha, existing, onSaved }: Props) {
@@ -158,11 +171,9 @@ export function LimpiezaPopover({ open, onOpenChange, apt, fecha, existing, onSa
     },
   });
 
-  const winMins = minsBetween(form.hora_out_time, form.hora_in_time);
-  // Negative result means "next check-in is on a later day" — add 24h.
-  const winMinsAdj =
-    winMins == null ? null : winMins < 0 ? winMins + 24 * 60 : winMins;
-  const winCritical = winMinsAdj != null && winMinsAdj < 150;
+  // Full datetime window: checkout (fecha_limpieza + hora_out) vs
+  // next reservation's checkin date + hora_in. Falls back to same-day if the
+  // next-reservation lookup hasn't resolved yet.
 
   // Look up the actual next reservation's check-in date so we can show it
   // next to the "Entra" row instead of reusing the checkout date.
@@ -191,6 +202,17 @@ export function LimpiezaPopover({ open, onOpenChange, apt, fecha, existing, onSa
       return next;
     },
   });
+
+  const checkoutDT = combineDateTime(form.fecha_limpieza, form.hora_out_time);
+  const checkinDT = combineDateTime(
+    nextResQ.data?.["Check in"] ?? null,
+    form.hora_in_time,
+  );
+  const winMinsAdj =
+    checkoutDT && checkinDT
+      ? Math.round((checkinDT.getTime() - checkoutDT.getTime()) / 60000)
+      : null;
+  const winCritical = winMinsAdj != null && winMinsAdj >= 0 && winMinsAdj < 150;
 
   const set = <K extends keyof Limpieza>(k: K, v: Limpieza[K]) => setForm((f) => ({ ...f, [k]: v }));
 
@@ -377,7 +399,7 @@ export function LimpiezaPopover({ open, onOpenChange, apt, fecha, existing, onSa
               >
                 {winMinsAdj == null
                   ? "Sin próxima entrada en 7 días"
-                  : fmtHours(winMinsAdj)}
+                  : fmtWindow(winMinsAdj)}
               </div>
             </section>
 
