@@ -54,10 +54,30 @@ type AptInfo = {
   nombre: string;
   grupo_nombre?: string | null;
   camas_fijas?: number | null;
+  tiene_sofa_cama?: boolean | null;
+};
+
+type ReservaPopoverRow = {
+  "Número": string;
+  "Check in": string | null;
+  "Check-out": string | null;
+  "Huéspedes": number | null;
+  "Estado": string | null;
+  "Hora estimada de llegada": string | null;
+  "Hora estimada de salida": string | null;
+  id_apt: number | null;
+  es_reserva_compartida: boolean | null;
+};
+
+type GestioTimes = {
+  "Número": string;
+  HCheckInConf: string | null;
+  HCheckOutConf: string | null;
 };
 
 type Props = {
   open: boolean;
+  loadKey: number;
   onOpenChange: (o: boolean) => void;
   apt: AptInfo;
   fecha: string; // YYYY-MM-DD
@@ -98,10 +118,41 @@ function emptyLimpieza(apt: AptInfo, fecha: string): Limpieza {
   };
 }
 
+const ESTADOS_EXCLUDED_FILTER = '("Cancelada","No show")';
+
+function addDaysISO(iso: string, n: number): string {
+  const d = new Date(iso + "T00:00:00");
+  d.setDate(d.getDate() + n);
+  const tz = d.getTimezoneOffset() * 60000;
+  return new Date(d.getTime() - tz).toISOString().slice(0, 10);
+}
+
+function normalizeLimpieza(row: Partial<Limpieza> | null | undefined, apt: AptInfo, fecha: string): Limpieza {
+  return {
+    ...emptyLimpieza(apt, fecha),
+    ...(row ?? {}),
+    id_apt: row?.id_apt ?? apt.id_apt,
+    fecha_limpieza: row?.fecha_limpieza ?? fecha,
+    tipo: row?.tipo ?? "salida",
+  };
+}
+
 function parseHM(s: string | null | undefined): { h: number; m: number } | null {
   if (!s) return null;
   const m = String(s).match(/(\d{1,2}):(\d{2})/);
   return m ? { h: Number(m[1]), m: Number(m[2]) } : null;
+}
+
+function resolveTime(
+  conf: string | null,
+  estimada: string | null,
+  defaultVal: string,
+): { value: string; informed: boolean } {
+  const c = parseHM(conf);
+  if (c) return { value: `${String(c.h).padStart(2, "0")}:${String(c.m).padStart(2, "0")}:00`, informed: true };
+  const e = parseHM(estimada);
+  if (e) return { value: `${String(e.h).padStart(2, "0")}:${String(e.m).padStart(2, "0")}:00`, informed: true };
+  return { value: defaultVal, informed: false };
 }
 
 // Combine an ISO date (YYYY-MM-DD) and HH:MM[:SS] into a UTC-anchored Date
@@ -125,21 +176,169 @@ function fmtWindow(mins: number): string {
   return days > 0 ? `${days}d ${hm}` : hm;
 }
 
-export function LimpiezaPopover({ open, onOpenChange, apt, fecha, existing, onSaved }: Props) {
-  const [form, setForm] = useState<Limpieza>(() => existing ?? emptyLimpieza(apt, fecha));
+export function LimpiezaPopover({ open, loadKey, onOpenChange, apt, fecha, existing, onSaved }: Props) {
+  const [form, setForm] = useState<Limpieza>(() => emptyLimpieza(apt, fecha));
+  const [loaded, setLoaded] = useState(false);
+  const [realCheckoutDate, setRealCheckoutDate] = useState<string | null>(null);
+  const [nextReservation, setNextReservation] = useState<ReservaPopoverRow | null>(null);
   const [saving, setSaving] = useState(false);
   const [anularOpen, setAnularOpen] = useState(false);
 
   useEffect(() => {
-    if (open) setForm(existing ?? emptyLimpieza(apt, fecha));
-  }, [open, existing, apt, fecha]);
+    if (!open) return;
+    setForm(emptyLimpieza(apt, fecha));
+    setRealCheckoutDate(null);
+    setNextReservation(null);
+    setSaving(false);
+    setAnularOpen(false);
+    setLoaded(false);
+  }, [open, loadKey, apt.id_apt, fecha, existing?.id_limpieza]);
+
+  const popoverDataQ = useQuery({
+    queryKey: [
+      "limpieza-popover-data",
+      apt.id_apt,
+      fecha,
+      existing?.id_limpieza ?? 0,
+      existing?.numero_reserva ?? null,
+      existing?.tipo ?? "salida",
+      loadKey,
+    ],
+    enabled: open,
+    staleTime: 0,
+    gcTime: 0,
+    refetchOnMount: "always",
+    refetchOnWindowFocus: false,
+    queryFn: async () => {
+      const freshExisting = existing?.id_limpieza
+        ? await supabase
+            .from("limpiezas")
+            .select("*")
+            .eq("id_limpieza", existing.id_limpieza)
+            .maybeSingle()
+        : { data: null, error: null };
+      if (freshExisting.error) throw freshExisting.error;
+      const persisted = normalizeLimpieza((freshExisting.data as Partial<Limpieza> | null) ?? existing, apt, fecha);
+      if (persisted.tipo === "intermedia") {
+        return {
+          form: {
+            ...persisted,
+            tipo: "intermedia",
+            check_toallas: persisted.check_toallas ?? true,
+            check_sabanas: persisted.check_sabanas ?? true,
+            check_limpieza_basica: persisted.check_limpieza_basica ?? true,
+            check_limpieza_completa: persisted.check_limpieza_completa ?? false,
+          },
+          realCheckoutDate: null,
+          nextReservation: null,
+        };
+      }
+
+      let current: ReservaPopoverRow | null = null;
+      if (persisted.numero_reserva) {
+        const { data, error } = await supabase
+          .from("v_reservas_por_apartamento")
+          .select(`"Número","Check in","Check-out","Huéspedes","Estado","Hora estimada de llegada","Hora estimada de salida",id_apt,es_reserva_compartida`)
+          .eq("id_apt", apt.id_apt)
+          .eq("Número", persisted.numero_reserva)
+          .limit(1);
+        if (error) throw error;
+        current = ((data ?? [])[0] ?? null) as ReservaPopoverRow | null;
+      } else {
+        const { data, error } = await supabase
+          .from("v_reservas_por_apartamento")
+          .select(`"Número","Check in","Check-out","Huéspedes","Estado","Hora estimada de llegada","Hora estimada de salida",id_apt,es_reserva_compartida`)
+          .eq("id_apt", apt.id_apt)
+          .not("Estado", "in", ESTADOS_EXCLUDED_FILTER)
+          .eq("Check-out", fecha)
+          .order("Check in", { ascending: true })
+          .limit(1);
+        if (error) throw error;
+        current = ((data ?? [])[0] ?? null) as ReservaPopoverRow | null;
+      }
+
+      let checkoutDate = current?.["Check-out"] ?? null;
+      if (!checkoutDate && persisted.numero_reserva) {
+        const { data, error } = await supabase
+          .from("reservas_kb")
+          .select('"Número","Check-out"')
+          .eq("Número", persisted.numero_reserva)
+          .maybeSingle();
+        if (error) throw error;
+        checkoutDate = ((data as any)?.["Check-out"] as string | null | undefined) ?? null;
+      }
+      checkoutDate = checkoutDate ?? fecha;
+      const currentNumero = current?.["Número"] ?? persisted.numero_reserva ?? null;
+
+      let next: ReservaPopoverRow | null = null;
+      const { data: nextRows, error: nextError } = await supabase
+        .from("v_reservas_por_apartamento")
+        .select(`"Número","Check in","Check-out","Huéspedes","Estado","Hora estimada de llegada","Hora estimada de salida",id_apt,es_reserva_compartida`)
+        .eq("id_apt", apt.id_apt)
+        .not("Estado", "in", ESTADOS_EXCLUDED_FILTER)
+        .gte("Check in", checkoutDate)
+        .lte("Check in", addDaysISO(checkoutDate, 7))
+        .order("Check in", { ascending: true })
+        .order("Hora estimada de llegada", { ascending: true, nullsFirst: true });
+      if (nextError) throw nextError;
+      next = ((nextRows ?? []) as ReservaPopoverRow[]).find((r) => r["Número"] !== currentNumero) ?? null;
+
+      const numeros = Array.from(new Set([currentNumero, next?.["Número"]].filter(Boolean))) as string[];
+      const gestRows = numeros.length
+        ? await supabase.from("reservas_gestio").select('"Número",HCheckInConf,HCheckOutConf').in("Número", numeros)
+        : { data: [] as GestioTimes[], error: null };
+      if (gestRows.error) throw gestRows.error;
+      const gestMap = new Map<string, GestioTimes>(
+        ((gestRows.data ?? []) as GestioTimes[]).map((g) => [g["Número"], g]),
+      );
+
+      const currentGest = currentNumero ? gestMap.get(currentNumero) : null;
+      const nextGest = next?.["Número"] ? gestMap.get(next["Número"]) : null;
+      const out = current
+        ? resolveTime(currentGest?.HCheckOutConf ?? null, current["Hora estimada de salida"], "11:00:00")
+        : { value: persisted.hora_out_time ?? "11:00:00", informed: persisted.hora_out_informed ?? false };
+      const inRes = next
+        ? resolveTime(nextGest?.HCheckInConf ?? null, next["Hora estimada de llegada"], "15:00:00")
+        : null;
+      const checkoutDT = combineDateTime(checkoutDate, out.value);
+      const checkinDT = combineDateTime(next?.["Check in"] ?? null, inRes?.value ?? null);
+      const winMins = checkoutDT && checkinDT ? Math.round((checkinDT.getTime() - checkoutDT.getTime()) / 60000) : null;
+      const autoSfcMontar = !!next && !current?.es_reserva_compartida && !!apt.tiene_sofa_cama && (next["Huéspedes"] ?? 0) > (apt.camas_fijas ?? 0);
+      const autoSfcDesmontar = !current?.es_reserva_compartida && !!apt.tiene_sofa_cama && (current?.["Huéspedes"] ?? 0) > (apt.camas_fijas ?? 0) && !autoSfcMontar;
+
+      return {
+        form: {
+          ...persisted,
+          numero_reserva: currentNumero,
+          tipo: "salida",
+          hora_out_time: out.value,
+          hora_out_informed: out.informed,
+          hora_in_time: inRes?.value ?? null,
+          hora_in_informed: inRes?.informed ?? false,
+          prioritaria: winMins != null && winMins >= 0 && winMins < 150,
+          sfc_montar: persisted.sfc_montar_manual ?? autoSfcMontar,
+          sfc_desmontar: persisted.sfc_desmontar_manual ?? autoSfcDesmontar,
+        },
+        realCheckoutDate: checkoutDate,
+        nextReservation: next,
+      };
+    },
+  });
+
+  useEffect(() => {
+    if (!open || !popoverDataQ.data) return;
+    setForm(popoverDataQ.data.form);
+    setRealCheckoutDate(popoverDataQ.data.realCheckoutDate);
+    setNextReservation(popoverDataQ.data.nextReservation);
+    setLoaded(true);
+  }, [open, popoverDataQ.data]);
 
   const limpiadoresQ = useQuery({ queryKey: ["limpiadores"], queryFn: fetchLimpiadores });
 
   // Shared-reservation detection
   const sharedQ = useQuery({
-    queryKey: ["limpieza-shared", form.numero_reserva],
-    enabled: !!form.numero_reserva,
+    queryKey: ["limpieza-shared", apt.id_apt, form.numero_reserva],
+    enabled: loaded && !!form.numero_reserva,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("v_reservas_por_apartamento")
@@ -167,7 +366,7 @@ export function LimpiezaPopover({ open, onOpenChange, apt, fecha, existing, onSa
   // orden_trabajo siblings count
   const siblingsQ = useQuery({
     queryKey: ["limp-siblings", form.worker, form.fecha_limpieza],
-    enabled: !!form.worker && !!form.fecha_limpieza,
+    enabled: loaded && !!form.worker && !!form.fecha_limpieza,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("limpiezas")
@@ -180,55 +379,9 @@ export function LimpiezaPopover({ open, onOpenChange, apt, fecha, existing, onSa
     },
   });
 
-  // The reservation's REAL checkout date is a fact about the reservation and
-  // must NOT change when the gestor reschedules the cleaning (fecha_limpieza).
-  const reservaQ = useQuery({
-    queryKey: ["limp-reserva-kb", form.numero_reserva],
-    enabled: !!form.numero_reserva,
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("reservas_kb")
-        .select('"Número","Check-out"')
-        .eq("Número", form.numero_reserva!)
-        .maybeSingle();
-      if (error) throw error;
-      return (data ?? null) as { "Número": string; "Check-out": string | null } | null;
-    },
-  });
-  const realCheckoutDate =
-    reservaQ.data?.["Check-out"] ?? (form.tipo === "salida" ? form.fecha_limpieza : null);
-
-  // Look up the genuinely NEXT reservation (strictly after the real checkout).
-  const nextResQ = useQuery({
-    queryKey: ["limp-next-res", apt.id_apt, realCheckoutDate, form.numero_reserva],
-    enabled: !!realCheckoutDate && !!apt.id_apt,
-    queryFn: async () => {
-      const fecha = realCheckoutDate!;
-      const end = new Date(fecha + "T00:00:00");
-      end.setDate(end.getDate() + 14);
-      const tz = end.getTimezoneOffset() * 60000;
-      const endISO = new Date(end.getTime() - tz).toISOString().slice(0, 10);
-      let q = supabase
-        .from("v_reservas_por_apartamento")
-        .select(`"Número","Check in","Hora estimada de llegada"`)
-        .eq("id_apt", apt.id_apt)
-        .not("Estado", "in", '("Cancelada","No show")')
-        .gte("Check in", fecha)
-        .lte("Check in", endISO);
-      if (form.numero_reserva) q = q.neq("Número", form.numero_reserva);
-      const { data, error } = await q
-        .order("Check in", { ascending: true })
-        .order("Hora estimada de llegada", { ascending: true, nullsFirst: true })
-        .limit(1);
-      if (error) throw error;
-      const rows = (data ?? []) as Array<{ "Número": string; "Check in": string }>;
-      return rows[0] ?? null;
-    },
-  });
-
   const checkoutDT = combineDateTime(realCheckoutDate, form.hora_out_time);
   const checkinDT = combineDateTime(
-    nextResQ.data?.["Check in"] ?? null,
+    nextReservation?.["Check in"] ?? null,
     form.hora_in_time,
   );
   const winMinsAdj =
@@ -364,6 +517,14 @@ export function LimpiezaPopover({ open, onOpenChange, apt, fecha, existing, onSa
           </DialogHeader>
 
           <div className="overflow-y-auto px-4 py-3 space-y-4">
+            {popoverDataQ.isError ? (
+              <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+                Error cargando la limpieza: {(popoverDataQ.error as Error).message}
+              </div>
+            ) : !loaded || popoverDataQ.isLoading ? (
+              <div className="py-8 text-center text-sm text-muted-foreground">Cargando limpieza…</div>
+            ) : (
+              <>
             {/* Cancellation reason (read-only) */}
             {form.estado === "anulada" && (
               <div className="rounded-md border border-muted bg-muted/40 p-3 text-xs">
@@ -411,8 +572,8 @@ export function LimpiezaPopover({ open, onOpenChange, apt, fecha, existing, onSa
                 <HoraRow
                   label="Entra (próx. reserva)"
                   dateLabel={
-                    nextResQ.data?.["Check in"]
-                      ? fmtDate(nextResQ.data["Check in"])
+                    nextReservation?.["Check in"]
+                      ? fmtDate(nextReservation["Check in"])
                       : "—"
                   }
                   time={form.hora_in_time}
@@ -606,6 +767,8 @@ export function LimpiezaPopover({ open, onOpenChange, apt, fecha, existing, onSa
                 onChange={(e) => set("observaciones", e.target.value || null)}
               />
             </section>
+              </>
+            )}
           </div>
 
           <DialogFooter className="px-4 py-3 border-t flex-row sm:justify-between gap-2">
@@ -671,7 +834,7 @@ export function LimpiezaPopover({ open, onOpenChange, apt, fecha, existing, onSa
                 >
                   <X className="h-4 w-4 mr-1" /> Anular limpieza
                 </Button>
-                <Button onClick={save} disabled={saving} className="bg-emerald-600 hover:bg-emerald-700">
+                <Button onClick={save} disabled={saving || !loaded || popoverDataQ.isError} className="bg-emerald-600 hover:bg-emerald-700">
                   {saving ? "Guardando…" : "Guardar"}
                 </Button>
               </>

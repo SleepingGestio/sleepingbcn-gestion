@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { AppShell } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
@@ -199,11 +199,13 @@ function ProgramacionLimpiezasPage() {
   const [popover, setPopover] = useState<
     | null
     | {
-        apt: { id_apt: number; nombre: string; grupo_nombre?: string | null; camas_fijas?: number | null };
+        loadKey: number;
+        apt: { id_apt: number; nombre: string; grupo_nombre?: string | null; camas_fijas?: number | null; tiene_sofa_cama?: boolean | null };
         fecha: string;
         existing: LimpiezaRow | null;
       }
   >(null);
+  const popoverLoadSeq = useRef(0);
   const [genOpen, setGenOpen] = useState(false);
 
   const gruposQ = useQuery({ queryKey: ["grupos_apartamentos"], queryFn: fetchGrupos });
@@ -488,12 +490,15 @@ function ProgramacionLimpiezasPage() {
                                 style={{ width: DAY_COL_W }}
                                 onClick={(e) => {
                                   e.stopPropagation();
+                                  const loadKey = ++popoverLoadSeq.current;
                                   setPopover({
+                                    loadKey,
                                     apt: {
                                       id_apt: a.id_apt,
                                       nombre: a.nombre,
                                       grupo_nombre: grupoNombreById(a.id_grupo),
                                       camas_fijas: a.camas_fijas,
+                                      tiene_sofa_cama: a.tiene_sofa_cama,
                                     },
                                     fecha: iso,
                                     existing,
@@ -521,17 +526,21 @@ function ProgramacionLimpiezasPage() {
                         {(limpiezasByApt.get(a.id_apt) ?? []).map((l) => {
                           const idx = dayISOs.indexOf(l.fecha_limpieza);
                           if (idx < 0) return null;
-                          const onOpen = () =>
+                          const onOpen = () => {
+                            const loadKey = ++popoverLoadSeq.current;
                             setPopover({
+                              loadKey,
                               apt: {
                                 id_apt: a.id_apt,
                                 nombre: a.nombre,
                                 grupo_nombre: grupoNombreById(a.id_grupo),
                                 camas_fijas: a.camas_fijas,
+                                tiene_sofa_cama: a.tiene_sofa_cama,
                               },
                               fecha: l.fecha_limpieza,
                               existing: l,
                             });
+                          };
                           if (l.tipo === "intermedia") {
                             return (
                               <IntermediaOverlay
@@ -570,8 +579,9 @@ function ProgramacionLimpiezasPage() {
 
       {popover && (
         <LimpiezaPopover
-          key={`${popover.apt.id_apt}|${popover.fecha}|${popover.existing?.id_limpieza ?? 0}`}
+          key={`${popover.apt.id_apt}|${popover.fecha}|${popover.existing?.id_limpieza ?? 0}|${popover.loadKey}`}
           open={!!popover}
+          loadKey={popover.loadKey}
           onOpenChange={(o) => !o && setPopover(null)}
           apt={popover.apt}
           fecha={popover.fecha}
