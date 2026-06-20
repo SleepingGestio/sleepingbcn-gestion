@@ -199,11 +199,13 @@ function ProgramacionLimpiezasPage() {
   const [popover, setPopover] = useState<
     | null
     | {
+        loadKey: number;
         apt: { id_apt: number; nombre: string; grupo_nombre?: string | null; camas_fijas?: number | null };
         fecha: string;
         existing: LimpiezaRow | null;
       }
   >(null);
+  const [popoverLoadKey, setPopoverLoadKey] = useState(0);
   const [genOpen, setGenOpen] = useState(false);
 
   const gruposQ = useQuery({ queryKey: ["grupos_apartamentos"], queryFn: fetchGrupos });
@@ -488,7 +490,10 @@ function ProgramacionLimpiezasPage() {
                                 style={{ width: DAY_COL_W }}
                                 onClick={(e) => {
                                   e.stopPropagation();
+                                  const loadKey = popoverLoadKey + 1;
+                                  setPopoverLoadKey(loadKey);
                                   setPopover({
+                                    loadKey,
                                     apt: {
                                       id_apt: a.id_apt,
                                       nombre: a.nombre,
@@ -521,8 +526,11 @@ function ProgramacionLimpiezasPage() {
                         {(limpiezasByApt.get(a.id_apt) ?? []).map((l) => {
                           const idx = dayISOs.indexOf(l.fecha_limpieza);
                           if (idx < 0) return null;
-                          const onOpen = () =>
+                          const onOpen = () => {
+                            const loadKey = popoverLoadKey + 1;
+                            setPopoverLoadKey(loadKey);
                             setPopover({
+                              loadKey,
                               apt: {
                                 id_apt: a.id_apt,
                                 nombre: a.nombre,
@@ -532,6 +540,7 @@ function ProgramacionLimpiezasPage() {
                               fecha: l.fecha_limpieza,
                               existing: l,
                             });
+                          };
                           if (l.tipo === "intermedia") {
                             return (
                               <IntermediaOverlay
@@ -570,8 +579,9 @@ function ProgramacionLimpiezasPage() {
 
       {popover && (
         <LimpiezaPopover
-          key={`${popover.apt.id_apt}|${popover.fecha}|${popover.existing?.id_limpieza ?? 0}`}
+          key={`${popover.apt.id_apt}|${popover.fecha}|${popover.existing?.id_limpieza ?? 0}|${popover.loadKey}`}
           open={!!popover}
+          loadKey={popover.loadKey}
           onOpenChange={(o) => !o && setPopover(null)}
           apt={popover.apt}
           fecha={popover.fecha}
