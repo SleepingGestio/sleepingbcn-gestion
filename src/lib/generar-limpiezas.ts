@@ -33,7 +33,11 @@ type ExistingLimp = {
   tipo: string | null;
 };
 
-const ESTADOS_OK = ["Confirmada", "Check-in realizado"];
+// Reservations whose stay actually happened / will happen — used to find both
+// "checkouts that need a salida limpieza" and the "next incoming reservation"
+// that drives hora_in_time. Explicitly excludes Cancelada and No show.
+const ESTADOS_EXCLUDED = ["Cancelada", "No show"];
+const ESTADOS_EXCLUDED_FILTER = `(${ESTADOS_EXCLUDED.map((e) => `"${e}"`).join(",")})`;
 
 function addDaysISO(iso: string, n: number): string {
   const d = new Date(iso + "T00:00:00");
@@ -44,8 +48,27 @@ function addDaysISO(iso: string, n: number): string {
 
 function trimHM(s: string | null | undefined): string | null {
   if (!s) return null;
-  const m = String(s).match(/(\d{1,2}):(\d{2})/);
-  return m ? `${m[1].padStart(2, "0")}:${m[2]}:00` : null;
+  const str = String(s).trim();
+  // Pure time value like "15:00" or "15:00:00"
+  if (/^\d{1,2}:\d{2}/.test(str)) {
+    const m = str.match(/^(\d{1,2}):(\d{2})/)!;
+    return `${m[1].padStart(2, "0")}:${m[2]}:00`;
+  }
+  // Timestamp value (with or without TZ). Convert to Europe/Madrid local time
+  // to recover the time the operator actually entered.
+  if (/^\d{4}-\d{2}-\d{2}[T ]/.test(str)) {
+    const d = new Date(str);
+    if (isNaN(d.getTime())) return null;
+    const fmt = new Intl.DateTimeFormat("es-ES", {
+      timeZone: "Europe/Madrid",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    });
+    const parts = fmt.format(d).match(/(\d{2}):(\d{2})/);
+    return parts ? `${parts[1]}:${parts[2]}:00` : null;
+  }
+  return null;
 }
 
 function resolveTime(
@@ -86,7 +109,7 @@ export async function generarLimpiezas(fromISO: string, toISO: string): Promise<
     .select(
       `"Número","Check in","Check-out","Noches","Huéspedes","Estado","Hora estimada de llegada","Hora estimada de salida",id_apt,es_reserva_compartida`,
     )
-    .in("Estado", ESTADOS_OK)
+    .not("Estado", "in", ESTADOS_EXCLUDED_FILTER)
     .lte("Check in", toISO)
     .gte("Check-out", fromISO);
   if (e1) throw e1;
@@ -97,7 +120,7 @@ export async function generarLimpiezas(fromISO: string, toISO: string): Promise<
   const { data: vresFuture, error: e2 } = await supabase
     .from("v_reservas_por_apartamento")
     .select(`"Número","Check in","Check-out","Huéspedes","Estado",id_apt`)
-    .in("Estado", ESTADOS_OK)
+    .not("Estado", "in", ESTADOS_EXCLUDED_FILTER)
     .gte("Check in", fromISO)
     .lte("Check in", widerTo);
   if (e2) throw e2;

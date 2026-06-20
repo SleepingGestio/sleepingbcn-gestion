@@ -64,7 +64,7 @@ type ReservaRow = {
 type LimpiezaRow = Limpieza;
 
 const DOW = ["D", "L", "M", "X", "J", "V", "S"];
-const DAY_COL_W = 112; // px per day column
+const DAY_COL_W = 84; // px per day column (compact: fits 12 days on typical desktop)
 const APT_COL_W = 160; // px for left apartment column
 const ROW_H = 38; // px per apartment row (compact: one reservation lane)
 
@@ -89,7 +89,8 @@ function addDays(d: Date, n: number) {
 function defaultRange(): { from: Date; to: Date } {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  return { from: addDays(today, -1), to: addDays(today, 8) };
+  // Default visible window: today-2 .. today+9 (12 columns total)
+  return { from: addDays(today, -2), to: addDays(today, 9) };
 }
 
 async function fetchGrupos(): Promise<Grupo[]> {
@@ -345,10 +346,14 @@ function ProgramacionLimpiezasPage() {
         <Button variant="secondary" size="sm" onClick={resetToday}>
           Hoy
         </Button>
-        <div className="ml-auto" />
-        <Button size="sm" onClick={() => setGenOpen(true)}>
+        <Button
+          size="sm"
+          onClick={() => setGenOpen(true)}
+          className="bg-purple-700 hover:bg-purple-800 text-white"
+        >
           <Sparkles className="h-4 w-4" /> Generar limpiezas
         </Button>
+        <div className="ml-auto" />
       </div>
 
       {/* Group filter chips */}
