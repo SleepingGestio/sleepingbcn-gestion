@@ -45,7 +45,7 @@ export type ReservaGestio = {
 };
 
 export type AgCheckIn = { id_persona: number; nombre: string | null; apellidos: string | null };
-export type PersLimp = { id_persona: number; nombre: string | null; apellidos: string | null };
+export type PersLimp = { id_persona: number; nombre: string | null; apellidos: string | null; codigo?: string | null };
 
 export const fullName = (p: { nombre: string | null; apellidos: string | null } | null | undefined) =>
   p ? [p.nombre, p.apellidos].filter(Boolean).join(" ").trim() || "—" : "—";
