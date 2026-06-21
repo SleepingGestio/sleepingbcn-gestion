@@ -520,6 +520,107 @@ export function LimpiezaPopover({ open, loadKey, onOpenChange, apt, fecha, exist
 
   const workerObj = limpiadoresQ.data?.find((p) => p.id_persona === form.worker);
 
+  const kbChange = popoverDataQ.data && "fresh" in popoverDataQ.data ? popoverDataQ.data : null;
+  const showKbAlert =
+    !!kbChange &&
+    kbChange.fresh &&
+    kbChange.stored &&
+    (form.affected_by_kb_change || kbChange.reason === "cancelada");
+  const kbChanges: { label: string; old: string; nu: string }[] = [];
+  if (showKbAlert && kbChange?.fresh && kbChange?.stored) {
+    const f = kbChange.fresh;
+    const s = kbChange.stored;
+    if (s.hora_out_time !== f.hora_out_time) {
+      kbChanges.push({
+        label: "Hora de salida",
+        old: s.hora_out_time ? fmtTime(s.hora_out_time) : "—",
+        nu: f.hora_out_time ? fmtTime(f.hora_out_time) : "—",
+      });
+    }
+    if (s.hora_in_time !== f.hora_in_time) {
+      kbChanges.push({
+        label: "Hora de entrada",
+        old: s.hora_in_time ? fmtTime(s.hora_in_time) : "—",
+        nu: f.hora_in_time ? fmtTime(f.hora_in_time) : "—",
+      });
+    }
+    if (s.proxima_reserva_numero !== f.proxima_reserva_numero) {
+      kbChanges.push({
+        label: "Próxima reserva",
+        old: s.proxima_reserva_numero ?? "ninguna",
+        nu: f.proxima_reserva_numero ?? "ninguna",
+      });
+    }
+    if (s.sfc_montar_auto !== f.sfc_montar_auto) {
+      kbChanges.push({
+        label: "Montar sofá cama (auto)",
+        old: s.sfc_montar_auto ? "sí" : "no",
+        nu: f.sfc_montar_auto ? "sí" : "no",
+      });
+    }
+    if (s.sfc_desmontar_auto !== f.sfc_desmontar_auto) {
+      kbChanges.push({
+        label: "Desmontar sofá cama (auto)",
+        old: s.sfc_desmontar_auto ? "sí" : "no",
+        nu: f.sfc_desmontar_auto ? "sí" : "no",
+      });
+    }
+  }
+
+  const isCancelada = showKbAlert && kbChange?.reason === "cancelada";
+
+  const applyFresh = async () => {
+    if (!kbChange?.fresh || form.id_limpieza === 0) return;
+    setSaving(true);
+    try {
+      const f = kbChange.fresh;
+      const payload: any = {
+        hora_out_time: f.hora_out_time,
+        hora_out_informed: f.hora_out_informed,
+        hora_in_time: f.hora_in_time,
+        hora_in_informed: f.hora_in_informed,
+        proxima_reserva_numero: f.proxima_reserva_numero,
+        affected_by_kb_change: false,
+        affected_reason: null,
+      };
+      // Only update the auto SFC base when the gestor hasn't manually
+      // overridden it; manual flags are explicitly preserved.
+      if (form.sfc_montar_manual == null) payload.sfc_montar = f.sfc_montar_auto;
+      if (form.sfc_desmontar_manual == null) payload.sfc_desmontar = f.sfc_desmontar_auto;
+      const { error } = await supabase
+        .from("limpiezas")
+        .update(payload)
+        .eq("id_limpieza", form.id_limpieza);
+      if (error) throw error;
+      toast.success("Limpieza actualizada con datos nuevos");
+      onSaved();
+      onOpenChange(false);
+    } catch (e) {
+      toast.error("Error: " + (e as Error).message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const markReviewed = async () => {
+    if (form.id_limpieza === 0) return;
+    setSaving(true);
+    try {
+      const { error } = await supabase
+        .from("limpiezas")
+        .update({ affected_by_kb_change: false, affected_reason: null })
+        .eq("id_limpieza", form.id_limpieza);
+      if (error) throw error;
+      setForm((f) => ({ ...f, affected_by_kb_change: false, affected_reason: null }));
+      toast.success("Marcada como revisada");
+      onSaved();
+    } catch (e) {
+      toast.error("Error: " + (e as Error).message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
