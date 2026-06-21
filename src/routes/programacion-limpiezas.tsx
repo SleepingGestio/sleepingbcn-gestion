@@ -262,6 +262,26 @@ function ProgramacionLimpiezasPage() {
     return m;
   }, [limpiezasQ.data]);
 
+  // Per apartment, the set of check-in dates of (non-cancelled) reservations.
+  // Used to detect NENTRAN: a salida task whose next reservation does not
+  // arrive on the SAME calendar day as the checkout.
+  const checkinDaysByApt = useMemo(() => {
+    const m = new Map<number, Set<string>>();
+    for (const r of reservasQ.data ?? []) {
+      if (r.id_apt == null || !r["Check in"]) continue;
+      const s = m.get(r.id_apt) ?? new Set<string>();
+      s.add(r["Check in"]);
+      m.set(r.id_apt, s);
+    }
+    return m;
+  }, [reservasQ.data]);
+
+  const [onlyAffected, setOnlyAffected] = useState(false);
+  const affectedCount = useMemo(
+    () => (limpiezasQ.data ?? []).filter((l) => l.affected_by_kb_change).length,
+    [limpiezasQ.data],
+  );
+
   const sharedByNumero = useMemo(() => {
     const m = new Map<string, ReservaRow[]>();
     for (const r of reservasQ.data ?? []) {
@@ -328,6 +348,24 @@ function ProgramacionLimpiezasPage() {
 
   return (
     <AppShell title="Programación de limpiezas">
+      {affectedCount > 0 && (
+        <button
+          type="button"
+          onClick={() => setOnlyAffected((v) => !v)}
+          className={cn(
+            "mb-3 w-full rounded-md border px-3 py-2 text-left text-sm transition-colors",
+            onlyAffected
+              ? "bg-orange-500 border-orange-600 text-white"
+              : "bg-orange-50 border-orange-300 text-orange-900 hover:bg-orange-100",
+          )}
+        >
+          <span className="font-semibold">{affectedCount}</span>{" "}
+          {affectedCount === 1 ? "limpieza afectada" : "limpiezas afectadas"} — revisar
+          <span className="ml-2 text-xs opacity-80">
+            {onlyAffected ? "(filtro activo · clic para quitar)" : "(clic para filtrar)"}
+          </span>
+        </button>
+      )}
       {/* Toolbar */}
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <Button variant="outline" size="sm" onClick={() => shiftDays(-7)}>
