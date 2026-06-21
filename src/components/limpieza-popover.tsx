@@ -858,12 +858,14 @@ function HoraRow({
   time,
   informed,
   emptyText,
+  badge,
 }: {
   label: string;
   dateLabel: string;
   time: string | null;
   informed: boolean;
   emptyText?: string;
+  badge?: { label: string; title?: string };
 }) {
   return (
     <div className="flex items-center gap-2 text-sm">
@@ -880,6 +882,14 @@ function HoraRow({
         </span>
       ) : (
         <span className="text-xs text-muted-foreground italic">{emptyText ?? "—"}</span>
+      )}
+      {badge && (
+        <span
+          title={badge.title}
+          className="text-[10px] font-semibold uppercase tracking-wide rounded px-1.5 py-0.5 bg-muted text-muted-foreground border border-muted-foreground/20"
+        >
+          {badge.label}
+        </span>
       )}
     </div>
   );
