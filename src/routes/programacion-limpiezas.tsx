@@ -898,8 +898,8 @@ function SalidaLabel({
     : hasWorker
       ? codigo ?? `#${l.worker}`
       : "Sin asig.";
-  const left = dayIdx * DAY_COL_W + 0.25 * DAY_COL_W;
-  const width = 0.32 * DAY_COL_W;
+  const left = dayIdx * DAY_COL_W + 0.28 * DAY_COL_W;
+  const width = 0.42 * DAY_COL_W;
   return (
     <button
       type="button"
@@ -908,13 +908,18 @@ function SalidaLabel({
         onClick();
       }}
       className={cn(
-        "absolute z-20 rounded flex items-center justify-center gap-1 px-1 text-[10px] font-semibold overflow-hidden shadow-sm",
+        "absolute z-10 rounded flex items-center justify-center gap-1 px-1 text-[10px] font-semibold overflow-hidden shadow-sm",
         cls,
       )}
       style={{ left, width, top: 3, height: 20 }}
       title={`Salida · ${l.fecha_limpieza}`}
     >
       <span className="truncate">{label}</span>
+      {hasWorker && l.orden_trabajo != null && !anulada && (
+        <span className="shrink-0 h-3.5 min-w-[14px] rounded-full bg-black/30 px-1 text-[9px] leading-[14px] text-center">
+          {l.orden_trabajo}
+        </span>
+      )}
     </button>
   );
 }
@@ -944,8 +949,8 @@ function IntermediaOverlay({
   } else if (hasWorker && isPriority) {
     cls = "bg-amber-500/55 text-white border border-dashed border-amber-200";
   }
-  const left = dayIdx * DAY_COL_W + 0.3 * DAY_COL_W;
-  const width = 0.4 * DAY_COL_W;
+  const left = dayIdx * DAY_COL_W + 0.28 * DAY_COL_W;
+  const width = 0.42 * DAY_COL_W;
   const label = anulada
     ? "NUL"
     : hasWorker
@@ -959,7 +964,7 @@ function IntermediaOverlay({
         onClick();
       }}
       className={cn(
-        "absolute z-30 rounded flex items-center justify-center gap-1 px-1 text-[10px] font-semibold overflow-hidden",
+        "absolute z-10 rounded flex items-center justify-center gap-1 px-1 text-[10px] font-semibold overflow-hidden shadow-sm",
         cls,
       )}
       style={{ left, width, top: 3, height: 20 }}
