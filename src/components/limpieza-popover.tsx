@@ -46,6 +46,8 @@ export type Limpieza = {
   estado: string | null;
   motivo_anulacion: string | null;
   affected_by_kb_change: boolean | null;
+  affected_reason: string | null;
+  proxima_reserva_numero: string | null;
 };
 
 type AptInfo = {
@@ -114,10 +116,15 @@ function emptyLimpieza(apt: AptInfo, fecha: string): Limpieza {
     estado: "activa",
     motivo_anulacion: null,
     affected_by_kb_change: false,
+    affected_reason: null,
+    proxima_reserva_numero: null,
   };
 }
 
-const ESTADOS_EXCLUDED_FILTER = '("Cancelada","No show")';
+// Normal lifecycle states for cleaning lookups (Confirmada → Check-in
+// realizado → Check-out realizado). Cancelada / No show are problem states.
+const ESTADOS_VALID = ["Confirmada", "Check-in realizado", "Check-out realizado"] as const;
+const ESTADOS_VALID_FILTER = `(${ESTADOS_VALID.map((e) => `"${e}"`).join(",")})`;
 
 function addDaysISO(iso: string, n: number): string {
   const d = new Date(iso + "T00:00:00");
