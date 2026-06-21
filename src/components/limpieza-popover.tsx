@@ -124,7 +124,6 @@ function emptyLimpieza(apt: AptInfo, fecha: string): Limpieza {
 // Normal lifecycle states for cleaning lookups (Confirmada → Check-in
 // realizado → Check-out realizado). Cancelada / No show are problem states.
 const ESTADOS_VALID = ["Confirmada", "Check-in realizado", "Check-out realizado"] as const;
-const ESTADOS_VALID_FILTER = `(${ESTADOS_VALID.map((e) => `"${e}"`).join(",")})`;
 
 function addDaysISO(iso: string, n: number): string {
   const d = new Date(iso + "T00:00:00");
