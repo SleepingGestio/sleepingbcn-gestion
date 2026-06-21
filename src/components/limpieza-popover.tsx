@@ -494,6 +494,10 @@ export function LimpiezaPopover({ open, loadKey, onOpenChange, apt, fecha, exist
         check_limpieza_completa: form.check_limpieza_completa,
         observaciones: form.observaciones,
         estado: form.estado ?? "activa",
+        // Saving normally implies the gestor has reviewed and acted on
+        // any KB-change alert, so clear the flag.
+        affected_by_kb_change: false,
+        affected_reason: null,
       };
       if (form.id_limpieza > 0) {
         const { error } = await supabase.from("limpiezas").update(payload).eq("id_limpieza", form.id_limpieza);
