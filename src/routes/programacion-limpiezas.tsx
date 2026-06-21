@@ -601,14 +601,6 @@ function ProgramacionLimpiezasPage() {
                           const idx = dayISOs.indexOf(l.fecha_limpieza);
                           if (idx < 0) return null;
                           if (onlyAffected && !l.affected_by_kb_change) return null;
-                          const isOverdue =
-                            l.estado === "activa" && l.fecha_limpieza < todayISO;
-                          const checkinDays = checkinDaysByApt.get(a.id_apt);
-                          const sameDayEntrada = !!checkinDays?.has(l.fecha_limpieza);
-                          const isNentran =
-                            l.tipo === "salida" &&
-                            l.estado === "activa" &&
-                            !sameDayEntrada;
                           const onOpen = () => {
                             const loadKey = ++popoverLoadSeq.current;
                             setPopover({
@@ -632,7 +624,6 @@ function ProgramacionLimpiezasPage() {
                                 codigo={workerCodigo(l.worker)}
                                 dayIdx={idx}
                                 onClick={onOpen}
-                                overdue={isOverdue}
                               />
                             );
                           }
@@ -643,8 +634,6 @@ function ProgramacionLimpiezasPage() {
                               codigo={workerCodigo(l.worker)}
                               dayIdx={idx}
                               onClick={onOpen}
-                              overdue={isOverdue}
-                              nentran={isNentran}
                             />
                           );
                         })}
