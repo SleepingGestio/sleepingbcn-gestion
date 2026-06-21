@@ -50,7 +50,6 @@ type ExistingLimp = {
 // generation and next-reservation lookups. Cancelada / No show are problem
 // states and are explicitly excluded (and surfaced via affected_reason).
 const ESTADOS_VALID = ["Confirmada", "Check-in realizado", "Check-out realizado"];
-const ESTADOS_VALID_FILTER = `(${ESTADOS_VALID.map((e) => `"${e}"`).join(",")})`;
 const ESTADOS_CANCELADAS = new Set(["Cancelada", "No show"]);
 
 function addDaysISO(iso: string, n: number): string {
