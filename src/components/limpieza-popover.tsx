@@ -539,6 +539,14 @@ export function LimpiezaPopover({ open, loadKey, onOpenChange, apt, fecha, exist
                   dateLabel={realCheckoutDate ? fmtDate(realCheckoutDate) : fmtDate(form.fecha_limpieza)}
                   time={form.hora_out_time}
                   informed={!!form.hora_out_informed}
+                  badge={
+                    realCheckoutDate && realCheckoutDate < form.fecha_limpieza
+                      ? {
+                          label: "VACÍO",
+                          title: `Apartamento vacío desde ${fmtDate(realCheckoutDate)}`,
+                        }
+                      : undefined
+                  }
                 />
                 <HoraRow
                   label="Entra (próx. reserva)"
@@ -550,6 +558,14 @@ export function LimpiezaPopover({ open, loadKey, onOpenChange, apt, fecha, exist
                   time={form.hora_in_time}
                   informed={!!form.hora_in_informed}
                   emptyText="— sin reserva en 7 días"
+                  badge={
+                    (nextReservation?.["Check in"] ?? null) !== form.fecha_limpieza
+                      ? {
+                          label: "NENTRAN",
+                          title: "No entra ningún huésped el día de la limpieza",
+                        }
+                      : undefined
+                  }
                 />
               </div>
             </section>
