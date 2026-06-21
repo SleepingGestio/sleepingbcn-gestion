@@ -683,6 +683,55 @@ export function LimpiezaPopover({ open, loadKey, onOpenChange, apt, fecha, exist
               </div>
             )}
 
+            {/* KB-change alert */}
+            {showKbAlert && (
+              <div className="rounded-md border border-orange-300 bg-orange-50 p-3 text-xs space-y-2">
+                <div className="font-semibold text-orange-900">
+                  {isCancelada
+                    ? "⚠ Esta reserva ha sido cancelada — revisar si la limpieza sigue siendo necesaria"
+                    : "⚠ Cambios detectados en la reserva"}
+                </div>
+                {!isCancelada && kbChanges.length > 0 && (
+                  <ul className="space-y-1 text-orange-900">
+                    {kbChanges.map((c) => (
+                      <li key={c.label} className="flex flex-wrap items-center gap-1">
+                        <span className="font-medium">{c.label}:</span>
+                        <span className="line-through text-orange-700/70">{c.old}</span>
+                        <span>→</span>
+                        <span className="font-semibold">{c.nu}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                {isCancelada && (
+                  <div className="text-orange-800">
+                    Si la limpieza ya no es necesaria, usa el botón <span className="font-semibold">Anular limpieza</span>.
+                  </div>
+                )}
+                <div className="flex flex-wrap gap-2 pt-1">
+                  {!isCancelada && (
+                    <Button
+                      size="sm"
+                      className="bg-orange-600 hover:bg-orange-700 text-white"
+                      disabled={saving}
+                      onClick={applyFresh}
+                    >
+                      Actualizar con datos nuevos
+                    </Button>
+                  )}
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="border-orange-400 text-orange-800 hover:bg-orange-100"
+                    disabled={saving}
+                    onClick={markReviewed}
+                  >
+                    ✓ Marcar como revisada
+                  </Button>
+                </div>
+              </div>
+            )}
+
             {/* Horarios */}
             {form.tipo !== "intermedia" && (
             <section>
