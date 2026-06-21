@@ -406,9 +406,9 @@ function ProgramacionLimpiezasPage() {
         <div className="overflow-x-auto">
           <div style={{ width: gridWidth, minWidth: "100%" }}>
             {/* Sticky day header */}
-            <div className="flex sticky top-0 z-20 bg-white border-b">
+            <div className="flex sticky top-0 z-40 bg-white border-b">
               <div
-                className="shrink-0 sticky left-0 z-30 bg-white border-r px-3 py-2 text-xs font-medium text-muted-foreground"
+                className="shrink-0 sticky left-0 z-50 bg-white border-r px-3 py-2 text-xs font-medium text-muted-foreground"
                 style={{ width: APT_COL_W }}
               >
                 Apartamento
@@ -448,16 +448,20 @@ function ProgramacionLimpiezasPage() {
                   {/* Group header bar */}
                   <div className="flex bg-muted/60 border-b border-t">
                     <div
-                      className="sticky left-0 z-10 bg-muted/60 px-3 py-1.5 text-xs font-semibold uppercase tracking-wide"
-                      style={{ width: APT_COL_W + DAY_COL_W * days.length }}
+                      className="shrink-0 sticky left-0 z-30 bg-muted/60 px-3 py-1.5 text-xs font-semibold uppercase tracking-wide"
+                      style={{ width: APT_COL_W }}
                     >
                       {g.nombre}
                     </div>
+                    <div
+                      className="shrink-0 bg-muted/60"
+                      style={{ width: DAY_COL_W * days.length }}
+                    />
                   </div>
                   {apts.map((a) => (
                     <div key={a.id_apt} className="flex border-b relative" style={{ height: ROW_H }}>
                       <div
-                        className="shrink-0 sticky left-0 z-10 bg-white border-r px-3 py-1 flex flex-col justify-center"
+                        className="shrink-0 sticky left-0 z-30 bg-white border-r px-3 py-1 flex flex-col justify-center"
                         style={{ width: APT_COL_W }}
                       >
                         <div className="text-sm font-medium truncate leading-tight">{a.nombre}</div>
@@ -471,7 +475,7 @@ function ProgramacionLimpiezasPage() {
                         </div>
                       </div>
                       <div
-                        className="relative"
+                        className="relative overflow-hidden"
                         style={{ width: DAY_COL_W * days.length, height: ROW_H }}
                       >
                         <div className="flex h-full">
@@ -894,8 +898,8 @@ function SalidaLabel({
     : hasWorker
       ? codigo ?? `#${l.worker}`
       : "Sin asig.";
-  const left = dayIdx * DAY_COL_W + 0.25 * DAY_COL_W;
-  const width = 0.32 * DAY_COL_W;
+  const left = dayIdx * DAY_COL_W + 0.28 * DAY_COL_W;
+  const width = 0.42 * DAY_COL_W;
   return (
     <button
       type="button"
@@ -904,13 +908,18 @@ function SalidaLabel({
         onClick();
       }}
       className={cn(
-        "absolute z-20 rounded flex items-center justify-center gap-1 px-1 text-[10px] font-semibold overflow-hidden shadow-sm",
+        "absolute z-10 rounded flex items-center justify-center gap-1 px-1 text-[10px] font-semibold overflow-hidden shadow-sm",
         cls,
       )}
       style={{ left, width, top: 3, height: 20 }}
       title={`Salida · ${l.fecha_limpieza}`}
     >
       <span className="truncate">{label}</span>
+      {hasWorker && l.orden_trabajo != null && !anulada && (
+        <span className="shrink-0 h-3.5 min-w-[14px] rounded-full bg-black/30 px-1 text-[9px] leading-[14px] text-center">
+          {l.orden_trabajo}
+        </span>
+      )}
     </button>
   );
 }
@@ -940,8 +949,8 @@ function IntermediaOverlay({
   } else if (hasWorker && isPriority) {
     cls = "bg-amber-500/55 text-white border border-dashed border-amber-200";
   }
-  const left = dayIdx * DAY_COL_W + 0.3 * DAY_COL_W;
-  const width = 0.4 * DAY_COL_W;
+  const left = dayIdx * DAY_COL_W + 0.28 * DAY_COL_W;
+  const width = 0.42 * DAY_COL_W;
   const label = anulada
     ? "NUL"
     : hasWorker
@@ -955,7 +964,7 @@ function IntermediaOverlay({
         onClick();
       }}
       className={cn(
-        "absolute z-30 rounded flex items-center justify-center gap-1 px-1 text-[10px] font-semibold overflow-hidden",
+        "absolute z-10 rounded flex items-center justify-center gap-1 px-1 text-[10px] font-semibold overflow-hidden shadow-sm",
         cls,
       )}
       style={{ left, width, top: 3, height: 20 }}
