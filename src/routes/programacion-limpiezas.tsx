@@ -406,9 +406,9 @@ function ProgramacionLimpiezasPage() {
         <div className="overflow-x-auto">
           <div style={{ width: gridWidth, minWidth: "100%" }}>
             {/* Sticky day header */}
-            <div className="flex sticky top-0 z-20 bg-white border-b">
+            <div className="flex sticky top-0 z-40 bg-white border-b">
               <div
-                className="shrink-0 sticky left-0 z-30 bg-white border-r px-3 py-2 text-xs font-medium text-muted-foreground"
+                className="shrink-0 sticky left-0 z-50 bg-white border-r px-3 py-2 text-xs font-medium text-muted-foreground"
                 style={{ width: APT_COL_W }}
               >
                 Apartamento
@@ -448,16 +448,20 @@ function ProgramacionLimpiezasPage() {
                   {/* Group header bar */}
                   <div className="flex bg-muted/60 border-b border-t">
                     <div
-                      className="sticky left-0 z-10 bg-muted/60 px-3 py-1.5 text-xs font-semibold uppercase tracking-wide"
-                      style={{ width: APT_COL_W + DAY_COL_W * days.length }}
+                      className="shrink-0 sticky left-0 z-30 bg-muted/60 px-3 py-1.5 text-xs font-semibold uppercase tracking-wide"
+                      style={{ width: APT_COL_W }}
                     >
                       {g.nombre}
                     </div>
+                    <div
+                      className="shrink-0 bg-muted/60"
+                      style={{ width: DAY_COL_W * days.length }}
+                    />
                   </div>
                   {apts.map((a) => (
                     <div key={a.id_apt} className="flex border-b relative" style={{ height: ROW_H }}>
                       <div
-                        className="shrink-0 sticky left-0 z-10 bg-white border-r px-3 py-1 flex flex-col justify-center"
+                        className="shrink-0 sticky left-0 z-30 bg-white border-r px-3 py-1 flex flex-col justify-center"
                         style={{ width: APT_COL_W }}
                       >
                         <div className="text-sm font-medium truncate leading-tight">{a.nombre}</div>
@@ -471,7 +475,7 @@ function ProgramacionLimpiezasPage() {
                         </div>
                       </div>
                       <div
-                        className="relative"
+                        className="relative overflow-hidden"
                         style={{ width: DAY_COL_W * days.length, height: ROW_H }}
                       >
                         <div className="flex h-full">
