@@ -539,6 +539,14 @@ export function LimpiezaPopover({ open, loadKey, onOpenChange, apt, fecha, exist
                   dateLabel={realCheckoutDate ? fmtDate(realCheckoutDate) : fmtDate(form.fecha_limpieza)}
                   time={form.hora_out_time}
                   informed={!!form.hora_out_informed}
+                  badge={
+                    realCheckoutDate && realCheckoutDate < form.fecha_limpieza
+                      ? {
+                          label: "VACÍO",
+                          title: `Apartamento vacío desde ${fmtDate(realCheckoutDate)}`,
+                        }
+                      : undefined
+                  }
                 />
                 <HoraRow
                   label="Entra (próx. reserva)"
@@ -550,6 +558,14 @@ export function LimpiezaPopover({ open, loadKey, onOpenChange, apt, fecha, exist
                   time={form.hora_in_time}
                   informed={!!form.hora_in_informed}
                   emptyText="— sin reserva en 7 días"
+                  badge={
+                    (nextReservation?.["Check in"] ?? null) !== form.fecha_limpieza
+                      ? {
+                          label: "NENTRAN",
+                          title: "No entra ningún huésped el día de la limpieza",
+                        }
+                      : undefined
+                  }
                 />
               </div>
             </section>
@@ -842,12 +858,14 @@ function HoraRow({
   time,
   informed,
   emptyText,
+  badge,
 }: {
   label: string;
   dateLabel: string;
   time: string | null;
   informed: boolean;
   emptyText?: string;
+  badge?: { label: string; title?: string };
 }) {
   return (
     <div className="flex items-center gap-2 text-sm">
@@ -864,6 +882,14 @@ function HoraRow({
         </span>
       ) : (
         <span className="text-xs text-muted-foreground italic">{emptyText ?? "—"}</span>
+      )}
+      {badge && (
+        <span
+          title={badge.title}
+          className="text-[10px] font-semibold uppercase tracking-wide rounded px-1.5 py-0.5 bg-muted text-muted-foreground border border-muted-foreground/20"
+        >
+          {badge.label}
+        </span>
       )}
     </div>
   );
