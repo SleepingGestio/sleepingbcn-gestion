@@ -787,18 +787,18 @@ function ReservaBar({
           style={{ left, width, top: 3, height: 20 }}
         >
           <TimeBadge {...leftTime} />
-          <span className="flex-1 truncate flex items-center gap-1 min-w-0">
-            {r.es_reserva_compartida && (
-              <Link2 className="h-3 w-3 shrink-0 opacity-90" />
-            )}
-            <span className="truncate">{guestLabel}</span>
-          </span>
           {!r.es_reserva_compartida && (
             <span className="shrink-0 rounded-full bg-black/25 px-1.5 py-px text-[10px] leading-4 flex items-center gap-0.5">
               {guestCount}p
               {overCapacity && <Sofa className="h-3 w-3" />}
             </span>
           )}
+          <span className="flex-1 truncate flex items-center gap-1 min-w-0">
+            {r.es_reserva_compartida && (
+              <Link2 className="h-3 w-3 shrink-0 opacity-90" />
+            )}
+            <span className="truncate">{guestLabel}</span>
+          </span>
           <TimeBadge {...rightTime} />
         </div>
       </HoverCardTrigger>
@@ -898,8 +898,8 @@ function SalidaLabel({
     : hasWorker
       ? codigo ?? `#${l.worker}`
       : "Sin asig.";
-  const left = dayIdx * DAY_COL_W + 0.28 * DAY_COL_W;
-  const width = 0.42 * DAY_COL_W;
+  const left = dayIdx * DAY_COL_W + 0.24 * DAY_COL_W;
+  const width = 0.36 * DAY_COL_W;
   return (
     <button
       type="button"
@@ -949,8 +949,8 @@ function IntermediaOverlay({
   } else if (hasWorker && isPriority) {
     cls = "bg-amber-500/55 text-white border border-dashed border-amber-200";
   }
-  const left = dayIdx * DAY_COL_W + 0.28 * DAY_COL_W;
-  const width = 0.42 * DAY_COL_W;
+  const left = dayIdx * DAY_COL_W + 0.24 * DAY_COL_W;
+  const width = 0.36 * DAY_COL_W;
   const label = anulada
     ? "NUL"
     : hasWorker
