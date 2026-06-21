@@ -507,8 +507,13 @@ export function LimpiezaPopover({ open, loadKey, onOpenChange, apt, fecha, exist
         <DialogContent className="max-w-md p-0 gap-0 max-h-[90vh] overflow-hidden flex flex-col">
           <DialogHeader className="px-4 py-3 border-b">
             <DialogTitle className="text-base">{apt.nombre}</DialogTitle>
-            {(apt.grupo_nombre || apt.camas_fijas != null) && (
+            {(apt.grupo_nombre || apt.camas_fijas != null || form.tipo === "intermedia") && (
               <DialogDescription className="text-xs">
+                {form.tipo === "intermedia" && (
+                  <span className="inline-block mr-1 rounded bg-teal-100 text-teal-800 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide">
+                    Limpieza extra
+                  </span>
+                )}
                 {apt.grupo_nombre}
                 {apt.grupo_nombre && apt.camas_fijas != null ? " · " : ""}
                 {apt.camas_fijas != null ? bedLabel(apt.camas_fijas) : ""}
@@ -695,6 +700,8 @@ export function LimpiezaPopover({ open, loadKey, onOpenChange, apt, fecha, exist
                       ...f,
                       check_limpieza_completa: v,
                       check_limpieza_basica: v ? false : f.check_limpieza_basica,
+                      check_toallas: v ? false : f.check_toallas,
+                      check_sabanas: v ? false : f.check_sabanas,
                     }))
                   }
                 />
