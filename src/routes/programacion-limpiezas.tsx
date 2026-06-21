@@ -116,7 +116,7 @@ async function fetchReservas(fromISO: string, toExclusiveISO: string): Promise<R
   const { data: vres, error } = await supabase
     .from("v_reservas_por_apartamento")
     .select("*")
-    .neq("Estado", "Cancelada")
+    .in("Estado", ["Confirmada", "Check-in realizado", "Check-out realizado"])
     .lt("Check in", toExclusiveISO)
     .gt("Check-out", fromISO);
   if (error) throw error;
@@ -564,6 +564,8 @@ function ProgramacionLimpiezasPage() {
                                         estado: "activa",
                                         motivo_anulacion: null,
                                         affected_by_kb_change: false,
+                                        affected_reason: null,
+                                        proxima_reserva_numero: null,
                                       };
                                   setPopover({
                                     loadKey,

@@ -46,6 +46,8 @@ export type Limpieza = {
   estado: string | null;
   motivo_anulacion: string | null;
   affected_by_kb_change: boolean | null;
+  affected_reason: string | null;
+  proxima_reserva_numero: string | null;
 };
 
 type AptInfo = {
@@ -114,10 +116,14 @@ function emptyLimpieza(apt: AptInfo, fecha: string): Limpieza {
     estado: "activa",
     motivo_anulacion: null,
     affected_by_kb_change: false,
+    affected_reason: null,
+    proxima_reserva_numero: null,
   };
 }
 
-const ESTADOS_EXCLUDED_FILTER = '("Cancelada","No show")';
+// Normal lifecycle states for cleaning lookups (Confirmada → Check-in
+// realizado → Check-out realizado). Cancelada / No show are problem states.
+const ESTADOS_VALID = ["Confirmada", "Check-in realizado", "Check-out realizado"] as const;
 
 function addDaysISO(iso: string, n: number): string {
   const d = new Date(iso + "T00:00:00");
@@ -230,6 +236,9 @@ export function LimpiezaPopover({ open, loadKey, onOpenChange, apt, fecha, exist
           },
           realCheckoutDate: null,
           nextReservation: null,
+          fresh: null,
+          stored: null,
+          reason: null,
         };
       }
 
@@ -248,7 +257,7 @@ export function LimpiezaPopover({ open, loadKey, onOpenChange, apt, fecha, exist
           .from("v_reservas_por_apartamento")
           .select(`"Número","Check in","Check-out","Huéspedes","Estado","Hora estimada de llegada","Hora estimada de salida",id_apt,es_reserva_compartida`)
           .eq("id_apt", apt.id_apt)
-          .not("Estado", "in", ESTADOS_EXCLUDED_FILTER)
+          .in("Estado", ESTADOS_VALID as unknown as string[])
           .eq("Check-out", fecha)
           .order("Check in", { ascending: true })
           .limit(1);
@@ -274,7 +283,7 @@ export function LimpiezaPopover({ open, loadKey, onOpenChange, apt, fecha, exist
         .from("v_reservas_por_apartamento")
         .select(`"Número","Check in","Check-out","Huéspedes","Estado","Hora estimada de llegada","Hora estimada de salida",id_apt,es_reserva_compartida`)
         .eq("id_apt", apt.id_apt)
-        .not("Estado", "in", ESTADOS_EXCLUDED_FILTER)
+        .in("Estado", ESTADOS_VALID as unknown as string[])
         .gte("Check in", checkoutDate)
         .lte("Check in", addDaysISO(checkoutDate, 7))
         .order("Check in", { ascending: true })
@@ -305,21 +314,60 @@ export function LimpiezaPopover({ open, loadKey, onOpenChange, apt, fecha, exist
       const autoSfcMontar = !!next && !current?.es_reserva_compartida && !!apt.tiene_sofa_cama && (next["Huéspedes"] ?? 0) > (apt.camas_fijas ?? 0);
       const autoSfcDesmontar = !current?.es_reserva_compartida && !!apt.tiene_sofa_cama && (current?.["Huéspedes"] ?? 0) > (apt.camas_fijas ?? 0) && !autoSfcMontar;
 
+      const isCurCancelada =
+        !!current?.Estado && (current.Estado === "Cancelada" || current.Estado === "No show");
+      const fresh = {
+        hora_out_time: out.value,
+        hora_out_informed: out.informed,
+        hora_in_time: inRes?.value ?? null,
+        hora_in_informed: inRes?.informed ?? false,
+        sfc_montar_auto: autoSfcMontar,
+        sfc_desmontar_auto: autoSfcDesmontar,
+        proxima_reserva_numero: next?.["Número"] ?? null,
+        next_guests: next?.["Huéspedes"] ?? null,
+      };
+      const stored = {
+        hora_out_time: persisted.hora_out_time,
+        hora_out_informed: !!persisted.hora_out_informed,
+        hora_in_time: persisted.hora_in_time,
+        hora_in_informed: !!persisted.hora_in_informed,
+        sfc_montar_auto: !!persisted.sfc_montar,
+        sfc_desmontar_auto: !!persisted.sfc_desmontar,
+        proxima_reserva_numero: persisted.proxima_reserva_numero ?? null,
+        cur_estado: current?.Estado ?? null,
+        cur_guests: current?.["Huéspedes"] ?? null,
+      };
+      const affected = !!persisted.affected_by_kb_change || isCurCancelada;
+      // When affected: show the gestor's stored values so they can compare
+      // against the freshly recalculated ones in the alert. When not affected:
+      // keep things in sync with the recomputation (existing behaviour).
+      const formBase = affected
+        ? {
+            ...persisted,
+            numero_reserva: currentNumero,
+            tipo: "salida",
+            sfc_montar: persisted.sfc_montar_manual ?? !!persisted.sfc_montar,
+            sfc_desmontar: persisted.sfc_desmontar_manual ?? !!persisted.sfc_desmontar,
+          }
+        : {
+            ...persisted,
+            numero_reserva: currentNumero,
+            tipo: "salida",
+            hora_out_time: out.value,
+            hora_out_informed: out.informed,
+            hora_in_time: inRes?.value ?? null,
+            hora_in_informed: inRes?.informed ?? false,
+            prioritaria: winMins != null && winMins >= 0 && winMins < 150,
+            sfc_montar: persisted.sfc_montar_manual ?? autoSfcMontar,
+            sfc_desmontar: persisted.sfc_desmontar_manual ?? autoSfcDesmontar,
+          };
       return {
-        form: {
-          ...persisted,
-          numero_reserva: currentNumero,
-          tipo: "salida",
-          hora_out_time: out.value,
-          hora_out_informed: out.informed,
-          hora_in_time: inRes?.value ?? null,
-          hora_in_informed: inRes?.informed ?? false,
-          prioritaria: winMins != null && winMins >= 0 && winMins < 150,
-          sfc_montar: persisted.sfc_montar_manual ?? autoSfcMontar,
-          sfc_desmontar: persisted.sfc_desmontar_manual ?? autoSfcDesmontar,
-        },
+        form: formBase,
         realCheckoutDate: checkoutDate,
         nextReservation: next,
+        fresh,
+        stored,
+        reason: persisted.affected_reason ?? (isCurCancelada ? "cancelada" : null),
       };
     },
   });
@@ -445,6 +493,10 @@ export function LimpiezaPopover({ open, loadKey, onOpenChange, apt, fecha, exist
         check_limpieza_completa: form.check_limpieza_completa,
         observaciones: form.observaciones,
         estado: form.estado ?? "activa",
+        // Saving normally implies the gestor has reviewed and acted on
+        // any KB-change alert, so clear the flag.
+        affected_by_kb_change: false,
+        affected_reason: null,
       };
       if (form.id_limpieza > 0) {
         const { error } = await supabase.from("limpiezas").update(payload).eq("id_limpieza", form.id_limpieza);
@@ -466,6 +518,107 @@ export function LimpiezaPopover({ open, loadKey, onOpenChange, apt, fecha, exist
   };
 
   const workerObj = limpiadoresQ.data?.find((p) => p.id_persona === form.worker);
+
+  const kbChange = popoverDataQ.data && "fresh" in popoverDataQ.data ? popoverDataQ.data : null;
+  const showKbAlert =
+    !!kbChange &&
+    kbChange.fresh &&
+    kbChange.stored &&
+    (form.affected_by_kb_change || kbChange.reason === "cancelada");
+  const kbChanges: { label: string; old: string; nu: string }[] = [];
+  if (showKbAlert && kbChange?.fresh && kbChange?.stored) {
+    const f = kbChange.fresh;
+    const s = kbChange.stored;
+    if (s.hora_out_time !== f.hora_out_time) {
+      kbChanges.push({
+        label: "Hora de salida",
+        old: s.hora_out_time ? fmtTime(s.hora_out_time) : "—",
+        nu: f.hora_out_time ? fmtTime(f.hora_out_time) : "—",
+      });
+    }
+    if (s.hora_in_time !== f.hora_in_time) {
+      kbChanges.push({
+        label: "Hora de entrada",
+        old: s.hora_in_time ? fmtTime(s.hora_in_time) : "—",
+        nu: f.hora_in_time ? fmtTime(f.hora_in_time) : "—",
+      });
+    }
+    if (s.proxima_reserva_numero !== f.proxima_reserva_numero) {
+      kbChanges.push({
+        label: "Próxima reserva",
+        old: s.proxima_reserva_numero ?? "ninguna",
+        nu: f.proxima_reserva_numero ?? "ninguna",
+      });
+    }
+    if (s.sfc_montar_auto !== f.sfc_montar_auto) {
+      kbChanges.push({
+        label: "Montar sofá cama (auto)",
+        old: s.sfc_montar_auto ? "sí" : "no",
+        nu: f.sfc_montar_auto ? "sí" : "no",
+      });
+    }
+    if (s.sfc_desmontar_auto !== f.sfc_desmontar_auto) {
+      kbChanges.push({
+        label: "Desmontar sofá cama (auto)",
+        old: s.sfc_desmontar_auto ? "sí" : "no",
+        nu: f.sfc_desmontar_auto ? "sí" : "no",
+      });
+    }
+  }
+
+  const isCancelada = showKbAlert && kbChange?.reason === "cancelada";
+
+  const applyFresh = async () => {
+    if (!kbChange?.fresh || form.id_limpieza === 0) return;
+    setSaving(true);
+    try {
+      const f = kbChange.fresh;
+      const payload: any = {
+        hora_out_time: f.hora_out_time,
+        hora_out_informed: f.hora_out_informed,
+        hora_in_time: f.hora_in_time,
+        hora_in_informed: f.hora_in_informed,
+        proxima_reserva_numero: f.proxima_reserva_numero,
+        affected_by_kb_change: false,
+        affected_reason: null,
+      };
+      // Only update the auto SFC base when the gestor hasn't manually
+      // overridden it; manual flags are explicitly preserved.
+      if (form.sfc_montar_manual == null) payload.sfc_montar = f.sfc_montar_auto;
+      if (form.sfc_desmontar_manual == null) payload.sfc_desmontar = f.sfc_desmontar_auto;
+      const { error } = await supabase
+        .from("limpiezas")
+        .update(payload)
+        .eq("id_limpieza", form.id_limpieza);
+      if (error) throw error;
+      toast.success("Limpieza actualizada con datos nuevos");
+      onSaved();
+      onOpenChange(false);
+    } catch (e) {
+      toast.error("Error: " + (e as Error).message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const markReviewed = async () => {
+    if (form.id_limpieza === 0) return;
+    setSaving(true);
+    try {
+      const { error } = await supabase
+        .from("limpiezas")
+        .update({ affected_by_kb_change: false, affected_reason: null })
+        .eq("id_limpieza", form.id_limpieza);
+      if (error) throw error;
+      setForm((f) => ({ ...f, affected_by_kb_change: false, affected_reason: null }));
+      toast.success("Marcada como revisada");
+      onSaved();
+    } catch (e) {
+      toast.error("Error: " + (e as Error).message);
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return (
     <>
@@ -525,6 +678,55 @@ export function LimpiezaPopover({ open, loadKey, onOpenChange, apt, fecha, exist
                 )}
                 <div className="text-[11px] text-orange-700">
                   El número de huéspedes es para la reserva completa, no solo este apartamento.
+                </div>
+              </div>
+            )}
+
+            {/* KB-change alert */}
+            {showKbAlert && (
+              <div className="rounded-md border border-orange-300 bg-orange-50 p-3 text-xs space-y-2">
+                <div className="font-semibold text-orange-900">
+                  {isCancelada
+                    ? "⚠ Esta reserva ha sido cancelada — revisar si la limpieza sigue siendo necesaria"
+                    : "⚠ Cambios detectados en la reserva"}
+                </div>
+                {!isCancelada && kbChanges.length > 0 && (
+                  <ul className="space-y-1 text-orange-900">
+                    {kbChanges.map((c) => (
+                      <li key={c.label} className="flex flex-wrap items-center gap-1">
+                        <span className="font-medium">{c.label}:</span>
+                        <span className="line-through text-orange-700/70">{c.old}</span>
+                        <span>→</span>
+                        <span className="font-semibold">{c.nu}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                {isCancelada && (
+                  <div className="text-orange-800">
+                    Si la limpieza ya no es necesaria, usa el botón <span className="font-semibold">Anular limpieza</span>.
+                  </div>
+                )}
+                <div className="flex flex-wrap gap-2 pt-1">
+                  {!isCancelada && (
+                    <Button
+                      size="sm"
+                      className="bg-orange-600 hover:bg-orange-700 text-white"
+                      disabled={saving}
+                      onClick={applyFresh}
+                    >
+                      Actualizar con datos nuevos
+                    </Button>
+                  )}
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="border-orange-400 text-orange-800 hover:bg-orange-100"
+                    disabled={saving}
+                    onClick={markReviewed}
+                  >
+                    ✓ Marcar como revisada
+                  </Button>
                 </div>
               </div>
             )}

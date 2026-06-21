@@ -32,16 +32,25 @@ type ExistingLimp = {
   id_apt: number;
   fecha_limpieza: string;
   tipo: string | null;
+  hora_out_time?: string | null;
   hora_in_time?: string | null;
   hora_in_informed?: boolean | null;
+  sfc_montar?: boolean | null;
+  sfc_montar_manual?: boolean | null;
+  sfc_desmontar?: boolean | null;
+  sfc_desmontar_manual?: boolean | null;
+  proxima_reserva_numero?: string | null;
   affected_by_kb_change?: boolean | null;
+  affected_reason?: string | null;
+  estado?: string | null;
 };
 
-// Reservations whose stay actually happened / will happen — used to find both
-// "checkouts that need a salida limpieza" and the "next incoming reservation"
-// that drives hora_in_time. Explicitly excludes Cancelada and No show.
-const ESTADOS_EXCLUDED = ["Cancelada", "No show"];
-const ESTADOS_EXCLUDED_FILTER = `(${ESTADOS_EXCLUDED.map((e) => `"${e}"`).join(",")})`;
+// The normal reservation lifecycle is Confirmada → Check-in realizado →
+// Check-out realizado. These three are the only "valid" states for cleaning
+// generation and next-reservation lookups. Cancelada / No show are problem
+// states and are explicitly excluded (and surfaced via affected_reason).
+const ESTADOS_VALID = ["Confirmada", "Check-in realizado", "Check-out realizado"];
+const ESTADOS_CANCELADAS = new Set(["Cancelada", "No show"]);
 
 function addDaysISO(iso: string, n: number): string {
   const d = new Date(iso + "T00:00:00");
@@ -113,7 +122,7 @@ export async function generarLimpiezas(fromISO: string, toISO: string): Promise<
     .select(
       `"Número","Check in","Check-out","Noches","Huéspedes","Estado","Hora estimada de llegada","Hora estimada de salida",id_apt,es_reserva_compartida`,
     )
-    .not("Estado", "in", ESTADOS_EXCLUDED_FILTER)
+    .in("Estado", ESTADOS_VALID)
     .lte("Check in", toISO)
     .gte("Check-out", fromISO);
   if (e1) throw e1;
@@ -124,7 +133,7 @@ export async function generarLimpiezas(fromISO: string, toISO: string): Promise<
   const { data: vresFuture, error: e2 } = await supabase
     .from("v_reservas_por_apartamento")
     .select(`"Número","Check in","Check-out","Huéspedes","Estado",id_apt,"Hora estimada de llegada"`)
-    .not("Estado", "in", ESTADOS_EXCLUDED_FILTER)
+    .in("Estado", ESTADOS_VALID)
     .gte("Check in", fromISO)
     .lte("Check in", widerTo);
   if (e2) throw e2;
@@ -175,83 +184,193 @@ export async function generarLimpiezas(fromISO: string, toISO: string): Promise<
   const { data: existRows, error: e3 } = numeros.length
     ? await supabase
         .from("limpiezas")
-        .select("id_limpieza, numero_reserva, id_apt, fecha_limpieza, tipo, hora_in_time, hora_in_informed, affected_by_kb_change, estado")
+        .select(
+          "id_limpieza, numero_reserva, id_apt, fecha_limpieza, tipo, hora_out_time, hora_in_time, hora_in_informed, sfc_montar, sfc_montar_manual, sfc_desmontar, sfc_desmontar_manual, proxima_reserva_numero, affected_by_kb_change, affected_reason, estado",
+        )
         .in("numero_reserva", numeros)
     : { data: [], error: null };
   if (e3) throw e3;
-  const existing = (existRows ?? []) as (ExistingLimp & { estado?: string | null })[];
+  const existing = (existRows ?? []) as ExistingLimp[];
 
   // ---- KB CHANGE DETECTION on existing salida rows ----
-  // (A) compare reservas_kb."Check-out" vs limpieza.fecha_limpieza
-  // (B) re-run next-reservation lookup; if its resolved hora_in_time/informed
-  //     differs from what is stored, mark as affected. Otherwise clear flag.
-  const salidaExisting = existing.filter((l) => l.tipo === "salida" && l.estado !== "anulada" && l.numero_reserva);
+  // Recalculate everything as if generating fresh, then compare against the
+  // currently-stored values. ANY mismatch flips affected_by_kb_change=true
+  // and stamps a machine-readable affected_reason. We DO NOT overwrite the
+  // stored field values themselves — only the flag/reason. The popover lets
+  // the gestor explicitly apply the recomputed values.
+  const salidaExisting = existing.filter(
+    (l) => l.tipo === "salida" && l.estado !== "anulada" && l.numero_reserva,
+  );
   if (salidaExisting.length) {
-    const kbNums = Array.from(new Set(salidaExisting.map((l) => l.numero_reserva!)));
-    const { data: kbRows, error: eKb } = await supabase
-      .from("reservas_kb")
-      .select('"Número","Check-out"')
-      .in("Número", kbNums);
-    if (eKb) throw eKb;
-    const kbCheckoutByNum = new Map<string, string | null>(
-      ((kbRows ?? []) as any[]).map((r) => [r["Número"], r["Check-out"] ?? null]),
-    );
+    // Universe of reservation numbers to inspect: every salida's linked
+    // numero plus its previously-recorded next-reservation numero.
+    const lookupNums = Array.from(
+      new Set(
+        salidaExisting.flatMap((l) =>
+          [l.numero_reserva, l.proxima_reserva_numero].filter(Boolean),
+        ),
+      ),
+    ) as string[];
 
-    const toMarkAffected: number[] = [];
-    const toClearAffected: number[] = [];
+    // Bypass status filter — we WANT Cancelada / No show so we can flag them.
+    const { data: lookupRows, error: eLk } = lookupNums.length
+      ? await supabase
+          .from("v_reservas_por_apartamento")
+          .select(
+            `"Número","Check in","Check-out","Huéspedes","Estado","Hora estimada de llegada","Hora estimada de salida",id_apt,es_reserva_compartida`,
+          )
+          .in("Número", lookupNums)
+      : { data: [] as any[], error: null };
+    if (eLk) throw eLk;
+    const resByNumero = new Map<string, ResVw>();
+    for (const r of ((lookupRows ?? []) as ResVw[])) {
+      if (!resByNumero.has(r["Número"])) resByNumero.set(r["Número"], r);
+    }
+
+    // Ensure apt + gestio coverage for everything we may inspect.
+    const extraAptIds = Array.from(
+      new Set(
+        Array.from(resByNumero.values())
+          .map((r) => r.id_apt)
+          .filter((x): x is number => x != null && !aptMap.has(x)),
+      ),
+    );
+    if (extraAptIds.length) {
+      const { data: extraApts } = await supabase
+        .from("apartamentos")
+        .select("id_apt, camas_fijas, tiene_sofa_cama, requiere_limpieza_intermedia")
+        .in("id_apt", extraAptIds);
+      for (const a of ((extraApts ?? []) as Apt[])) aptMap.set(a.id_apt, a);
+    }
+    const missingGestNums = lookupNums.filter((n) => !gestMap.has(n));
+    if (missingGestNums.length) {
+      const { data: extraGest } = await supabase
+        .from("reservas_gestio")
+        .select(`"Número",HCheckInConf,HCheckOutConf`)
+        .in("Número", missingGestNums);
+      for (const g of ((extraGest ?? []) as Gestio[])) gestMap.set(g["Número"], g);
+    }
+
+    type UpdatePayload = {
+      affected_by_kb_change: boolean;
+      affected_reason: string | null;
+      proxima_reserva_numero?: string | null;
+    };
+    const updates: { id: number; payload: UpdatePayload }[] = [];
 
     for (const l of salidaExisting) {
-      let isAffected = false;
+      const numero = l.numero_reserva!;
+      const cur = resByNumero.get(numero) ?? null;
+      let reason: string | null = null;
 
-      // (A) checkout changed?
-      const kbCo = kbCheckoutByNum.get(l.numero_reserva!) ?? null;
-      if (kbCo && kbCo !== l.fecha_limpieza) isAffected = true;
+      // (a) own reservation cancelada / no show
+      if (cur && cur["Estado"] && ESTADOS_CANCELADAS.has(cur["Estado"]!)) {
+        reason = "cancelada";
+      }
 
-      // (B) next reservation differs?
-      if (!isAffected) {
-        const baseCo = kbCo ?? l.fecha_limpieza;
-        const arr = futureByApt.get(l.id_apt) ?? [];
-        const next = arr.find(
-          (x) => x.numero !== l.numero_reserva && x.ci >= baseCo && x.ci <= addDaysISO(baseCo, 7),
+      // (b) previously-matched next reservation cancelada / no show
+      if (!reason && l.proxima_reserva_numero) {
+        const prevNext = resByNumero.get(l.proxima_reserva_numero) ?? null;
+        if (prevNext && prevNext["Estado"] && ESTADOS_CANCELADAS.has(prevNext["Estado"]!)) {
+          reason = "cancelada";
+        }
+      }
+
+      const baseCo = cur?.["Check-out"] ?? l.fecha_limpieza;
+      const arr = futureByApt.get(cur?.id_apt ?? l.id_apt) ?? [];
+      const freshNext = arr.find(
+        (x) => x.numero !== numero && x.ci >= baseCo && x.ci <= addDaysISO(baseCo, 7),
+      );
+      const freshNextNumero = freshNext?.numero ?? null;
+
+      if (!reason) {
+        const gest = gestMap.get(numero) ?? null;
+        const outRes = resolveTime(
+          gest?.HCheckOutConf ?? null,
+          cur?.["Hora estimada de salida"] ?? null,
+          "11:00:00",
         );
-        let newInTime: string | null = null;
-        let newInInformed = false;
-        if (next) {
-          const gestNext = gestMap.get(next.numero) ?? null;
-          const nextRow = vres.find(
-            (x) => x["Número"] === next.numero && x.id_apt === l.id_apt,
-          );
+        let inTime: string | null = null;
+        if (freshNext) {
+          const gestNext = gestMap.get(freshNext.numero) ?? null;
+          const nextRow =
+            resByNumero.get(freshNext.numero) ??
+            vres.find((x) => x["Número"] === freshNext.numero) ??
+            null;
           const inRes = resolveTime(
             gestNext?.HCheckInConf ?? null,
             nextRow?.["Hora estimada de llegada"] ?? null,
             "15:00:00",
           );
-          newInTime = inRes.value;
-          newInInformed = inRes.informed;
+          inTime = inRes.value;
         }
-        const storedTime = l.hora_in_time ?? null;
-        const storedInformed = !!l.hora_in_informed;
-        if (newInTime !== storedTime || newInInformed !== storedInformed) {
-          isAffected = true;
+        const apt = aptMap.get(cur?.id_apt ?? l.id_apt);
+        let freshSfcMontar = false;
+        let freshSfcDesmontar = false;
+        if (cur && apt && !cur.es_reserva_compartida && apt.tiene_sofa_cama) {
+          const camas = apt.camas_fijas ?? 0;
+          const thisGuests = cur["Huéspedes"] ?? 0;
+          const nextGuests = freshNext?.guests ?? 0;
+          const nextNeedsSfc = !!freshNext && nextGuests > camas;
+          freshSfcMontar = nextNeedsSfc;
+          const thisNeedsSfc = thisGuests > camas;
+          freshSfcDesmontar = thisNeedsSfc && !nextNeedsSfc;
+        }
+
+        if (cur && cur.id_apt != null && cur.id_apt !== l.id_apt) {
+          reason = "apartamento";
+        } else if (cur && cur["Check-out"] && cur["Check-out"] !== l.fecha_limpieza) {
+          reason = "fechas";
+        } else {
+          const storedSfcMontarAuto = l.sfc_montar_manual == null ? !!l.sfc_montar : null;
+          const storedSfcDesmontarAuto =
+            l.sfc_desmontar_manual == null ? !!l.sfc_desmontar : null;
+          const sfcMontarDiff =
+            storedSfcMontarAuto !== null && storedSfcMontarAuto !== freshSfcMontar;
+          const sfcDesmontarDiff =
+            storedSfcDesmontarAuto !== null && storedSfcDesmontarAuto !== freshSfcDesmontar;
+          if (sfcMontarDiff || sfcDesmontarDiff) {
+            reason = "huespedes";
+          } else if (
+            l.proxima_reserva_numero != null &&
+            l.proxima_reserva_numero !== freshNextNumero
+          ) {
+            reason = "proxima_reserva";
+          } else if (
+            outRes.value !== (l.hora_out_time ?? null) ||
+            inTime !== (l.hora_in_time ?? null)
+          ) {
+            reason = "horario";
+          }
         }
       }
 
-      if (isAffected && !l.affected_by_kb_change) toMarkAffected.push(l.id_limpieza);
-      else if (!isAffected && l.affected_by_kb_change) toClearAffected.push(l.id_limpieza);
+      // Backfill proxima_reserva_numero for legacy rows where it's NULL,
+      // without flagging — record the current value so future runs can
+      // detect "next reservation changed".
+      const needsBackfill =
+        l.proxima_reserva_numero == null && freshNextNumero != null && !reason;
+
+      const isAffected = reason !== null;
+      const flagChanged =
+        !!l.affected_by_kb_change !== isAffected ||
+        (l.affected_reason ?? null) !== reason;
+
+      if (flagChanged || needsBackfill) {
+        const payload: UpdatePayload = {
+          affected_by_kb_change: isAffected,
+          affected_reason: reason,
+        };
+        if (needsBackfill) payload.proxima_reserva_numero = freshNextNumero;
+        updates.push({ id: l.id_limpieza, payload });
+      }
     }
 
-    if (toMarkAffected.length) {
+    for (const u of updates) {
       const { error } = await supabase
         .from("limpiezas")
-        .update({ affected_by_kb_change: true })
-        .in("id_limpieza", toMarkAffected);
-      if (error) throw error;
-    }
-    if (toClearAffected.length) {
-      const { error } = await supabase
-        .from("limpiezas")
-        .update({ affected_by_kb_change: false })
-        .in("id_limpieza", toClearAffected);
+        .update(u.payload)
+        .eq("id_limpieza", u.id);
       if (error) throw error;
     }
   }
@@ -340,6 +459,7 @@ export async function generarLimpiezas(fromISO: string, toISO: string): Promise<
           sfc_desmontar,
           prioritaria,
           estado: "activa",
+          proxima_reserva_numero: next?.numero ?? null,
         });
         existingSalida.add(salidaKey(r["Número"], r.id_apt));
       }
