@@ -22,6 +22,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Sparkles } from "lucide-react";
 import { toast } from "sonner";
+import { LogOut, Brush } from "lucide-react";
 
 export const Route = createFileRoute("/programacion-limpiezas")({
   component: ProgramacionLimpiezasPage,
@@ -207,6 +208,8 @@ function ProgramacionLimpiezasPage() {
   >(null);
   const popoverLoadSeq = useRef(0);
   const [genOpen, setGenOpen] = useState(false);
+  const [newSalidaOpen, setNewSalidaOpen] = useState(false);
+  const [newIntermediaOpen, setNewIntermediaOpen] = useState(false);
 
   const gruposQ = useQuery({ queryKey: ["grupos_apartamentos"], queryFn: fetchGrupos });
   const aptsQ = useQuery({ queryKey: ["apartamentos_activos"], queryFn: fetchApartamentos });
@@ -353,7 +356,23 @@ function ProgramacionLimpiezasPage() {
           onClick={() => setGenOpen(true)}
           className="bg-purple-700 hover:bg-purple-800 text-white"
         >
-          <Sparkles className="h-4 w-4" /> Generar limpiezas
+          <Sparkles className="h-4 w-4" /> Generar limpiezas automáticas
+        </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => setNewSalidaOpen(true)}
+          className="border-blue-500 text-blue-700 hover:bg-blue-50"
+        >
+          <LogOut className="h-4 w-4" /> + Limpieza checkout
+        </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => setNewIntermediaOpen(true)}
+          className="border-teal-500 text-teal-700 hover:bg-teal-50"
+        >
+          <Brush className="h-4 w-4" /> + Limpieza intermedia
         </Button>
         <div className="ml-auto" />
       </div>
@@ -478,7 +497,6 @@ function ProgramacionLimpiezasPage() {
                           {days.map((d) => {
                             const iso = toISO(d);
                             const isToday = iso === todayISO;
-                            const existing = limpiezasByAptDay.get(`${a.id_apt}|${iso}`) ?? null;
                             return (
                               <button
                                 key={iso}
@@ -488,22 +506,8 @@ function ProgramacionLimpiezasPage() {
                                   isToday && "bg-primary/5",
                                 )}
                                 style={{ width: DAY_COL_W }}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  const loadKey = ++popoverLoadSeq.current;
-                                  setPopover({
-                                    loadKey,
-                                    apt: {
-                                      id_apt: a.id_apt,
-                                      nombre: a.nombre,
-                                      grupo_nombre: grupoNombreById(a.id_grupo),
-                                      camas_fijas: a.camas_fijas,
-                                      tiene_sofa_cama: a.tiene_sofa_cama,
-                                    },
-                                    fecha: iso,
-                                    existing,
-                                  });
-                                }}
+                                aria-hidden
+                                tabIndex={-1}
                               />
                             );
                           })}
@@ -594,7 +598,191 @@ function ProgramacionLimpiezasPage() {
         onOpenChange={setGenOpen}
         onDone={() => limpiezasQ.refetch()}
       />
+      <NuevaLimpiezaSelector
+        open={newSalidaOpen}
+        onOpenChange={setNewSalidaOpen}
+        tipo="salida"
+        grupos={gruposQ.data ?? []}
+        apartamentos={aptsQ.data ?? []}
+        onConfirm={(apt, fecha) => {
+          const loadKey = ++popoverLoadSeq.current;
+          setPopover({
+            loadKey,
+            apt: {
+              id_apt: apt.id_apt,
+              nombre: apt.nombre,
+              grupo_nombre: grupoNombreById(apt.id_grupo),
+              camas_fijas: apt.camas_fijas,
+              tiene_sofa_cama: apt.tiene_sofa_cama,
+            },
+            fecha,
+            existing: null,
+          });
+          setNewSalidaOpen(false);
+        }}
+      />
+      <NuevaLimpiezaSelector
+        open={newIntermediaOpen}
+        onOpenChange={setNewIntermediaOpen}
+        tipo="intermedia"
+        grupos={gruposQ.data ?? []}
+        apartamentos={aptsQ.data ?? []}
+        onConfirm={(apt, fecha) => {
+          const loadKey = ++popoverLoadSeq.current;
+          // Skeleton "existing" with tipo='intermedia' so the popover renders
+          // its intermedia layout in create-new mode (id_limpieza=0 → INSERT on save).
+          const skeleton: LimpiezaRow = {
+            id_limpieza: 0,
+            numero_reserva: null,
+            id_apt: apt.id_apt,
+            fecha_limpieza: fecha,
+            tipo: "intermedia",
+            hora_out_time: null,
+            hora_out_informed: false,
+            hora_in_time: null,
+            hora_in_informed: false,
+            worker: null,
+            orden_trabajo: null,
+            hora_sugerida: null,
+            prioritaria: false,
+            prioritaria_manual: null,
+            sfc_montar: false,
+            sfc_montar_manual: null,
+            sfc_desmontar: false,
+            sfc_desmontar_manual: null,
+            check_checkin: false,
+            check_tasas: false,
+            check_toallas: true,
+            check_sabanas: true,
+            check_limpieza_basica: true,
+            check_limpieza_completa: false,
+            observaciones: null,
+            estado: "activa",
+            motivo_anulacion: null,
+            affected_by_kb_change: false,
+          };
+          setPopover({
+            loadKey,
+            apt: {
+              id_apt: apt.id_apt,
+              nombre: apt.nombre,
+              grupo_nombre: grupoNombreById(apt.id_grupo),
+              camas_fijas: apt.camas_fijas,
+              tiene_sofa_cama: apt.tiene_sofa_cama,
+            },
+            fecha,
+            existing: skeleton,
+          });
+          setNewIntermediaOpen(false);
+        }}
+      />
     </AppShell>
+  );
+}
+
+function NuevaLimpiezaSelector({
+  open,
+  onOpenChange,
+  tipo,
+  grupos,
+  apartamentos,
+  onConfirm,
+}: {
+  open: boolean;
+  onOpenChange: (o: boolean) => void;
+  tipo: "salida" | "intermedia";
+  grupos: Grupo[];
+  apartamentos: Apartamento[];
+  onConfirm: (apt: Apartamento, fecha: string) => void;
+}) {
+  const today = toISO(new Date());
+  const [idApt, setIdApt] = useState<string>("");
+  const [fecha, setFecha] = useState<string>(today);
+
+  // Reset on open
+  const openRef = useRef(open);
+  if (openRef.current !== open) {
+    openRef.current = open;
+    if (open) {
+      setIdApt("");
+      setFecha(today);
+    }
+  }
+
+  const grouped = useMemo(() => {
+    const map = new Map<number, Apartamento[]>();
+    for (const a of apartamentos) {
+      const arr = map.get(a.id_grupo) ?? [];
+      arr.push(a);
+      map.set(a.id_grupo, arr);
+    }
+    return grupos
+      .map((g) => ({ g, apts: map.get(g.id_grupo) ?? [] }))
+      .filter((x) => x.apts.length > 0);
+  }, [grupos, apartamentos]);
+
+  const confirm = () => {
+    const apt = apartamentos.find((a) => String(a.id_apt) === idApt);
+    if (!apt || !fecha) {
+      toast.error("Selecciona apartamento y fecha");
+      return;
+    }
+    onConfirm(apt, fecha);
+  };
+
+  const title =
+    tipo === "salida" ? "Nueva limpieza checkout" : "Nueva limpieza intermedia";
+  const desc =
+    tipo === "salida"
+      ? "Selecciona apartamento y fecha. Si existe una reserva con checkout en esa fecha, se cargarán horarios y SFC automáticamente."
+      : "Selecciona apartamento y fecha. Las limpiezas intermedias no dependen de reservas.";
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle>{title}</DialogTitle>
+          <DialogDescription className="text-xs">{desc}</DialogDescription>
+        </DialogHeader>
+        <div className="space-y-3">
+          <div>
+            <Label className="text-xs">Apartamento</Label>
+            <select
+              value={idApt}
+              onChange={(e) => setIdApt(e.target.value)}
+              className="mt-1 w-full h-9 rounded-md border border-input bg-transparent px-2 text-sm"
+            >
+              <option value="">— Selecciona —</option>
+              {grouped.map(({ g, apts }) => (
+                <optgroup key={g.id_grupo} label={g.nombre}>
+                  {apts.map((a) => (
+                    <option key={a.id_apt} value={a.id_apt}>
+                      {a.nombre}
+                    </option>
+                  ))}
+                </optgroup>
+              ))}
+            </select>
+          </div>
+          <div>
+            <Label className="text-xs">Fecha de la limpieza</Label>
+            <Input
+              type="date"
+              value={fecha}
+              onChange={(e) => setFecha(e.target.value)}
+            />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
+            Cancelar
+          </Button>
+          <Button onClick={confirm} disabled={!idApt || !fecha}>
+            Continuar
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
