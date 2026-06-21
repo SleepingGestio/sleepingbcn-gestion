@@ -487,8 +487,55 @@ function ProgramacionLimpiezasPage() {
                                   isToday && "bg-primary/5",
                                 )}
                                 style={{ width: DAY_COL_W }}
-                                aria-hidden
-                                tabIndex={-1}
+                                onClick={() => {
+                                  const existing =
+                                    limpiezasByAptDay.get(`${a.id_apt}|${iso}`) ?? null;
+                                  const loadKey = ++popoverLoadSeq.current;
+                                  const skeleton: LimpiezaRow | null = existing
+                                    ? null
+                                    : {
+                                        id_limpieza: 0,
+                                        numero_reserva: null,
+                                        id_apt: a.id_apt,
+                                        fecha_limpieza: iso,
+                                        tipo: "intermedia",
+                                        hora_out_time: null,
+                                        hora_out_informed: false,
+                                        hora_in_time: null,
+                                        hora_in_informed: false,
+                                        worker: null,
+                                        orden_trabajo: null,
+                                        hora_sugerida: null,
+                                        prioritaria: false,
+                                        prioritaria_manual: null,
+                                        sfc_montar: false,
+                                        sfc_montar_manual: null,
+                                        sfc_desmontar: false,
+                                        sfc_desmontar_manual: null,
+                                        check_checkin: false,
+                                        check_tasas: false,
+                                        check_toallas: true,
+                                        check_sabanas: true,
+                                        check_limpieza_basica: true,
+                                        check_limpieza_completa: false,
+                                        observaciones: null,
+                                        estado: "activa",
+                                        motivo_anulacion: null,
+                                        affected_by_kb_change: false,
+                                      };
+                                  setPopover({
+                                    loadKey,
+                                    apt: {
+                                      id_apt: a.id_apt,
+                                      nombre: a.nombre,
+                                      grupo_nombre: grupoNombreById(a.id_grupo),
+                                      camas_fijas: a.camas_fijas,
+                                      tiene_sofa_cama: a.tiene_sofa_cama,
+                                    },
+                                    fecha: iso,
+                                    existing: existing ?? skeleton,
+                                  });
+                                }}
                               />
                             );
                           })}
