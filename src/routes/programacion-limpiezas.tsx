@@ -564,6 +564,8 @@ function ProgramacionLimpiezasPage() {
                                         estado: "activa",
                                         motivo_anulacion: null,
                                         affected_by_kb_change: false,
+                                        affected_reason: null,
+                                        proxima_reserva_numero: null,
                                       };
                                   setPopover({
                                     loadKey,
