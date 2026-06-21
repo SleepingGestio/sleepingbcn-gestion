@@ -22,6 +22,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Sparkles } from "lucide-react";
 import { toast } from "sonner";
+import { LogOut, Brush } from "lucide-react";
 
 export const Route = createFileRoute("/programacion-limpiezas")({
   component: ProgramacionLimpiezasPage,
@@ -353,7 +354,23 @@ function ProgramacionLimpiezasPage() {
           onClick={() => setGenOpen(true)}
           className="bg-purple-700 hover:bg-purple-800 text-white"
         >
-          <Sparkles className="h-4 w-4" /> Generar limpiezas
+          <Sparkles className="h-4 w-4" /> Generar limpiezas automáticas
+        </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => setNewSalidaOpen(true)}
+          className="border-blue-500 text-blue-700 hover:bg-blue-50"
+        >
+          <LogOut className="h-4 w-4" /> + Limpieza checkout
+        </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => setNewIntermediaOpen(true)}
+          className="border-teal-500 text-teal-700 hover:bg-teal-50"
+        >
+          <Brush className="h-4 w-4" /> + Limpieza intermedia
         </Button>
         <div className="ml-auto" />
       </div>
