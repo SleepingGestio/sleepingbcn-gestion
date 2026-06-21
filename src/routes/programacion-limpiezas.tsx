@@ -755,9 +755,9 @@ function ReservaBar({
   if (!coVisible) coIdx = coISO < dayISOs[0] ? -1 : days.length;
 
   const left =
-    ciVisible ? ciIdx * DAY_COL_W + 0.62 * DAY_COL_W : ciIdx < 0 ? 0 : days.length * DAY_COL_W;
+    ciVisible ? ciIdx * DAY_COL_W + 0.66 * DAY_COL_W : ciIdx < 0 ? 0 : days.length * DAY_COL_W;
   const right =
-    coVisible ? coIdx * DAY_COL_W + 0.2 * DAY_COL_W : coIdx < 0 ? 0 : days.length * DAY_COL_W;
+    coVisible ? coIdx * DAY_COL_W + 0.18 * DAY_COL_W : coIdx < 0 ? 0 : days.length * DAY_COL_W;
   const width = right - left;
   if (width <= 2) return null;
 
