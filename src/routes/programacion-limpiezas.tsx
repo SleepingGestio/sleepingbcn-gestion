@@ -507,22 +507,8 @@ function ProgramacionLimpiezasPage() {
                                   isToday && "bg-primary/5",
                                 )}
                                 style={{ width: DAY_COL_W }}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  const loadKey = ++popoverLoadSeq.current;
-                                  setPopover({
-                                    loadKey,
-                                    apt: {
-                                      id_apt: a.id_apt,
-                                      nombre: a.nombre,
-                                      grupo_nombre: grupoNombreById(a.id_grupo),
-                                      camas_fijas: a.camas_fijas,
-                                      tiene_sofa_cama: a.tiene_sofa_cama,
-                                    },
-                                    fecha: iso,
-                                    existing,
-                                  });
-                                }}
+                                aria-hidden
+                                tabIndex={-1}
                               />
                             );
                           })}
