@@ -942,7 +942,11 @@ function IntermediaOverlay({
   }
   const left = dayIdx * DAY_COL_W + 0.3 * DAY_COL_W;
   const width = 0.4 * DAY_COL_W;
-  const label = anulada ? "INT · NUL" : "INT";
+  const label = anulada
+    ? "NUL"
+    : hasWorker
+      ? codigo ?? `#${l.worker}`
+      : "Sin asig.";
   return (
     <button
       type="button"
@@ -962,9 +966,6 @@ function IntermediaOverlay({
         <span className="shrink-0 h-3.5 min-w-[14px] rounded-full bg-black/30 px-1 text-[9px] leading-[14px] text-center">
           {l.orden_trabajo}
         </span>
-      )}
-      {hasWorker && codigo && !anulada && (
-        <span className="truncate text-[9px] opacity-90">{codigo}</span>
       )}
     </button>
   );
