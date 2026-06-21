@@ -610,17 +610,12 @@ export function LimpiezaPopover({ open, loadKey, onOpenChange, apt, fecha, exist
                   Orden de trabajo {workerObj ? `— ${workerObj.nombre ?? ""}` : ""}
                 </Label>
                 <div className="mt-2 flex items-center gap-2">
-                  <div className="flex items-center gap-1">
-                    <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => stepOrden(-1)}>
-                      <Minus className="h-3 w-3" />
-                    </Button>
-                    <div className="min-w-16 text-center text-sm">
-                      <span className="font-semibold">{form.orden_trabajo ?? "—"}</span>
-                      <span className="text-muted-foreground"> de {siblingsQ.data?.length ?? 0}</span>
-                    </div>
-                    <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => stepOrden(1)}>
-                      <Plus className="h-3 w-3" />
-                    </Button>
+                  <div className="rounded-md border bg-muted/40 px-3 py-1.5 text-sm">
+                    Orden:{" "}
+                    <span className="font-semibold">{form.orden_trabajo ?? "—"}</span>
+                    <span className="text-muted-foreground">
+                      {" "}de {Math.max(siblingsQ.data?.length ?? 0, form.orden_trabajo ?? 0)}
+                    </span>
                   </div>
                   <Input
                     placeholder="--:--"
