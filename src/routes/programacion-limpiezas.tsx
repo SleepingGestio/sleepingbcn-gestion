@@ -497,7 +497,6 @@ function ProgramacionLimpiezasPage() {
                           {days.map((d) => {
                             const iso = toISO(d);
                             const isToday = iso === todayISO;
-                            const existing = limpiezasByAptDay.get(`${a.id_apt}|${iso}`) ?? null;
                             return (
                               <button
                                 key={iso}
