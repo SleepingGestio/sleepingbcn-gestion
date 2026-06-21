@@ -237,6 +237,9 @@ export function LimpiezaPopover({ open, loadKey, onOpenChange, apt, fecha, exist
           },
           realCheckoutDate: null,
           nextReservation: null,
+          fresh: null,
+          stored: null,
+          reason: null,
         };
       }
 
@@ -312,21 +315,60 @@ export function LimpiezaPopover({ open, loadKey, onOpenChange, apt, fecha, exist
       const autoSfcMontar = !!next && !current?.es_reserva_compartida && !!apt.tiene_sofa_cama && (next["Huéspedes"] ?? 0) > (apt.camas_fijas ?? 0);
       const autoSfcDesmontar = !current?.es_reserva_compartida && !!apt.tiene_sofa_cama && (current?.["Huéspedes"] ?? 0) > (apt.camas_fijas ?? 0) && !autoSfcMontar;
 
+      const isCurCancelada =
+        !!current?.Estado && (current.Estado === "Cancelada" || current.Estado === "No show");
+      const fresh = {
+        hora_out_time: out.value,
+        hora_out_informed: out.informed,
+        hora_in_time: inRes?.value ?? null,
+        hora_in_informed: inRes?.informed ?? false,
+        sfc_montar_auto: autoSfcMontar,
+        sfc_desmontar_auto: autoSfcDesmontar,
+        proxima_reserva_numero: next?.["Número"] ?? null,
+        next_guests: next?.["Huéspedes"] ?? null,
+      };
+      const stored = {
+        hora_out_time: persisted.hora_out_time,
+        hora_out_informed: !!persisted.hora_out_informed,
+        hora_in_time: persisted.hora_in_time,
+        hora_in_informed: !!persisted.hora_in_informed,
+        sfc_montar_auto: !!persisted.sfc_montar,
+        sfc_desmontar_auto: !!persisted.sfc_desmontar,
+        proxima_reserva_numero: persisted.proxima_reserva_numero ?? null,
+        cur_estado: current?.Estado ?? null,
+        cur_guests: current?.["Huéspedes"] ?? null,
+      };
+      const affected = !!persisted.affected_by_kb_change || isCurCancelada;
+      // When affected: show the gestor's stored values so they can compare
+      // against the freshly recalculated ones in the alert. When not affected:
+      // keep things in sync with the recomputation (existing behaviour).
+      const formBase = affected
+        ? {
+            ...persisted,
+            numero_reserva: currentNumero,
+            tipo: "salida",
+            sfc_montar: persisted.sfc_montar_manual ?? !!persisted.sfc_montar,
+            sfc_desmontar: persisted.sfc_desmontar_manual ?? !!persisted.sfc_desmontar,
+          }
+        : {
+            ...persisted,
+            numero_reserva: currentNumero,
+            tipo: "salida",
+            hora_out_time: out.value,
+            hora_out_informed: out.informed,
+            hora_in_time: inRes?.value ?? null,
+            hora_in_informed: inRes?.informed ?? false,
+            prioritaria: winMins != null && winMins >= 0 && winMins < 150,
+            sfc_montar: persisted.sfc_montar_manual ?? autoSfcMontar,
+            sfc_desmontar: persisted.sfc_desmontar_manual ?? autoSfcDesmontar,
+          };
       return {
-        form: {
-          ...persisted,
-          numero_reserva: currentNumero,
-          tipo: "salida",
-          hora_out_time: out.value,
-          hora_out_informed: out.informed,
-          hora_in_time: inRes?.value ?? null,
-          hora_in_informed: inRes?.informed ?? false,
-          prioritaria: winMins != null && winMins >= 0 && winMins < 150,
-          sfc_montar: persisted.sfc_montar_manual ?? autoSfcMontar,
-          sfc_desmontar: persisted.sfc_desmontar_manual ?? autoSfcDesmontar,
-        },
+        form: formBase,
         realCheckoutDate: checkoutDate,
         nextReservation: next,
+        fresh,
+        stored,
+        reason: persisted.affected_reason ?? (isCurCancelada ? "cancelada" : null),
       };
     },
   });
