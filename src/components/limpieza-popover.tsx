@@ -255,7 +255,7 @@ export function LimpiezaPopover({ open, loadKey, onOpenChange, apt, fecha, exist
           .from("v_reservas_por_apartamento")
           .select(`"Número","Check in","Check-out","Huéspedes","Estado","Hora estimada de llegada","Hora estimada de salida",id_apt,es_reserva_compartida`)
           .eq("id_apt", apt.id_apt)
-          .not("Estado", "in", ESTADOS_EXCLUDED_FILTER)
+          .in("Estado", ESTADOS_VALID as unknown as string[])
           .eq("Check-out", fecha)
           .order("Check in", { ascending: true })
           .limit(1);
@@ -281,7 +281,7 @@ export function LimpiezaPopover({ open, loadKey, onOpenChange, apt, fecha, exist
         .from("v_reservas_por_apartamento")
         .select(`"Número","Check in","Check-out","Huéspedes","Estado","Hora estimada de llegada","Hora estimada de salida",id_apt,es_reserva_compartida`)
         .eq("id_apt", apt.id_apt)
-        .not("Estado", "in", ESTADOS_EXCLUDED_FILTER)
+        .in("Estado", ESTADOS_VALID as unknown as string[])
         .gte("Check in", checkoutDate)
         .lte("Check in", addDaysISO(checkoutDate, 7))
         .order("Check in", { ascending: true })
