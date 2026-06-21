@@ -32,6 +32,9 @@ type ExistingLimp = {
   id_apt: number;
   fecha_limpieza: string;
   tipo: string | null;
+  hora_in_time?: string | null;
+  hora_in_informed?: boolean | null;
+  affected_by_kb_change?: boolean | null;
 };
 
 // Reservations whose stay actually happened / will happen — used to find both
@@ -172,11 +175,87 @@ export async function generarLimpiezas(fromISO: string, toISO: string): Promise<
   const { data: existRows, error: e3 } = numeros.length
     ? await supabase
         .from("limpiezas")
-        .select("id_limpieza, numero_reserva, id_apt, fecha_limpieza, tipo")
+        .select("id_limpieza, numero_reserva, id_apt, fecha_limpieza, tipo, hora_in_time, hora_in_informed, affected_by_kb_change, estado")
         .in("numero_reserva", numeros)
     : { data: [], error: null };
   if (e3) throw e3;
-  const existing = (existRows ?? []) as ExistingLimp[];
+  const existing = (existRows ?? []) as (ExistingLimp & { estado?: string | null })[];
+
+  // ---- KB CHANGE DETECTION on existing salida rows ----
+  // (A) compare reservas_kb."Check-out" vs limpieza.fecha_limpieza
+  // (B) re-run next-reservation lookup; if its resolved hora_in_time/informed
+  //     differs from what is stored, mark as affected. Otherwise clear flag.
+  const salidaExisting = existing.filter((l) => l.tipo === "salida" && l.estado !== "anulada" && l.numero_reserva);
+  if (salidaExisting.length) {
+    const kbNums = Array.from(new Set(salidaExisting.map((l) => l.numero_reserva!)));
+    const { data: kbRows, error: eKb } = await supabase
+      .from("reservas_kb")
+      .select('"Número","Check-out"')
+      .in("Número", kbNums);
+    if (eKb) throw eKb;
+    const kbCheckoutByNum = new Map<string, string | null>(
+      ((kbRows ?? []) as any[]).map((r) => [r["Número"], r["Check-out"] ?? null]),
+    );
+
+    const toMarkAffected: number[] = [];
+    const toClearAffected: number[] = [];
+
+    for (const l of salidaExisting) {
+      let isAffected = false;
+
+      // (A) checkout changed?
+      const kbCo = kbCheckoutByNum.get(l.numero_reserva!) ?? null;
+      if (kbCo && kbCo !== l.fecha_limpieza) isAffected = true;
+
+      // (B) next reservation differs?
+      if (!isAffected) {
+        const baseCo = kbCo ?? l.fecha_limpieza;
+        const arr = futureByApt.get(l.id_apt) ?? [];
+        const next = arr.find(
+          (x) => x.numero !== l.numero_reserva && x.ci >= baseCo && x.ci <= addDaysISO(baseCo, 7),
+        );
+        let newInTime: string | null = null;
+        let newInInformed = false;
+        if (next) {
+          const gestNext = gestMap.get(next.numero) ?? null;
+          const nextRow = vres.find(
+            (x) => x["Número"] === next.numero && x.id_apt === l.id_apt,
+          );
+          const inRes = resolveTime(
+            gestNext?.HCheckInConf ?? null,
+            nextRow?.["Hora estimada de llegada"] ?? null,
+            "15:00:00",
+          );
+          newInTime = inRes.value;
+          newInInformed = inRes.informed;
+        }
+        const storedTime = l.hora_in_time ?? null;
+        const storedInformed = !!l.hora_in_informed;
+        if (newInTime !== storedTime || newInInformed !== storedInformed) {
+          isAffected = true;
+        }
+      }
+
+      if (isAffected && !l.affected_by_kb_change) toMarkAffected.push(l.id_limpieza);
+      else if (!isAffected && l.affected_by_kb_change) toClearAffected.push(l.id_limpieza);
+    }
+
+    if (toMarkAffected.length) {
+      const { error } = await supabase
+        .from("limpiezas")
+        .update({ affected_by_kb_change: true })
+        .in("id_limpieza", toMarkAffected);
+      if (error) throw error;
+    }
+    if (toClearAffected.length) {
+      const { error } = await supabase
+        .from("limpiezas")
+        .update({ affected_by_kb_change: false })
+        .in("id_limpieza", toClearAffected);
+      if (error) throw error;
+    }
+  }
+
   const salidaKey = (n: string, apt: number) => `${n}|${apt}|salida`;
   const intermediaKey = (n: string, apt: number) => `${n}|${apt}|intermedia`;
   const existingSalida = new Set<string>();

@@ -13,10 +13,9 @@ import { cn } from "@/lib/utils";
 import { fmtDate } from "@/lib/format";
 import { fetchLimpiadores } from "@/lib/catalogos";
 import { fullName } from "@/lib/types";
-import { Link2, Minus, Plus, RotateCcw, Trash2, X, Zap } from "lucide-react";
+import { Link2, RotateCcw, Trash2, X, Zap } from "lucide-react";
 import { bedLabel } from "@/routes/programacion-limpiezas";
 import { fmtTime } from "@/lib/format";
-import { recalcOrdenesTrabajo } from "@/lib/recalc-ordenes";
 
 export type Limpieza = {
   id_limpieza: number;
@@ -402,44 +401,17 @@ export function LimpiezaPopover({ open, loadKey, onOpenChange, apt, fecha, exist
       setForm((f) => ({ ...f, worker: null, orden_trabajo: null }));
       return;
     }
-    // append as last
+    // Append as next slot for that worker on that date. Exclude this task
+    // itself so re-selecting the same worker doesn't double-count.
     const { data } = await supabase
       .from("limpiezas")
-      .select("orden_trabajo")
+      .select("id_limpieza")
       .eq("worker", newWorker)
       .eq("fecha_limpieza", form.fecha_limpieza)
       .eq("estado", "activa");
-    const next = ((data ?? []).length) + 1;
+    const others = (data ?? []).filter((r: any) => r.id_limpieza !== form.id_limpieza);
+    const next = others.length + 1;
     setForm((f) => ({ ...f, worker: newWorker, orden_trabajo: next }));
-  };
-
-  const stepOrden = async (delta: number) => {
-    if (!form.worker || form.orden_trabajo == null) return;
-    const target = form.orden_trabajo + delta;
-    if (target < 1) return;
-    const siblings = siblingsQ.data ?? [];
-    const collision = siblings.find(
-      (s) => s.id_limpieza !== form.id_limpieza && s.orden_trabajo === target,
-    );
-    if (collision && form.id_limpieza > 0) {
-      // swap in DB
-      const oldOrden = form.orden_trabajo;
-      const { error: e1 } = await supabase
-        .from("limpiezas")
-        .update({ orden_trabajo: oldOrden })
-        .eq("id_limpieza", collision.id_limpieza);
-      if (e1) { toast.error(e1.message); return; }
-      const { error: e2 } = await supabase
-        .from("limpiezas")
-        .update({ orden_trabajo: target })
-        .eq("id_limpieza", form.id_limpieza);
-      if (e2) { toast.error(e2.message); return; }
-      set("orden_trabajo", target);
-      siblingsQ.refetch();
-      onSaved();
-    } else {
-      set("orden_trabajo", target);
-    }
   };
 
   const save = async () => {
@@ -481,14 +453,8 @@ export function LimpiezaPopover({ open, loadKey, onOpenChange, apt, fecha, exist
         const { error } = await supabase.from("limpiezas").insert(payload);
         if (error) throw error;
       }
-      // Recompute orden_trabajo for affected worker+date buckets.
-      const buckets = new Set<string>();
-      if (form.worker != null) buckets.add(`${form.worker}|${form.fecha_limpieza}`);
-      if (prevWorker != null && prevFecha) buckets.add(`${prevWorker}|${prevFecha}`);
-      for (const key of buckets) {
-        const [w, f] = key.split("|");
-        try { await recalcOrdenesTrabajo(Number(w), f); } catch { /* non-blocking */ }
-      }
+      // Simple assignment-order model: no renumbering of siblings on save.
+      void prevWorker; void prevFecha;
       toast.success("Limpieza guardada");
       onSaved();
       onOpenChange(false);
@@ -644,17 +610,12 @@ export function LimpiezaPopover({ open, loadKey, onOpenChange, apt, fecha, exist
                   Orden de trabajo {workerObj ? `— ${workerObj.nombre ?? ""}` : ""}
                 </Label>
                 <div className="mt-2 flex items-center gap-2">
-                  <div className="flex items-center gap-1">
-                    <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => stepOrden(-1)}>
-                      <Minus className="h-3 w-3" />
-                    </Button>
-                    <div className="min-w-16 text-center text-sm">
-                      <span className="font-semibold">{form.orden_trabajo ?? "—"}</span>
-                      <span className="text-muted-foreground"> de {siblingsQ.data?.length ?? 0}</span>
-                    </div>
-                    <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => stepOrden(1)}>
-                      <Plus className="h-3 w-3" />
-                    </Button>
+                  <div className="rounded-md border bg-muted/40 px-3 py-1.5 text-sm">
+                    Orden:{" "}
+                    <span className="font-semibold">{form.orden_trabajo ?? "—"}</span>
+                    <span className="text-muted-foreground">
+                      {" "}de {Math.max(siblingsQ.data?.length ?? 0, form.orden_trabajo ?? 0)}
+                    </span>
                   </div>
                   <Input
                     placeholder="--:--"

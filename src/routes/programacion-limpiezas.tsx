@@ -262,6 +262,26 @@ function ProgramacionLimpiezasPage() {
     return m;
   }, [limpiezasQ.data]);
 
+  // Per apartment, the set of check-in dates of (non-cancelled) reservations.
+  // Used to detect NENTRAN: a salida task whose next reservation does not
+  // arrive on the SAME calendar day as the checkout.
+  const checkinDaysByApt = useMemo(() => {
+    const m = new Map<number, Set<string>>();
+    for (const r of reservasQ.data ?? []) {
+      if (r.id_apt == null || !r["Check in"]) continue;
+      const s = m.get(r.id_apt) ?? new Set<string>();
+      s.add(r["Check in"]);
+      m.set(r.id_apt, s);
+    }
+    return m;
+  }, [reservasQ.data]);
+
+  const [onlyAffected, setOnlyAffected] = useState(false);
+  const affectedCount = useMemo(
+    () => (limpiezasQ.data ?? []).filter((l) => l.affected_by_kb_change).length,
+    [limpiezasQ.data],
+  );
+
   const sharedByNumero = useMemo(() => {
     const m = new Map<string, ReservaRow[]>();
     for (const r of reservasQ.data ?? []) {
@@ -328,6 +348,24 @@ function ProgramacionLimpiezasPage() {
 
   return (
     <AppShell title="Programación de limpiezas">
+      {affectedCount > 0 && (
+        <button
+          type="button"
+          onClick={() => setOnlyAffected((v) => !v)}
+          className={cn(
+            "mb-3 w-full rounded-md border px-3 py-2 text-left text-sm transition-colors",
+            onlyAffected
+              ? "bg-orange-500 border-orange-600 text-white"
+              : "bg-orange-50 border-orange-300 text-orange-900 hover:bg-orange-100",
+          )}
+        >
+          <span className="font-semibold">{affectedCount}</span>{" "}
+          {affectedCount === 1 ? "limpieza afectada" : "limpiezas afectadas"} — revisar
+          <span className="ml-2 text-xs opacity-80">
+            {onlyAffected ? "(filtro activo · clic para quitar)" : "(clic para filtrar)"}
+          </span>
+        </button>
+      )}
       {/* Toolbar */}
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <Button variant="outline" size="sm" onClick={() => shiftDays(-7)}>
@@ -562,6 +600,15 @@ function ProgramacionLimpiezasPage() {
                         {(limpiezasByApt.get(a.id_apt) ?? []).map((l) => {
                           const idx = dayISOs.indexOf(l.fecha_limpieza);
                           if (idx < 0) return null;
+                          if (onlyAffected && !l.affected_by_kb_change) return null;
+                          const isOverdue =
+                            l.estado === "activa" && l.fecha_limpieza < todayISO;
+                          const checkinDays = checkinDaysByApt.get(a.id_apt);
+                          const sameDayEntrada = !!checkinDays?.has(l.fecha_limpieza);
+                          const isNentran =
+                            l.tipo === "salida" &&
+                            l.estado === "activa" &&
+                            !sameDayEntrada;
                           const onOpen = () => {
                             const loadKey = ++popoverLoadSeq.current;
                             setPopover({
@@ -585,6 +632,7 @@ function ProgramacionLimpiezasPage() {
                                 codigo={workerCodigo(l.worker)}
                                 dayIdx={idx}
                                 onClick={onOpen}
+                                overdue={isOverdue}
                               />
                             );
                           }
@@ -595,6 +643,8 @@ function ProgramacionLimpiezasPage() {
                               codigo={workerCodigo(l.worker)}
                               dayIdx={idx}
                               onClick={onOpen}
+                              overdue={isOverdue}
+                              nentran={isNentran}
                             />
                           );
                         })}
@@ -872,13 +922,38 @@ function SalidaLabel({
   codigo,
   dayIdx,
   onClick,
+  overdue,
+  nentran,
 }: {
   l: Limpieza;
   codigo: string | null;
   dayIdx: number;
   onClick: () => void;
+  overdue?: boolean;
+  nentran?: boolean;
 }) {
   const { anulada, enCurso, isPriority, hasWorker, affected } = cleaningState(l);
+  const left = dayIdx * DAY_COL_W + 0.24 * DAY_COL_W;
+  const width = 0.36 * DAY_COL_W;
+
+  // NENTRAN takes precedence when there is no manual worker assignment.
+  if (nentran && !hasWorker && !anulada) {
+    return (
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          onClick();
+        }}
+        className="absolute z-10 flex items-center justify-center px-1 text-[10px] italic text-muted-foreground hover:text-foreground overflow-hidden"
+        style={{ left, width, top: 3, height: 20 }}
+        title={`Sin entrada · ${l.fecha_limpieza}`}
+      >
+        <span className="truncate">— sin entrada —</span>
+      </button>
+    );
+  }
+
   let cls = "bg-rose-400/85 text-white border border-dashed border-rose-500";
   if (anulada) {
     cls =
@@ -893,13 +968,16 @@ function SalidaLabel({
   if (affected && !anulada) {
     cls = "bg-orange-100 text-orange-900 border border-dashed border-orange-500";
   }
-  const label = anulada
-    ? "NUL"
-    : hasWorker
-      ? codigo ?? `#${l.worker}`
-      : "Sin asig.";
-  const left = dayIdx * DAY_COL_W + 0.24 * DAY_COL_W;
-  const width = 0.36 * DAY_COL_W;
+  if (overdue && !anulada) {
+    cls = "bg-gray-200 text-gray-700 border border-dashed border-gray-400";
+  }
+  const label = overdue && !anulada
+    ? "VACÍO"
+    : anulada
+      ? "NUL"
+      : hasWorker
+        ? codigo ?? `#${l.worker}`
+        : "Sin asig.";
   return (
     <button
       type="button"
@@ -915,7 +993,7 @@ function SalidaLabel({
       title={`Salida · ${l.fecha_limpieza}`}
     >
       <span className="truncate">{label}</span>
-      {hasWorker && l.orden_trabajo != null && !anulada && (
+      {hasWorker && l.orden_trabajo != null && !anulada && !overdue && (
         <span className="shrink-0 h-3.5 min-w-[14px] rounded-full bg-black/30 px-1 text-[9px] leading-[14px] text-center">
           {l.orden_trabajo}
         </span>
@@ -929,11 +1007,13 @@ function IntermediaOverlay({
   codigo,
   dayIdx,
   onClick,
+  overdue,
 }: {
   l: Limpieza;
   codigo: string | null;
   dayIdx: number;
   onClick: () => void;
+  overdue?: boolean;
 }) {
   const { anulada, hasWorker, affected, isPriority, enCurso } = cleaningState(l);
   // base: dark purple translucent overlay on top of reservation bar
@@ -949,13 +1029,18 @@ function IntermediaOverlay({
   } else if (hasWorker && isPriority) {
     cls = "bg-amber-500/55 text-white border border-dashed border-amber-200";
   }
+  if (overdue && !anulada) {
+    cls = "bg-gray-300/80 text-gray-700 border border-dashed border-gray-500";
+  }
   const left = dayIdx * DAY_COL_W + 0.24 * DAY_COL_W;
   const width = 0.36 * DAY_COL_W;
-  const label = anulada
-    ? "NUL"
-    : hasWorker
-      ? codigo ?? `#${l.worker}`
-      : "Sin asig.";
+  const label = overdue && !anulada
+    ? "VACÍO"
+    : anulada
+      ? "NUL"
+      : hasWorker
+        ? codigo ?? `#${l.worker}`
+        : "Sin asig.";
   return (
     <button
       type="button"
@@ -971,7 +1056,7 @@ function IntermediaOverlay({
       title={`Intermedia · ${l.fecha_limpieza}`}
     >
       <span className="truncate">{label}</span>
-      {hasWorker && l.orden_trabajo != null && !anulada && (
+      {hasWorker && l.orden_trabajo != null && !anulada && !overdue && (
         <span className="shrink-0 h-3.5 min-w-[14px] rounded-full bg-black/30 px-1 text-[9px] leading-[14px] text-center">
           {l.orden_trabajo}
         </span>
