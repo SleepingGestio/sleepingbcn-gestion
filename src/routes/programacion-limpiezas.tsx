@@ -208,6 +208,8 @@ function ProgramacionLimpiezasPage() {
   >(null);
   const popoverLoadSeq = useRef(0);
   const [genOpen, setGenOpen] = useState(false);
+  const [newSalidaOpen, setNewSalidaOpen] = useState(false);
+  const [newIntermediaOpen, setNewIntermediaOpen] = useState(false);
 
   const gruposQ = useQuery({ queryKey: ["grupos_apartamentos"], queryFn: fetchGrupos });
   const aptsQ = useQuery({ queryKey: ["apartamentos_activos"], queryFn: fetchApartamentos });
