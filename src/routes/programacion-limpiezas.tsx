@@ -17,12 +17,11 @@ import { fmtDate } from "@/lib/format";
 import { LimpiezaPopover, type Limpieza } from "@/components/limpieza-popover";
 import { fetchLimpiadores } from "@/lib/catalogos";
 import { generarLimpiezas } from "@/lib/generar-limpiezas";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Sparkles } from "lucide-react";
 import { toast } from "sonner";
-import { LogOut, Brush } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 
 export const Route = createFileRoute("/programacion-limpiezas")({
   component: ProgramacionLimpiezasPage,
@@ -208,8 +207,6 @@ function ProgramacionLimpiezasPage() {
   >(null);
   const popoverLoadSeq = useRef(0);
   const [genOpen, setGenOpen] = useState(false);
-  const [newSalidaOpen, setNewSalidaOpen] = useState(false);
-  const [newIntermediaOpen, setNewIntermediaOpen] = useState(false);
 
   const gruposQ = useQuery({ queryKey: ["grupos_apartamentos"], queryFn: fetchGrupos });
   const aptsQ = useQuery({ queryKey: ["apartamentos_activos"], queryFn: fetchApartamentos });
@@ -357,22 +354,6 @@ function ProgramacionLimpiezasPage() {
           className="bg-purple-700 hover:bg-purple-800 text-white"
         >
           <Sparkles className="h-4 w-4" /> Generar limpiezas automáticas
-        </Button>
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={() => setNewSalidaOpen(true)}
-          className="border-blue-500 text-blue-700 hover:bg-blue-50"
-        >
-          <LogOut className="h-4 w-4" /> + Limpieza checkout
-        </Button>
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={() => setNewIntermediaOpen(true)}
-          className="border-teal-500 text-teal-700 hover:bg-teal-50"
-        >
-          <Brush className="h-4 w-4" /> + Limpieza intermedia
         </Button>
         <div className="ml-auto" />
       </div>
