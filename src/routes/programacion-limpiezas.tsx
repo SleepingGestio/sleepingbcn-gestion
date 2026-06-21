@@ -922,13 +922,38 @@ function SalidaLabel({
   codigo,
   dayIdx,
   onClick,
+  overdue,
+  nentran,
 }: {
   l: Limpieza;
   codigo: string | null;
   dayIdx: number;
   onClick: () => void;
+  overdue?: boolean;
+  nentran?: boolean;
 }) {
   const { anulada, enCurso, isPriority, hasWorker, affected } = cleaningState(l);
+  const left = dayIdx * DAY_COL_W + 0.24 * DAY_COL_W;
+  const width = 0.36 * DAY_COL_W;
+
+  // NENTRAN takes precedence when there is no manual worker assignment.
+  if (nentran && !hasWorker && !anulada) {
+    return (
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          onClick();
+        }}
+        className="absolute z-10 flex items-center justify-center px-1 text-[10px] italic text-muted-foreground hover:text-foreground overflow-hidden"
+        style={{ left, width, top: 3, height: 20 }}
+        title={`Sin entrada · ${l.fecha_limpieza}`}
+      >
+        <span className="truncate">— sin entrada —</span>
+      </button>
+    );
+  }
+
   let cls = "bg-rose-400/85 text-white border border-dashed border-rose-500";
   if (anulada) {
     cls =
@@ -943,13 +968,16 @@ function SalidaLabel({
   if (affected && !anulada) {
     cls = "bg-orange-100 text-orange-900 border border-dashed border-orange-500";
   }
-  const label = anulada
-    ? "NUL"
-    : hasWorker
-      ? codigo ?? `#${l.worker}`
-      : "Sin asig.";
-  const left = dayIdx * DAY_COL_W + 0.24 * DAY_COL_W;
-  const width = 0.36 * DAY_COL_W;
+  if (overdue && !anulada) {
+    cls = "bg-gray-200 text-gray-700 border border-dashed border-gray-400";
+  }
+  const label = overdue && !anulada
+    ? "VACÍO"
+    : anulada
+      ? "NUL"
+      : hasWorker
+        ? codigo ?? `#${l.worker}`
+        : "Sin asig.";
   return (
     <button
       type="button"
@@ -965,7 +993,7 @@ function SalidaLabel({
       title={`Salida · ${l.fecha_limpieza}`}
     >
       <span className="truncate">{label}</span>
-      {hasWorker && l.orden_trabajo != null && !anulada && (
+      {hasWorker && l.orden_trabajo != null && !anulada && !overdue && (
         <span className="shrink-0 h-3.5 min-w-[14px] rounded-full bg-black/30 px-1 text-[9px] leading-[14px] text-center">
           {l.orden_trabajo}
         </span>
@@ -979,11 +1007,13 @@ function IntermediaOverlay({
   codigo,
   dayIdx,
   onClick,
+  overdue,
 }: {
   l: Limpieza;
   codigo: string | null;
   dayIdx: number;
   onClick: () => void;
+  overdue?: boolean;
 }) {
   const { anulada, hasWorker, affected, isPriority, enCurso } = cleaningState(l);
   // base: dark purple translucent overlay on top of reservation bar
@@ -999,13 +1029,18 @@ function IntermediaOverlay({
   } else if (hasWorker && isPriority) {
     cls = "bg-amber-500/55 text-white border border-dashed border-amber-200";
   }
+  if (overdue && !anulada) {
+    cls = "bg-gray-300/80 text-gray-700 border border-dashed border-gray-500";
+  }
   const left = dayIdx * DAY_COL_W + 0.24 * DAY_COL_W;
   const width = 0.36 * DAY_COL_W;
-  const label = anulada
-    ? "NUL"
-    : hasWorker
-      ? codigo ?? `#${l.worker}`
-      : "Sin asig.";
+  const label = overdue && !anulada
+    ? "VACÍO"
+    : anulada
+      ? "NUL"
+      : hasWorker
+        ? codigo ?? `#${l.worker}`
+        : "Sin asig.";
   return (
     <button
       type="button"
@@ -1021,7 +1056,7 @@ function IntermediaOverlay({
       title={`Intermedia · ${l.fecha_limpieza}`}
     >
       <span className="truncate">{label}</span>
-      {hasWorker && l.orden_trabajo != null && !anulada && (
+      {hasWorker && l.orden_trabajo != null && !anulada && !overdue && (
         <span className="shrink-0 h-3.5 min-w-[14px] rounded-full bg-black/30 px-1 text-[9px] leading-[14px] text-center">
           {l.orden_trabajo}
         </span>
