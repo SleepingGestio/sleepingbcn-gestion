@@ -12,6 +12,7 @@ import { EstadoBadge } from "@/components/estado-badge";
 import { DateRangePicker, nextWeekRange } from "@/components/date-range-picker";
 import { fmtDate } from "@/lib/format";
 import { SortHeader } from "@/components/sort-header";
+import { GroupFilterChips, useGroupFilter } from "@/components/group-filter";
 
 export const Route = createFileRoute("/reservas")({
   component: ReservasPage,
@@ -26,6 +27,7 @@ function ReservasPage() {
   const [range, setRange] = useState(nextWeekRange);
   const [sortKey, setSortKey] = useState<SortKey>("checkin");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+  const filter = useGroupFilter();
 
   const q = useQuery({
     queryKey: ["reservas", { estado, from: range.from, to: range.to }],
@@ -41,9 +43,12 @@ function ReservasPage() {
   const filtered = useMemo(() => {
     if (!q.data) return [];
     const s = search.trim().toLowerCase();
+    const byGroup = q.data.filter(
+      (r) => !r["Habitaciones"] || filter.allowedAptNames.has(r["Habitaciones"]),
+    );
     const base = !s
-      ? q.data
-      : q.data.filter((r) =>
+      ? byGroup
+      : byGroup.filter((r) =>
           [r["Referencia"], r["Número"], r["Habitaciones"]].some(
             (v) => v && String(v).toLowerCase().includes(s),
           ),
@@ -70,7 +75,7 @@ function ReservasPage() {
       return sortDir === "asc" ? c : -c;
     });
     return arr;
-  }, [q.data, search, sortKey, sortDir]);
+  }, [q.data, search, sortKey, sortDir, filter.allowedAptNames]);
 
   const toggleSort = (k: SortKey) => {
     if (sortKey === k) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
@@ -99,6 +104,7 @@ function ReservasPage() {
           </SelectContent>
         </Select>
       </div>
+      <GroupFilterChips {...filter} />
 
       <Card className="overflow-hidden bg-white">
         <Table>
