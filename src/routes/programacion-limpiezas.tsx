@@ -987,7 +987,7 @@ function IntermediaOverlay({
   dayIdx: number;
   onClick: () => void;
 }) {
-  const { anulada, hasWorker, affected, isPriority, enCurso } = cleaningState(l);
+  const { anulada, hasWorker, affected, isPriority, enCurso, finalizada, rechazada } = cleaningState(l);
   // base: dark purple translucent overlay on top of reservation bar
   let cls =
     "bg-purple-700/60 text-white border border-dashed border-purple-200/90 backdrop-blur-[1px]";
@@ -998,6 +998,10 @@ function IntermediaOverlay({
     cls = "bg-amber-500/60 text-white border border-dashed border-amber-200";
   } else if (enCurso) {
     cls = "bg-violet-500/60 text-white border border-dashed border-violet-200";
+  } else if (rechazada) {
+    cls = "bg-red-600/80 text-white border border-red-700";
+  } else if (finalizada) {
+    cls = "bg-emerald-300/60 text-emerald-950 border border-dashed border-emerald-400 opacity-80";
   } else if (hasWorker && isPriority) {
     cls = "bg-amber-500/55 text-white border border-dashed border-amber-200";
   }
@@ -1005,9 +1009,13 @@ function IntermediaOverlay({
   const width = 0.36 * DAY_COL_W;
   const label = anulada
     ? "NUL"
-    : hasWorker
-      ? codigo ?? `#${l.worker}`
-      : "Sin asig.";
+    : rechazada
+      ? `! ${codigo ?? `#${l.worker}`}`
+      : finalizada
+        ? `✓ ${codigo ?? `#${l.worker}`}`
+        : hasWorker
+          ? codigo ?? `#${l.worker}`
+          : "Sin asig.";
   return (
     <button
       type="button"
