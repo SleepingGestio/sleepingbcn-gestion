@@ -899,13 +899,15 @@ function TimeBadge({ value, informed }: { value: string; informed: boolean }) {
 function cleaningState(l: Limpieza) {
   const anulada = l.estado === "anulada";
   const enCurso = l.estado === "en_curso";
+  const finalizada = l.estado === "finalizada";
+  const rechazada = l.estado === "rechazada";
   const isPriority =
     l.prioritaria_manual !== null && l.prioritaria_manual !== undefined
       ? l.prioritaria_manual
       : !!l.prioritaria;
   const hasWorker = l.worker != null;
   const affected = !!l.affected_by_kb_change;
-  return { anulada, enCurso, isPriority, hasWorker, affected };
+  return { anulada, enCurso, finalizada, rechazada, isPriority, hasWorker, affected };
 }
 
 function SalidaLabel({
