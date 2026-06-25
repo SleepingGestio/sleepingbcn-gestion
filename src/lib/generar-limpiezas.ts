@@ -460,6 +460,10 @@ export async function generarLimpiezas(fromISO: string, toISO: string): Promise<
           prioritaria,
           estado: "activa",
           proxima_reserva_numero: next?.numero ?? null,
+          check_toallas: false,
+          check_sabanas: false,
+          check_limpieza_basica: false,
+          check_limpieza_completa: false,
         });
         existingSalida.add(salidaKey(r["Número"], r.id_apt));
       }
