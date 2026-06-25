@@ -41,7 +41,7 @@ export async function recalcOrdenesTrabajo(worker: number, fecha: string): Promi
     .select("id_limpieza,id_apt,numero_reserva,fecha_limpieza,hora_out_time,hora_in_time,orden_trabajo")
     .eq("worker", worker)
     .eq("fecha_limpieza", fecha)
-    .eq("estado", "activa");
+    .neq("estado", "anulada");
   if (error) throw error;
   const tasks = (data ?? []) as Task[];
   if (tasks.length === 0) return;
