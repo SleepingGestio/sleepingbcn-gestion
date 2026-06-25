@@ -17,7 +17,7 @@ import { useAuth } from "@/hooks/use-auth";
 const items = [
   { title: "Reservas", url: "/reservas", icon: Calendar },
   { title: "Check-ins de hoy", url: "/checkins", icon: LogIn },
-  { title: "Limpiezas", url: "/limpiezas", icon: Sparkles },
+  { title: "Limpiezas asignadas", url: "/limpiezas", icon: Sparkles },
   { title: "Programación limpiezas", url: "/programacion-limpiezas", icon: CalendarRange },
   { title: "Configuración", url: "/configuracion", icon: Settings },
 ];
