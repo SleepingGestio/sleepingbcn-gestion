@@ -921,7 +921,7 @@ function SalidaLabel({
   dayIdx: number;
   onClick: () => void;
 }) {
-  const { anulada, enCurso, isPriority, hasWorker, affected } = cleaningState(l);
+  const { anulada, enCurso, finalizada, rechazada, isPriority, hasWorker, affected } = cleaningState(l);
   const left = dayIdx * DAY_COL_W + 0.24 * DAY_COL_W;
   const width = 0.36 * DAY_COL_W;
 
@@ -931,6 +931,10 @@ function SalidaLabel({
       "bg-gray-300 text-gray-600 line-through bg-[repeating-linear-gradient(45deg,transparent_0_4px,rgba(0,0,0,0.08)_4px_8px)]";
   } else if (enCurso) {
     cls = "bg-violet-500/85 text-white";
+  } else if (rechazada) {
+    cls = "bg-red-600 text-white border border-red-700";
+  } else if (finalizada) {
+    cls = "bg-emerald-200 text-emerald-900 opacity-70";
   } else if (hasWorker && isPriority) {
     cls = "bg-amber-500/85 text-white";
   } else if (hasWorker) {
@@ -941,9 +945,13 @@ function SalidaLabel({
   }
   const label = anulada
     ? "NUL"
-    : hasWorker
-      ? codigo ?? `#${l.worker}`
-      : "Sin asig.";
+    : rechazada
+      ? `! ${codigo ?? `#${l.worker}`}`
+      : finalizada
+        ? `✓ ${codigo ?? `#${l.worker}`}`
+        : hasWorker
+          ? codigo ?? `#${l.worker}`
+          : "Sin asig.";
   return (
     <button
       type="button"
