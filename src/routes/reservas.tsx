@@ -44,7 +44,7 @@ function ReservasPage() {
     if (!q.data) return [];
     const s = search.trim().toLowerCase();
     const byGroup = q.data.filter(
-      (r) => !r["Habitaciones"] || filter.allowedAptNames.has(r["Habitaciones"]),
+      (r) => r["Habitaciones"] != null && filter.allowedAptNames.has(r["Habitaciones"]),
     );
     const base = !s
       ? byGroup
