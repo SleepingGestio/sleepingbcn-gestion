@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as ReservasRouteImport } from './routes/reservas'
 import { Route as ProgramacionLimpiezasRouteImport } from './routes/programacion-limpiezas'
+import { Route as MiDiaRouteImport } from './routes/mi-dia'
 import { Route as LimpiezasRouteImport } from './routes/limpiezas'
 import { Route as ConfiguracionRouteImport } from './routes/configuracion'
 import { Route as ComunicarTareasRouteImport } from './routes/comunicar-tareas'
@@ -25,6 +26,11 @@ const ReservasRoute = ReservasRouteImport.update({
 const ProgramacionLimpiezasRoute = ProgramacionLimpiezasRouteImport.update({
   id: '/programacion-limpiezas',
   path: '/programacion-limpiezas',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const MiDiaRoute = MiDiaRouteImport.update({
+  id: '/mi-dia',
+  path: '/mi-dia',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LimpiezasRoute = LimpiezasRouteImport.update({
@@ -59,6 +65,7 @@ export interface FileRoutesByFullPath {
   '/comunicar-tareas': typeof ComunicarTareasRoute
   '/configuracion': typeof ConfiguracionRoute
   '/limpiezas': typeof LimpiezasRoute
+  '/mi-dia': typeof MiDiaRoute
   '/programacion-limpiezas': typeof ProgramacionLimpiezasRoute
   '/reservas': typeof ReservasRoute
 }
@@ -68,6 +75,7 @@ export interface FileRoutesByTo {
   '/comunicar-tareas': typeof ComunicarTareasRoute
   '/configuracion': typeof ConfiguracionRoute
   '/limpiezas': typeof LimpiezasRoute
+  '/mi-dia': typeof MiDiaRoute
   '/programacion-limpiezas': typeof ProgramacionLimpiezasRoute
   '/reservas': typeof ReservasRoute
 }
@@ -78,6 +86,7 @@ export interface FileRoutesById {
   '/comunicar-tareas': typeof ComunicarTareasRoute
   '/configuracion': typeof ConfiguracionRoute
   '/limpiezas': typeof LimpiezasRoute
+  '/mi-dia': typeof MiDiaRoute
   '/programacion-limpiezas': typeof ProgramacionLimpiezasRoute
   '/reservas': typeof ReservasRoute
 }
@@ -89,6 +98,7 @@ export interface FileRouteTypes {
     | '/comunicar-tareas'
     | '/configuracion'
     | '/limpiezas'
+    | '/mi-dia'
     | '/programacion-limpiezas'
     | '/reservas'
   fileRoutesByTo: FileRoutesByTo
@@ -98,6 +108,7 @@ export interface FileRouteTypes {
     | '/comunicar-tareas'
     | '/configuracion'
     | '/limpiezas'
+    | '/mi-dia'
     | '/programacion-limpiezas'
     | '/reservas'
   id:
@@ -107,6 +118,7 @@ export interface FileRouteTypes {
     | '/comunicar-tareas'
     | '/configuracion'
     | '/limpiezas'
+    | '/mi-dia'
     | '/programacion-limpiezas'
     | '/reservas'
   fileRoutesById: FileRoutesById
@@ -117,6 +129,7 @@ export interface RootRouteChildren {
   ComunicarTareasRoute: typeof ComunicarTareasRoute
   ConfiguracionRoute: typeof ConfiguracionRoute
   LimpiezasRoute: typeof LimpiezasRoute
+  MiDiaRoute: typeof MiDiaRoute
   ProgramacionLimpiezasRoute: typeof ProgramacionLimpiezasRoute
   ReservasRoute: typeof ReservasRoute
 }
@@ -135,6 +148,13 @@ declare module '@tanstack/react-router' {
       path: '/programacion-limpiezas'
       fullPath: '/programacion-limpiezas'
       preLoaderRoute: typeof ProgramacionLimpiezasRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/mi-dia': {
+      id: '/mi-dia'
+      path: '/mi-dia'
+      fullPath: '/mi-dia'
+      preLoaderRoute: typeof MiDiaRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/limpiezas': {
@@ -181,6 +201,7 @@ const rootRouteChildren: RootRouteChildren = {
   ComunicarTareasRoute: ComunicarTareasRoute,
   ConfiguracionRoute: ConfiguracionRoute,
   LimpiezasRoute: LimpiezasRoute,
+  MiDiaRoute: MiDiaRoute,
   ProgramacionLimpiezasRoute: ProgramacionLimpiezasRoute,
   ReservasRoute: ReservasRoute,
 }
