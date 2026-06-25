@@ -12,6 +12,7 @@ import { DateRangePicker, todayRange } from "@/components/date-range-picker";
 import { toast } from "sonner";
 import { SortHeader } from "@/components/sort-header";
 import { fmtDate, fmtTime } from "@/lib/format";
+import { GroupFilterChips, useGroupFilter } from "@/components/group-filter";
 
 export const Route = createFileRoute("/checkins")({
   component: CheckinsPage,
@@ -24,6 +25,7 @@ function CheckinsPage() {
   const [range, setRange] = useState(todayRange);
   const [sortKey, setSortKey] = useState<SortKey>("checkin");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+  const filter = useGroupFilter();
 
   const q = useQuery({
     queryKey: ["checkins", range.from, range.to],
@@ -41,7 +43,11 @@ function CheckinsPage() {
   const sorted = useMemo(() => {
     const arr = [...(q.data ?? [])];
     const filtered = arr.filter(
-      (r) => r["Estado"] !== "Cancelada" && r["Estado"] !== "No show"
+      (r) =>
+        r["Estado"] !== "Cancelada" &&
+        r["Estado"] !== "No show" &&
+        r["Habitaciones"] != null &&
+        filter.allowedAptNames.has(r["Habitaciones"]),
     );
     filtered.sort((a, b) => {
       const pick = (r: typeof a) => {
@@ -58,7 +64,7 @@ function CheckinsPage() {
       return sortDir === "asc" ? c : -c;
     });
     return filtered;
-  }, [q.data, sortKey, sortDir]);
+  }, [q.data, sortKey, sortDir, filter.allowedAptNames]);
 
   const toggleSort = (k: SortKey) => {
     if (sortKey === k) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
@@ -71,6 +77,7 @@ function CheckinsPage() {
         <DateRangePicker value={range} onChange={setRange} />
         <span className="text-sm text-muted-foreground">{q.data?.length ?? 0} llegada(s)</span>
       </div>
+      <GroupFilterChips {...filter} />
       <Card className="overflow-hidden bg-white">
         <Table>
           <TableHeader>
