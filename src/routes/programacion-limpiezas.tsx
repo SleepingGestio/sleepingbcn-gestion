@@ -899,13 +899,15 @@ function TimeBadge({ value, informed }: { value: string; informed: boolean }) {
 function cleaningState(l: Limpieza) {
   const anulada = l.estado === "anulada";
   const enCurso = l.estado === "en_curso";
+  const finalizada = l.estado === "finalizada";
+  const rechazada = l.estado === "rechazada";
   const isPriority =
     l.prioritaria_manual !== null && l.prioritaria_manual !== undefined
       ? l.prioritaria_manual
       : !!l.prioritaria;
   const hasWorker = l.worker != null;
   const affected = !!l.affected_by_kb_change;
-  return { anulada, enCurso, isPriority, hasWorker, affected };
+  return { anulada, enCurso, finalizada, rechazada, isPriority, hasWorker, affected };
 }
 
 function SalidaLabel({
@@ -919,7 +921,7 @@ function SalidaLabel({
   dayIdx: number;
   onClick: () => void;
 }) {
-  const { anulada, enCurso, isPriority, hasWorker, affected } = cleaningState(l);
+  const { anulada, enCurso, finalizada, rechazada, isPriority, hasWorker, affected } = cleaningState(l);
   const left = dayIdx * DAY_COL_W + 0.24 * DAY_COL_W;
   const width = 0.36 * DAY_COL_W;
 
@@ -929,6 +931,10 @@ function SalidaLabel({
       "bg-gray-300 text-gray-600 line-through bg-[repeating-linear-gradient(45deg,transparent_0_4px,rgba(0,0,0,0.08)_4px_8px)]";
   } else if (enCurso) {
     cls = "bg-violet-500/85 text-white";
+  } else if (rechazada) {
+    cls = "bg-red-600 text-white border border-red-700";
+  } else if (finalizada) {
+    cls = "bg-emerald-200 text-emerald-900 opacity-70";
   } else if (hasWorker && isPriority) {
     cls = "bg-amber-500/85 text-white";
   } else if (hasWorker) {
@@ -939,9 +945,13 @@ function SalidaLabel({
   }
   const label = anulada
     ? "NUL"
-    : hasWorker
-      ? codigo ?? `#${l.worker}`
-      : "Sin asig.";
+    : rechazada
+      ? `! ${codigo ?? `#${l.worker}`}`
+      : finalizada
+        ? `✓ ${codigo ?? `#${l.worker}`}`
+        : hasWorker
+          ? codigo ?? `#${l.worker}`
+          : "Sin asig.";
   return (
     <button
       type="button"
@@ -977,7 +987,7 @@ function IntermediaOverlay({
   dayIdx: number;
   onClick: () => void;
 }) {
-  const { anulada, hasWorker, affected, isPriority, enCurso } = cleaningState(l);
+  const { anulada, hasWorker, affected, isPriority, enCurso, finalizada, rechazada } = cleaningState(l);
   // base: dark purple translucent overlay on top of reservation bar
   let cls =
     "bg-purple-700/60 text-white border border-dashed border-purple-200/90 backdrop-blur-[1px]";
@@ -988,6 +998,10 @@ function IntermediaOverlay({
     cls = "bg-amber-500/60 text-white border border-dashed border-amber-200";
   } else if (enCurso) {
     cls = "bg-violet-500/60 text-white border border-dashed border-violet-200";
+  } else if (rechazada) {
+    cls = "bg-red-600/80 text-white border border-red-700";
+  } else if (finalizada) {
+    cls = "bg-emerald-300/60 text-emerald-950 border border-dashed border-emerald-400 opacity-80";
   } else if (hasWorker && isPriority) {
     cls = "bg-amber-500/55 text-white border border-dashed border-amber-200";
   }
@@ -995,9 +1009,13 @@ function IntermediaOverlay({
   const width = 0.36 * DAY_COL_W;
   const label = anulada
     ? "NUL"
-    : hasWorker
-      ? codigo ?? `#${l.worker}`
-      : "Sin asig.";
+    : rechazada
+      ? `! ${codigo ?? `#${l.worker}`}`
+      : finalizada
+        ? `✓ ${codigo ?? `#${l.worker}`}`
+        : hasWorker
+          ? codigo ?? `#${l.worker}`
+          : "Sin asig.";
   return (
     <button
       type="button"
