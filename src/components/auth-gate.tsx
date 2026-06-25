@@ -1,5 +1,7 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useAuth } from "@/hooks/use-auth";
+import { useCurrentPersonal } from "@/hooks/use-current-personal";
+import { useRouter, useRouterState } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -17,6 +19,26 @@ export function AuthGate({ children }: { children: ReactNode }) {
   }
 
   if (!user) return <LoginScreen />;
+  return <RoleRouter>{children}</RoleRouter>;
+}
+
+function RoleRouter({ children }: { children: ReactNode }) {
+  const { isWorkerOnly, loading } = useCurrentPersonal();
+  const router = useRouter();
+  const path = useRouterState({ select: (s) => s.location.pathname });
+  useEffect(() => {
+    if (loading) return;
+    if (isWorkerOnly && path !== "/mi-dia") {
+      router.navigate({ to: "/mi-dia", replace: true });
+    }
+  }, [isWorkerOnly, loading, path, router]);
+  if (isWorkerOnly && path !== "/mi-dia") {
+    return (
+      <div className="min-h-screen flex items-center justify-center text-sm text-muted-foreground">
+        Cargando…
+      </div>
+    );
+  }
   return <>{children}</>;
 }
 

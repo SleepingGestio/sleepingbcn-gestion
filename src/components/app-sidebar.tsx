@@ -1,5 +1,5 @@
 import { Link, useRouterState } from "@tanstack/react-router";
-import { Calendar, LogIn, Sparkles, CalendarRange, Megaphone, Settings, LogOut } from "lucide-react";
+import { Calendar, LogIn, Sparkles, CalendarRange, Megaphone, Settings, LogOut, Smartphone } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -13,8 +13,9 @@ import {
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
 import { useAuth } from "@/hooks/use-auth";
+import { useCurrentPersonal } from "@/hooks/use-current-personal";
 
-const items = [
+const gestorItems = [
   { title: "Reservas", url: "/reservas", icon: Calendar },
   { title: "Check-ins de hoy", url: "/checkins", icon: LogIn },
   { title: "Limpiezas asignadas", url: "/limpiezas", icon: Sparkles },
@@ -22,10 +23,15 @@ const items = [
   { title: "Comunicar tareas", url: "/comunicar-tareas", icon: Megaphone },
   { title: "Configuración", url: "/configuracion", icon: Settings },
 ];
+const workerItems = [
+  { title: "Mi día", url: "/mi-dia", icon: Smartphone },
+];
 
 export function AppSidebar() {
   const path = useRouterState({ select: (s) => s.location.pathname });
   const { user, signOut } = useAuth();
+  const { isWorkerOnly } = useCurrentPersonal();
+  const items = isWorkerOnly ? workerItems : gestorItems;
 
   return (
     <Sidebar collapsible="icon">
