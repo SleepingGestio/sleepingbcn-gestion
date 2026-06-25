@@ -13,20 +13,32 @@ export type CurrentPersonal = {
 };
 
 async function fetchByEmail(email: string): Promise<CurrentPersonal | null> {
+  console.log("[useCurrentPersonal] Looking up personal by email:", email);
   const { data, error } = await supabase
     .from("personal")
     .select(
       "id_persona, nombre, apellidos, codigo, mail, activo, personal_roles(fecha_hasta, roles(nombre))",
     )
-    .eq("mail", email)
+    .ilike("mail", email)
     .maybeSingle();
-  if (error) throw error;
-  if (!data) return null;
+  if (error) {
+    console.error("[useCurrentPersonal] Lookup error:", error);
+    throw error;
+  }
+  if (!data) {
+    console.warn("[useCurrentPersonal] No matching personal record for:", email);
+    return null;
+  }
   const pr = (data as any).personal_roles ?? [];
   const roles: string[] = pr
     .filter((r: any) => !r.fecha_hasta)
     .map((r: any) => r.roles?.nombre)
     .filter(Boolean);
+  console.log("[useCurrentPersonal] Found personal:", {
+    id_persona: (data as any).id_persona,
+    mail: (data as any).mail,
+    roles,
+  });
   return {
     id_persona: (data as any).id_persona,
     nombre: (data as any).nombre,
