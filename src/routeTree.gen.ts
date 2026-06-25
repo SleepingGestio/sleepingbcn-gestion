@@ -13,6 +13,7 @@ import { Route as ReservasRouteImport } from './routes/reservas'
 import { Route as ProgramacionLimpiezasRouteImport } from './routes/programacion-limpiezas'
 import { Route as LimpiezasRouteImport } from './routes/limpiezas'
 import { Route as ConfiguracionRouteImport } from './routes/configuracion'
+import { Route as ComunicarTareasRouteImport } from './routes/comunicar-tareas'
 import { Route as CheckinsRouteImport } from './routes/checkins'
 import { Route as IndexRouteImport } from './routes/index'
 
@@ -36,6 +37,11 @@ const ConfiguracionRoute = ConfiguracionRouteImport.update({
   path: '/configuracion',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ComunicarTareasRoute = ComunicarTareasRouteImport.update({
+  id: '/comunicar-tareas',
+  path: '/comunicar-tareas',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const CheckinsRoute = CheckinsRouteImport.update({
   id: '/checkins',
   path: '/checkins',
@@ -50,6 +56,7 @@ const IndexRoute = IndexRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/checkins': typeof CheckinsRoute
+  '/comunicar-tareas': typeof ComunicarTareasRoute
   '/configuracion': typeof ConfiguracionRoute
   '/limpiezas': typeof LimpiezasRoute
   '/programacion-limpiezas': typeof ProgramacionLimpiezasRoute
@@ -58,6 +65,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/checkins': typeof CheckinsRoute
+  '/comunicar-tareas': typeof ComunicarTareasRoute
   '/configuracion': typeof ConfiguracionRoute
   '/limpiezas': typeof LimpiezasRoute
   '/programacion-limpiezas': typeof ProgramacionLimpiezasRoute
@@ -67,6 +75,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/checkins': typeof CheckinsRoute
+  '/comunicar-tareas': typeof ComunicarTareasRoute
   '/configuracion': typeof ConfiguracionRoute
   '/limpiezas': typeof LimpiezasRoute
   '/programacion-limpiezas': typeof ProgramacionLimpiezasRoute
@@ -77,6 +86,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/checkins'
+    | '/comunicar-tareas'
     | '/configuracion'
     | '/limpiezas'
     | '/programacion-limpiezas'
@@ -85,6 +95,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/checkins'
+    | '/comunicar-tareas'
     | '/configuracion'
     | '/limpiezas'
     | '/programacion-limpiezas'
@@ -93,6 +104,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/checkins'
+    | '/comunicar-tareas'
     | '/configuracion'
     | '/limpiezas'
     | '/programacion-limpiezas'
@@ -102,6 +114,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   CheckinsRoute: typeof CheckinsRoute
+  ComunicarTareasRoute: typeof ComunicarTareasRoute
   ConfiguracionRoute: typeof ConfiguracionRoute
   LimpiezasRoute: typeof LimpiezasRoute
   ProgramacionLimpiezasRoute: typeof ProgramacionLimpiezasRoute
@@ -138,6 +151,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ConfiguracionRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/comunicar-tareas': {
+      id: '/comunicar-tareas'
+      path: '/comunicar-tareas'
+      fullPath: '/comunicar-tareas'
+      preLoaderRoute: typeof ComunicarTareasRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/checkins': {
       id: '/checkins'
       path: '/checkins'
@@ -158,6 +178,7 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   CheckinsRoute: CheckinsRoute,
+  ComunicarTareasRoute: ComunicarTareasRoute,
   ConfiguracionRoute: ConfiguracionRoute,
   LimpiezasRoute: LimpiezasRoute,
   ProgramacionLimpiezasRoute: ProgramacionLimpiezasRoute,
