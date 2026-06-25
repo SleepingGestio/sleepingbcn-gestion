@@ -420,7 +420,7 @@ export function LimpiezaPopover({ open, loadKey, onOpenChange, apt, fecha, exist
         .select("id_limpieza, orden_trabajo")
         .eq("worker", form.worker!)
         .eq("fecha_limpieza", form.fecha_limpieza)
-        .eq("estado", "activa");
+        .neq("estado", "anulada");
       if (error) throw error;
       return (data ?? []) as { id_limpieza: number; orden_trabajo: number | null }[];
     },
@@ -456,7 +456,7 @@ export function LimpiezaPopover({ open, loadKey, onOpenChange, apt, fecha, exist
       .select("id_limpieza")
       .eq("worker", newWorker)
       .eq("fecha_limpieza", form.fecha_limpieza)
-      .eq("estado", "activa");
+      .neq("estado", "anulada");
     const others = (data ?? []).filter((r: any) => r.id_limpieza !== form.id_limpieza);
     const next = others.length + 1;
     setForm((f) => ({ ...f, worker: newWorker, orden_trabajo: next }));
