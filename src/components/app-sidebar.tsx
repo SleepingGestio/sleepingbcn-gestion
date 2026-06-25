@@ -1,5 +1,5 @@
 import { Link, useRouterState } from "@tanstack/react-router";
-import { Calendar, LogIn, Sparkles, CalendarRange, Settings, LogOut } from "lucide-react";
+import { Calendar, LogIn, Sparkles, CalendarRange, Megaphone, Settings, LogOut } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -19,6 +19,7 @@ const items = [
   { title: "Check-ins de hoy", url: "/checkins", icon: LogIn },
   { title: "Limpiezas asignadas", url: "/limpiezas", icon: Sparkles },
   { title: "Programación limpiezas", url: "/programacion-limpiezas", icon: CalendarRange },
+  { title: "Comunicar tareas", url: "/comunicar-tareas", icon: Megaphone },
   { title: "Configuración", url: "/configuracion", icon: Settings },
 ];
 
