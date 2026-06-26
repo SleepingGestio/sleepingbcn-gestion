@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
+import { EstadoLimpiezaBadge } from "@/components/estado-limpieza-badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -625,7 +626,10 @@ export function LimpiezaPopover({ open, loadKey, onOpenChange, apt, fecha, exist
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent className="max-w-md p-0 gap-0 max-h-[90vh] overflow-hidden flex flex-col">
           <DialogHeader className="px-4 py-3 border-b">
-            <DialogTitle className="text-base">{apt.nombre}</DialogTitle>
+            <DialogTitle className="text-base flex items-center gap-2">
+              <span>{apt.nombre}</span>
+              <EstadoLimpiezaBadge estado={form.estado} />
+            </DialogTitle>
             {(apt.grupo_nombre || apt.camas_fijas != null || form.tipo === "intermedia") && (
               <DialogDescription className="text-xs">
                 {form.tipo === "intermedia" && (
