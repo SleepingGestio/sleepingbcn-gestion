@@ -925,23 +925,30 @@ function SalidaLabel({
   const left = dayIdx * DAY_COL_W + 0.24 * DAY_COL_W;
   const width = 0.36 * DAY_COL_W;
 
-  let cls = "bg-rose-400/85 text-white border border-dashed border-rose-500";
-  if (anulada) {
-    cls =
-      "bg-gray-300 text-gray-600 line-through bg-[repeating-linear-gradient(45deg,transparent_0_4px,rgba(0,0,0,0.08)_4px_8px)]";
-  } else if (enCurso) {
-    cls = "bg-violet-500/85 text-white";
-  } else if (rechazada) {
-    cls = "bg-red-600 text-white border border-red-700";
-  } else if (finalizada) {
-    cls = "bg-emerald-200 text-emerald-900 opacity-70";
-  } else if (hasWorker && isPriority) {
-    cls = "bg-amber-500/85 text-white";
-  } else if (hasWorker) {
-    cls = "bg-purple-700/90 text-white";
+  let cls = "border border-dashed";
+  let inlineStyle: React.CSSProperties = {
+    left,
+    width,
+    top: 3,
+    height: 20,
+  };
+  if (!hasWorker && !anulada) {
+    cls += " bg-rose-400/85 text-white border-rose-500";
+  } else {
+    const s = getEstadoStyle(l.estado);
+    inlineStyle.backgroundColor = s.bg;
+    inlineStyle.color = s.fg;
+    cls += " border-transparent";
+    if (anulada) {
+      cls +=
+        " line-through bg-[repeating-linear-gradient(45deg,transparent_0_4px,rgba(0,0,0,0.15)_4px_8px)]";
+    }
+  }
+  if (isPriority && hasWorker && !anulada) {
+    cls += " ring-2 ring-amber-400";
   }
   if (affected && !anulada) {
-    cls = "bg-orange-100 text-orange-900 border border-dashed border-orange-500";
+    cls += " border-dashed border-amber-300";
   }
   const label = anulada
     ? "NUL"
@@ -963,12 +970,12 @@ function SalidaLabel({
         "absolute z-10 rounded flex items-center justify-center gap-1 px-1 text-[10px] font-semibold overflow-hidden shadow-sm",
         cls,
       )}
-      style={{ left, width, top: 3, height: 20 }}
+      style={inlineStyle}
       title={`Salida · ${l.fecha_limpieza}`}
     >
       <span className="truncate">{label}</span>
       {hasWorker && l.orden_trabajo != null && !anulada && (
-        <span className="shrink-0 h-3.5 min-w-[14px] rounded-full bg-black/30 px-1 text-[9px] leading-[14px] text-center">
+        <span className="shrink-0 h-3.5 min-w-[14px] rounded-full bg-white/25 px-1 text-[9px] leading-[14px] text-center">
           {l.orden_trabajo}
         </span>
       )}
@@ -987,26 +994,35 @@ function IntermediaOverlay({
   dayIdx: number;
   onClick: () => void;
 }) {
-  const { anulada, hasWorker, affected, isPriority, enCurso, finalizada, rechazada } = cleaningState(l);
-  // base: dark purple translucent overlay on top of reservation bar
-  let cls =
-    "bg-purple-700/60 text-white border border-dashed border-purple-200/90 backdrop-blur-[1px]";
-  if (anulada) {
-    cls =
-      "bg-gray-400/60 text-white line-through bg-[repeating-linear-gradient(45deg,transparent_0_4px,rgba(0,0,0,0.15)_4px_8px)] border border-dashed border-gray-500";
-  } else if (affected) {
-    cls = "bg-amber-500/60 text-white border border-dashed border-amber-200";
-  } else if (enCurso) {
-    cls = "bg-violet-500/60 text-white border border-dashed border-violet-200";
-  } else if (rechazada) {
-    cls = "bg-red-600/80 text-white border border-red-700";
-  } else if (finalizada) {
-    cls = "bg-emerald-300/60 text-emerald-950 border border-dashed border-emerald-400 opacity-80";
-  } else if (hasWorker && isPriority) {
-    cls = "bg-amber-500/55 text-white border border-dashed border-amber-200";
-  }
+  const { anulada, hasWorker, affected, isPriority, finalizada, rechazada } = cleaningState(l);
   const left = dayIdx * DAY_COL_W + 0.24 * DAY_COL_W;
   const width = 0.36 * DAY_COL_W;
+  let cls = "border border-dashed backdrop-blur-[1px]";
+  const inlineStyle: React.CSSProperties = {
+    left,
+    width,
+    top: 3,
+    height: 20,
+  };
+  if (!hasWorker && !anulada) {
+    cls += " bg-purple-700/60 text-white border-purple-200/90";
+  } else {
+    const s = getEstadoStyle(l.estado);
+    inlineStyle.backgroundColor = s.bg;
+    inlineStyle.color = s.fg;
+    cls += " border-white/40";
+    if (anulada) {
+      cls +=
+        " line-through bg-[repeating-linear-gradient(45deg,transparent_0_4px,rgba(0,0,0,0.15)_4px_8px)]";
+    }
+  }
+  if (isPriority && hasWorker && !anulada) {
+    cls += " ring-2 ring-amber-400";
+  }
+  if (affected && !anulada) {
+    cls += " border-dashed border-amber-300";
+  }
+  void finalizada; void rechazada;
   const label = anulada
     ? "NUL"
     : rechazada
@@ -1027,12 +1043,12 @@ function IntermediaOverlay({
         "absolute z-10 rounded flex items-center justify-center gap-1 px-1 text-[10px] font-semibold overflow-hidden shadow-sm",
         cls,
       )}
-      style={{ left, width, top: 3, height: 20 }}
+      style={inlineStyle}
       title={`Intermedia · ${l.fecha_limpieza}`}
     >
       <span className="truncate">{label}</span>
       {hasWorker && l.orden_trabajo != null && !anulada && (
-        <span className="shrink-0 h-3.5 min-w-[14px] rounded-full bg-black/30 px-1 text-[9px] leading-[14px] text-center">
+        <span className="shrink-0 h-3.5 min-w-[14px] rounded-full bg-white/25 px-1 text-[9px] leading-[14px] text-center">
           {l.orden_trabajo}
         </span>
       )}
