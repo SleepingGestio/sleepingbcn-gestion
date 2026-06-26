@@ -15,6 +15,7 @@ import {
 import { Link2, Sofa } from "lucide-react";
 import { fmtDate } from "@/lib/format";
 import { LimpiezaPopover, type Limpieza } from "@/components/limpieza-popover";
+import { getEstadoStyle } from "@/components/estado-limpieza-badge";
 import { fetchLimpiadores } from "@/lib/catalogos";
 import { generarLimpiezas } from "@/lib/generar-limpiezas";
 import { Input } from "@/components/ui/input";
