@@ -1006,7 +1006,7 @@ function IntermediaOverlay({
     height: 20,
   };
   if (!hasWorker && !anulada) {
-    cls += " bg-purple-700/60 text-white border-purple-200/90";
+    cls += " bg-rose-400/85 text-white border-rose-500";
   } else {
     const s = getEstadoStyle(l.estado);
     inlineStyle.backgroundColor = s.bg;
@@ -1023,7 +1023,6 @@ function IntermediaOverlay({
   if (affected && !anulada) {
     cls += " border-dashed border-amber-300";
   }
-  void finalizada; void rechazada;
   const label = anulada
     ? "NUL"
     : rechazada
