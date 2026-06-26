@@ -927,7 +927,7 @@ function SalidaLabel({
   const width = 0.36 * DAY_COL_W;
 
   let cls = "border border-dashed";
-  let inlineStyle: React.CSSProperties = {
+  let inlineStyle: CSSProperties = {
     left,
     width,
     top: 3,
@@ -999,7 +999,7 @@ function IntermediaOverlay({
   const left = dayIdx * DAY_COL_W + 0.24 * DAY_COL_W;
   const width = 0.36 * DAY_COL_W;
   let cls = "border border-dashed backdrop-blur-[1px]";
-  const inlineStyle: React.CSSProperties = {
+  const inlineStyle: CSSProperties = {
     left,
     width,
     top: 3,
