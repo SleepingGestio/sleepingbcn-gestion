@@ -22,19 +22,34 @@ export const ESTADO_LIMPIEZA_STYLE: Record<
   anulada:     { bg: "#9CA3AF", fg: "#FFFFFF", label: "Anulada" },
 };
 
-export function getEstadoStyle(estado: string | null | undefined) {
+const SIN_ASIGNAR_STYLE = { bg: "#FEE2E2", fg: "#7F1D1D", label: "Sin asignar" };
+
+function isNullWorker(worker: unknown) {
+  return worker === null || worker === undefined || worker === "";
+}
+
+export function getEstadoStyle(
+  estado: string | null | undefined,
+  worker?: number | string | null | undefined,
+) {
   const key = (estado ?? "activa") as EstadoLimpieza;
-  return ESTADO_LIMPIEZA_STYLE[key] ?? ESTADO_LIMPIEZA_STYLE.activa;
+  const base = ESTADO_LIMPIEZA_STYLE[key] ?? ESTADO_LIMPIEZA_STYLE.activa;
+  if (key === "activa" && worker !== undefined && isNullWorker(worker)) {
+    return SIN_ASIGNAR_STYLE;
+  }
+  return base;
 }
 
 export function EstadoLimpiezaBadge({
   estado,
+  worker,
   className,
 }: {
   estado: string | null | undefined;
+  worker?: number | string | null | undefined;
   className?: string;
 }) {
-  const s = getEstadoStyle(estado);
+  const s = getEstadoStyle(estado, worker);
   return (
     <span
       className={cn(
