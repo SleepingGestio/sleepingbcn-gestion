@@ -628,7 +628,7 @@ export function LimpiezaPopover({ open, loadKey, onOpenChange, apt, fecha, exist
           <DialogHeader className="px-4 py-3 border-b">
             <DialogTitle className="text-base flex items-center gap-2">
               <span>{apt.nombre}</span>
-              <EstadoLimpiezaBadge estado={form.estado} />
+              <EstadoLimpiezaBadge estado={form.estado} worker={form.worker} />
             </DialogTitle>
             {(apt.grupo_nombre || apt.camas_fijas != null || form.tipo === "intermedia") && (
               <DialogDescription className="text-xs">
