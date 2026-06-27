@@ -6,6 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PersonalAdmin } from "@/components/personal-admin";
 import { ApartamentosAdmin } from "@/components/apartamentos-admin";
+import { UsuariosAdmin } from "@/components/usuarios-admin";
+import { useCurrentPersonal } from "@/hooks/use-current-personal";
 
 export const Route = createFileRoute("/configuracion")({
   component: ConfigPage,
@@ -13,6 +15,7 @@ export const Route = createFileRoute("/configuracion")({
 
 function ConfigPage() {
   const { user, signOut } = useAuth();
+  const { isAdmin } = useCurrentPersonal();
   return (
     <AppShell title="Configuración">
       <Tabs defaultValue="general" className="w-full">
@@ -20,6 +23,7 @@ function ConfigPage() {
           <TabsTrigger value="general">General</TabsTrigger>
           <TabsTrigger value="personal">Personal</TabsTrigger>
           <TabsTrigger value="apartamentos">Apartamentos</TabsTrigger>
+          {isAdmin && <TabsTrigger value="usuarios">Usuarios</TabsTrigger>}
         </TabsList>
         <TabsContent value="general" className="max-w-2xl space-y-4">
           <Card>
@@ -52,6 +56,11 @@ function ConfigPage() {
         <TabsContent value="apartamentos">
           <ApartamentosAdmin />
         </TabsContent>
+        {isAdmin && (
+          <TabsContent value="usuarios">
+            <UsuariosAdmin />
+          </TabsContent>
+        )}
       </Tabs>
     </AppShell>
   );

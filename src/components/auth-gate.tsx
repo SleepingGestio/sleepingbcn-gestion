@@ -23,7 +23,8 @@ export function AuthGate({ children }: { children: ReactNode }) {
 }
 
 function RoleRouter({ children }: { children: ReactNode }) {
-  const { isWorkerOnly, loading } = useCurrentPersonal();
+  const { isWorkerOnly, hasAppAccess, notConfigured, loading } = useCurrentPersonal();
+  const { signOut } = useAuth();
   const router = useRouter();
   const path = useRouterState({ select: (s) => s.location.pathname });
   useEffect(() => {
@@ -32,6 +33,26 @@ function RoleRouter({ children }: { children: ReactNode }) {
       router.navigate({ to: "/mi-dia", replace: true });
     }
   }, [isWorkerOnly, loading, path, router]);
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center text-sm text-muted-foreground">
+        Cargando…
+      </div>
+    );
+  }
+  if (notConfigured || !hasAppAccess) {
+    return (
+      <div className="min-h-screen flex items-center justify-center px-6 text-center">
+        <div className="space-y-3 max-w-sm">
+          <p className="text-base font-semibold">Usuario no configurado</p>
+          <p className="text-sm text-muted-foreground">
+            Tu cuenta no tiene acceso a esta aplicación. Contacta con el administrador.
+          </p>
+          <Button variant="outline" onClick={() => signOut()}>Cerrar sesión</Button>
+        </div>
+      </div>
+    );
+  }
   if (isWorkerOnly && path !== "/mi-dia") {
     return (
       <div className="min-h-screen flex items-center justify-center text-sm text-muted-foreground">
