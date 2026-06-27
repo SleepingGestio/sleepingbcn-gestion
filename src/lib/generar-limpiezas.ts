@@ -27,6 +27,11 @@ type Gestio = {
   HCheckOutConf: string | null;
 };
 
+type Grupo = {
+  id_grupo: number;
+  mostrar_por_defecto: boolean | null;
+};
+
 type ExistingLimp = {
   id_limpieza: number;
   numero_reserva: string | null;
