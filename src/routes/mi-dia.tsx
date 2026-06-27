@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useMemo, useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -113,13 +113,35 @@ function windowHours(outTime: string | null, inTime: string | null, fecha: strin
 const VISIBLE_STATES = ["comunicada", "aceptada", "en_curso", "finalizada"] as const;
 
 function MiDiaPage() {
-  const { persona, loading: loadingPersona, isLimpieza } = useCurrentPersonal();
+  const { persona, loading: loadingPersona, isWorker, isAdmin, isGestor } = useCurrentPersonal();
   const { signOut } = useAuth();
+  const navigate = useNavigate();
 
-  if (loadingPersona) {
+  const previewParam = typeof window !== "undefined"
+    ? new URLSearchParams(window.location.search).get("preview")
+    : null;
+  const canPreview = isAdmin || isGestor;
+  const previewId = canPreview && previewParam ? Number(previewParam) : null;
+
+  const previewQ = useQuery({
+    queryKey: ["mi-dia-preview-persona", previewId],
+    enabled: !!previewId,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("personal")
+        .select("id_persona, nombre, apellidos")
+        .eq("id_persona", previewId!)
+        .maybeSingle();
+      if (error) throw error;
+      return data as { id_persona: number; nombre: string | null; apellidos: string | null } | null;
+    },
+  });
+
+  if (loadingPersona || (previewId && previewQ.isLoading)) {
     return <div className="min-h-screen grid place-items-center text-sm text-muted-foreground">Cargando…</div>;
   }
-  if (!persona || !isLimpieza) {
+  const allowed = !!persona && (isWorker || !!previewId);
+  if (!allowed) {
     return (
       <div className="min-h-screen grid place-items-center px-6 text-center">
         <div>
@@ -129,10 +151,37 @@ function MiDiaPage() {
       </div>
     );
   }
-  return <WorkerView personalId={persona.id_persona} nombre={persona.nombre ?? "limpiador/a"} />;
+  const targetId = previewId ?? persona!.id_persona;
+  const targetName = previewId
+    ? ([previewQ.data?.nombre, previewQ.data?.apellidos].filter(Boolean).join(" ") || `#${previewId}`)
+    : (persona!.nombre ?? "limpiador/a");
+  return (
+    <WorkerView
+      personalId={targetId}
+      nombre={targetName}
+      previewing={!!previewId ? targetName : null}
+      onExitPreview={() => {
+        navigate({ to: "/mi-dia", replace: true });
+        if (typeof window !== "undefined") {
+          window.history.replaceState({}, "", "/mi-dia");
+          window.location.reload();
+        }
+      }}
+    />
+  );
 }
 
-function WorkerView({ personalId, nombre }: { personalId: number; nombre: string }) {
+function WorkerView({
+  personalId,
+  nombre,
+  previewing,
+  onExitPreview,
+}: {
+  personalId: number;
+  nombre: string;
+  previewing?: string | null;
+  onExitPreview?: () => void;
+}) {
   const { signOut } = useAuth();
   const todayISO = toISO(new Date());
   const tomorrowISO = toISO(new Date(Date.now() + 86400000));
@@ -278,8 +327,21 @@ function WorkerView({ personalId, nombre }: { personalId: number; nombre: string
 
   return (
     <div className="min-h-screen bg-slate-50 pb-12">
+      {previewing && (
+        <div className="sticky top-0 z-40 bg-amber-400 text-amber-950 px-4 py-2 text-sm font-semibold flex items-center gap-2 shadow">
+          <span className="flex-1">👁 Modo supervisión — viendo como: {previewing}</span>
+          <button
+            type="button"
+            onClick={() => onExitPreview?.()}
+            className="h-7 w-7 grid place-items-center rounded-full hover:bg-amber-500/40"
+            aria-label="Salir del modo supervisión"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      )}
       {/* Header */}
-      <header className="sticky top-0 z-30 bg-[#26215C] text-white px-4 py-3 shadow-md">
+      <header className={cn("sticky z-30 bg-[#26215C] text-white px-4 py-3 shadow-md", previewing ? "top-[36px]" : "top-0")}>
         <div className="flex items-center gap-3">
           <div className="flex-1 min-w-0">
             <div className="text-base font-semibold truncate">Hola, {nombre} 👋</div>
@@ -311,7 +373,7 @@ function WorkerView({ personalId, nombre }: { personalId: number; nombre: string
         </div>
       ) : (
         <>
-          <div className="sticky top-[60px] z-20 bg-slate-50 border-b">
+          <div className={cn("sticky z-20 bg-slate-50 border-b", previewing ? "top-[96px]" : "top-[60px]")}>
             <div className="flex gap-2 overflow-x-auto px-3 py-2">
               {daysWithTasks.map((d) => {
                 const active = d.fecha === activeDay;
