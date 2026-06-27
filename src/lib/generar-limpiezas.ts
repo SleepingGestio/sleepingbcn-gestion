@@ -15,6 +15,7 @@ type ResVw = {
 
 type Apt = {
   id_apt: number;
+  id_grupo: number | null;
   camas_fijas: number | null;
   tiene_sofa_cama: boolean | null;
   requiere_limpieza_intermedia: boolean | null;
