@@ -6,7 +6,6 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PersonalAdmin } from "@/components/personal-admin";
 import { ApartamentosAdmin } from "@/components/apartamentos-admin";
-import { useCurrentPersonal } from "@/hooks/use-current-personal";
 
 export const Route = createFileRoute("/configuracion")({
   component: ConfigPage,
