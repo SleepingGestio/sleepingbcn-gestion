@@ -132,7 +132,7 @@ export async function generarLimpiezas(fromISO: string, toISO: string): Promise<
     .lte("Check in", toISO)
     .gte("Check-out", fromISO);
   if (e1) throw e1;
-  const vres = (vresAll ?? []) as ResVw[];
+  let vres = (vresAll ?? []) as ResVw[];
 
   // Plus a wider window of FUTURE reservations to find "next reservation" per apt (up to 7 days after a checkout in range).
   const widerTo = addDaysISO(toISO, 8);
