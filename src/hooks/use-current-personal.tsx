@@ -10,6 +10,7 @@ export type CurrentPersonal = {
   mail: string | null;
   activo: boolean | null;
   roles: string[];
+  accesoApps: string[];
 };
 
 async function fetchByEmail(email: string): Promise<CurrentPersonal | null> {
@@ -17,7 +18,7 @@ async function fetchByEmail(email: string): Promise<CurrentPersonal | null> {
   const { data, error } = await supabase
     .from("personal")
     .select(
-      "id_persona, nombre, apellidos, codigo, mail, activo, personal_roles(fecha_hasta, roles(nombre))",
+      "id_persona, nombre, apellidos, codigo, mail, activo, personal_roles(fecha_hasta, roles(nombre, acceso_app))",
     )
     .ilike("mail", email)
     .maybeSingle();
@@ -30,14 +31,16 @@ async function fetchByEmail(email: string): Promise<CurrentPersonal | null> {
     return null;
   }
   const pr = (data as any).personal_roles ?? [];
-  const roles: string[] = pr
-    .filter((r: any) => !r.fecha_hasta)
-    .map((r: any) => r.roles?.nombre)
-    .filter(Boolean);
+  const active = pr.filter((r: any) => !r.fecha_hasta);
+  const roles: string[] = active.map((r: any) => r.roles?.nombre).filter(Boolean);
+  const accesoApps: string[] = Array.from(
+    new Set(active.map((r: any) => r.roles?.acceso_app).filter(Boolean) as string[]),
+  );
   console.log("[useCurrentPersonal] Found personal:", {
     id_persona: (data as any).id_persona,
     mail: (data as any).mail,
     roles,
+    accesoApps,
   });
   return {
     id_persona: (data as any).id_persona,
@@ -47,6 +50,7 @@ async function fetchByEmail(email: string): Promise<CurrentPersonal | null> {
     mail: (data as any).mail,
     activo: (data as any).activo,
     roles,
+    accesoApps,
   };
 }
 
@@ -61,8 +65,26 @@ export function useCurrentPersonal() {
   });
   const persona = q.data ?? null;
   const roles = persona?.roles ?? [];
-  const isLimpieza = roles.includes("Limpieza");
-  const isGestor = roles.some((r) => r !== "Limpieza");
-  const isWorkerOnly = isLimpieza && !isGestor;
-  return { persona, roles, isLimpieza, isGestor, isWorkerOnly, loading: q.isLoading };
+  const accesoApps = persona?.accesoApps ?? [];
+  const isAdmin = accesoApps.includes("admin");
+  const isGestor = accesoApps.includes("gestor") || isAdmin;
+  const isWorker = accesoApps.includes("worker");
+  const isWorkerOnly = isWorker && !isAdmin && !isGestor;
+  const hasAppAccess = isAdmin || isGestor || isWorker;
+  const notConfigured = !q.isLoading && !!email && !persona;
+  // Backwards-compat alias used elsewhere
+  const isLimpieza = isWorker;
+  return {
+    persona,
+    roles,
+    accesoApps,
+    isAdmin,
+    isGestor,
+    isWorker,
+    isLimpieza,
+    isWorkerOnly,
+    hasAppAccess,
+    notConfigured,
+    loading: q.isLoading,
+  };
 }
