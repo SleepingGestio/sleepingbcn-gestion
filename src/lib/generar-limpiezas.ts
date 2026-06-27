@@ -15,6 +15,7 @@ type ResVw = {
 
 type Apt = {
   id_apt: number;
+  id_grupo: number | null;
   camas_fijas: number | null;
   tiene_sofa_cama: boolean | null;
   requiere_limpieza_intermedia: boolean | null;
@@ -24,6 +25,11 @@ type Gestio = {
   "Número": string;
   HCheckInConf: string | null;
   HCheckOutConf: string | null;
+};
+
+type Grupo = {
+  id_grupo: number;
+  mostrar_por_defecto: boolean | null;
 };
 
 type ExistingLimp = {
@@ -126,7 +132,7 @@ export async function generarLimpiezas(fromISO: string, toISO: string): Promise<
     .lte("Check in", toISO)
     .gte("Check-out", fromISO);
   if (e1) throw e1;
-  const vres = (vresAll ?? []) as ResVw[];
+  let vres = (vresAll ?? []) as ResVw[];
 
   // Plus a wider window of FUTURE reservations to find "next reservation" per apt (up to 7 days after a checkout in range).
   const widerTo = addDaysISO(toISO, 8);
@@ -156,14 +162,14 @@ export async function generarLimpiezas(fromISO: string, toISO: string): Promise<
   for (const arr of futureByApt.values())
     arr.sort((a, b) => a.ci.localeCompare(b.ci) || a.ciTime.localeCompare(b.ciTime));
 
-  // Apartments + gestio
+  // Apartments + gestio + grupos
   const aptIds = Array.from(new Set(vres.map((r) => r.id_apt).filter((x): x is number => x != null)));
   const numeros = Array.from(new Set(vres.map((r) => r["Número"]).filter(Boolean)));
-  const [aptsRes, gestRes] = await Promise.all([
+  const [aptsRes, gestRes, gruposRes] = await Promise.all([
     aptIds.length
       ? supabase
           .from("apartamentos")
-          .select("id_apt, camas_fijas, tiene_sofa_cama, requiere_limpieza_intermedia")
+          .select("id_apt, id_grupo, camas_fijas, tiene_sofa_cama, requiere_limpieza_intermedia")
           .in("id_apt", aptIds)
       : Promise.resolve({ data: [] as Apt[], error: null }),
     numeros.length
@@ -172,13 +178,27 @@ export async function generarLimpiezas(fromISO: string, toISO: string): Promise<
           .select(`"Número",HCheckInConf,HCheckOutConf`)
           .in("Número", numeros)
       : Promise.resolve({ data: [] as Gestio[], error: null }),
+    supabase.from("grupos_apartamentos").select("id_grupo, mostrar_por_defecto"),
   ]);
   if ((aptsRes as any).error) throw (aptsRes as any).error;
   if ((gestRes as any).error) throw (gestRes as any).error;
+  if (gruposRes.error) throw gruposRes.error;
   const aptMap = new Map<number, Apt>(((aptsRes.data ?? []) as Apt[]).map((a) => [a.id_apt, a]));
   const gestMap = new Map<string, Gestio>(
     ((gestRes.data ?? []) as Gestio[]).map((g) => [g["Número"], g]),
   );
+  const grupoMap = new Map<number, boolean>(
+    ((gruposRes.data ?? []) as Grupo[]).map((g) => [g.id_grupo, g.mostrar_por_defecto !== false]),
+  );
+  const hiddenAptIds = new Set<number>(
+    Array.from(aptMap.values())
+      .filter((a) => a.id_grupo == null || !grupoMap.get(a.id_grupo))
+      .map((a) => a.id_apt),
+  );
+
+  // Skip any apartment whose group is not shown by default (e.g., managed by other owners).
+  // We filter here so neither salida nor intermedia tasks are auto-generated for them.
+  vres = vres.filter((r) => r.id_apt == null || !hiddenAptIds.has(r.id_apt));
 
   // Existing limpiezas to dedupe — for all (numero, apt) pairs we may touch
   const { data: existRows, error: e3 } = numeros.length
