@@ -724,13 +724,14 @@ function TimeChip({ time, informed }: { time: string | null; informed: boolean |
 }
 
 function TaskCard({
-  t, apt, resv, onChanged, onOpenDetail,
+  t, apt, resv, onChanged, onOpenDetail, onFinish,
 }: {
   t: Limpieza;
   apt: Apartamento | undefined;
   resv: Map<string, ResvLite>;
   onChanged: () => void;
   onOpenDetail: () => void;
+  onFinish: () => void;
 }) {
   const [rejecting, setRejecting] = useState(false);
   const [motivo, setMotivo] = useState("");
@@ -866,7 +867,7 @@ function TaskCard({
           )}
           {t.estado === "en_curso" && (
             <>
-              <Button size="sm" className="h-11 px-4 bg-emerald-600 hover:bg-emerald-700 text-white" onClick={onOpenDetail}>
+              <Button size="sm" className="h-11 px-4 bg-emerald-600 hover:bg-emerald-700 text-white" onClick={onFinish}>
                 <Check className="h-4 w-4" /> Finalizar
               </Button>
               <Button size="sm" variant="secondary" className="h-11 px-4" onClick={onOpenDetail}>
