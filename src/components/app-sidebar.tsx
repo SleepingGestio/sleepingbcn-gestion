@@ -13,12 +13,11 @@ import {
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
 import { useAuth } from "@/hooks/use-auth";
-import { useCurrentPersonal } from "@/hooks/use-current-personal";
 import { usePermissions, type MenuKey } from "@/hooks/use-permissions";
 
 type NavItem = { title: string; url: string; icon: typeof Calendar; menu: MenuKey | null };
 
-const gestorItems: NavItem[] = [
+const NAV_ITEMS: NavItem[] = [
   { title: "Reservas", url: "/reservas", icon: Calendar, menu: "reservas" },
   { title: "Check-ins de hoy", url: "/checkins", icon: LogIn, menu: "checkins" },
   { title: "Limpiezas asignadas", url: "/limpiezas", icon: Sparkles, menu: "limpiezas_asignadas" },
@@ -27,17 +26,12 @@ const gestorItems: NavItem[] = [
   { title: "Mi día", url: "/mi-dia", icon: Smartphone, menu: "mi_dia" },
   { title: "Configuración", url: "/configuracion", icon: Settings, menu: null },
 ];
-const workerItems: NavItem[] = [
-  { title: "Mi día", url: "/mi-dia", icon: Smartphone, menu: "mi_dia" },
-];
 
 export function AppSidebar() {
   const path = useRouterState({ select: (s) => s.location.pathname });
   const { user, signOut } = useAuth();
-  const { isWorkerOnly } = useCurrentPersonal();
   const { canView, isAdmin } = usePermissions();
-  const base = isWorkerOnly ? workerItems : gestorItems;
-  const items = base.filter((it) => {
+  const items = NAV_ITEMS.filter((it) => {
     if (isAdmin) return true;
     if (it.url === "/configuracion") {
       return canView("config_general") || canView("config_personal") || canView("config_apartamentos");
