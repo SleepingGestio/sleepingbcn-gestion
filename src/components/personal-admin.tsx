@@ -18,7 +18,7 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Pencil, Plus, Mail, KeyRound, Eye, Ban } from "lucide-react";
+import { Pencil, Plus, Mail, Eye } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { usePermissions } from "@/hooks/use-permissions";
@@ -108,7 +108,7 @@ export function PersonalAdmin() {
 
   const [editing, setEditing] = useState<Persona | null>(null);
   const [creating, setCreating] = useState(false);
-  const [revokeFor, setRevokeFor] = useState<Persona | null>(null);
+  const [deactivateFor, setDeactivateFor] = useState<Persona | null>(null);
 
   const roleById = (id: number) => rolesQ.data?.find((r) => r.id_rol === id);
   const rolesOf = (id_persona: number): Rol[] =>
@@ -118,8 +118,24 @@ export function PersonalAdmin() {
       .filter((x): x is Rol => !!x);
 
   async function toggleActivo(p: Persona, activo: boolean) {
-    const { error } = await supabase.from("personal").update({ activo }).eq("id_persona", p.id_persona);
+    if (!activo) {
+      setDeactivateFor(p);
+      return;
+    }
+    const { error } = await supabase.from("personal").update({ activo: true }).eq("id_persona", p.id_persona);
     if (error) { toast.error("Error: " + error.message); return; }
+    personalQ.refetch();
+  }
+
+  async function confirmDeactivate() {
+    if (!deactivateFor) return;
+    const { error } = await supabase
+      .from("personal")
+      .update({ activo: false, mail: null })
+      .eq("id_persona", deactivateFor.id_persona);
+    if (error) { toast.error("Error: " + error.message); return; }
+    toast.success("Persona desactivada i accés revocat");
+    setDeactivateFor(null);
     personalQ.refetch();
   }
 
@@ -133,15 +149,6 @@ export function PersonalAdmin() {
     }
   }
 
-  async function confirmRevoke() {
-    if (!revokeFor) return;
-    const { error } = await supabase.from("personal").update({ mail: null }).eq("id_persona", revokeFor.id_persona);
-    if (error) { toast.error("Error: " + error.message); return; }
-    toast.success("Acceso revocado");
-    setRevokeFor(null);
-    personalQ.refetch();
-  }
-
   async function sendMagicLink(p: Persona) {
     if (!p.mail) return;
     try {
@@ -150,15 +157,6 @@ export function PersonalAdmin() {
     } catch (e) {
       toast.error("Error: " + (e as Error).message);
     }
-  }
-
-  async function forceReset(p: Persona) {
-    if (!p.mail) return;
-    const { error } = await supabase.auth.resetPasswordForEmail(p.mail, {
-      redirectTo: typeof window !== "undefined" ? window.location.origin : undefined,
-    });
-    if (error) { toast.error("Error: " + error.message); return; }
-    toast.success("Email de reset enviat");
   }
 
   return (
@@ -269,26 +267,6 @@ export function PersonalAdmin() {
                           <Mail className="h-4 w-4" />
                         </Button>
                       )}
-                      {isAdmin && status === "actiu" && (
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          title="Forçar reset PW"
-                          onClick={() => forceReset(p)}
-                        >
-                          <KeyRound className="h-4 w-4 text-amber-600" />
-                        </Button>
-                      )}
-                      {isAdmin && (status === "actiu" || status === "pendent") && (
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          title="Revocar accés"
-                          onClick={() => setRevokeFor(p)}
-                        >
-                          <Ban className="h-4 w-4 text-rose-600" />
-                        </Button>
-                      )}
                       {!isAdmin && canEdit && hasMail && (
                         <Button
                           size="icon"
@@ -333,17 +311,19 @@ export function PersonalAdmin() {
         />
       )}
 
-      <AlertDialog open={!!revokeFor} onOpenChange={(o) => !o && setRevokeFor(null)}>
+      <AlertDialog open={!!deactivateFor} onOpenChange={(o) => !o && setDeactivateFor(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Revocar acceso</AlertDialogTitle>
+            <AlertDialogTitle>
+              Desactivar {[deactivateFor?.nombre, deactivateFor?.apellidos].filter(Boolean).join(" ") || "persona"}?
+            </AlertDialogTitle>
             <AlertDialogDescription>
-              ¿Seguro? El usuario perderá el acceso inmediatamente. Esto borra el email de la ficha pero no elimina la cuenta de autenticación.
+              Perdrà l'accés a l'aplicació immediatament.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction onClick={confirmRevoke}>Revocar</AlertDialogAction>
+            <AlertDialogCancel>Cancel·lar</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDeactivate}>Confirmar</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
