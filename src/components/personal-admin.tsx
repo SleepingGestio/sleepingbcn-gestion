@@ -35,6 +35,7 @@ type Persona = {
   telefono: string | null;
   mail: string | null;
   activo: boolean | null;
+  onboarding_completat: boolean | null;
 };
 type Rol = { id_rol: number; nombre: string; acceso_app: string | null };
 type PersonaRol = { id_persona: number; id_rol: number; fecha_hasta: string | null };
@@ -62,7 +63,7 @@ export function PersonalAdmin() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("personal")
-        .select("id_persona,nombre,apellidos,codigo,tipo_contrato,telefono,mail,activo")
+        .select("id_persona,nombre,apellidos,codigo,tipo_contrato,telefono,mail,activo,onboarding_completat")
         .order("apellidos", { ascending: true, nullsFirst: false });
       if (error) throw error;
       return (data ?? []) as Persona[];
@@ -227,15 +228,13 @@ export function PersonalAdmin() {
               const canPreviewAsThis = roles.some((r) => permisosQ2.data?.has(r.id_rol));
               const authInfo = hasMail ? authByEmail.get(p.mail!.toLowerCase()) : undefined;
               // status: 'sense' | 'pendent' | 'actiu' | 'revocat'
-              let status: "sense" | "pendent" | "actiu" | "revocat" = "sense";
+              let status: "sense" | "pendent" | "actiu" | "revocat";
               if (!hasMail) {
-                status = hasAppRole ? "revocat" : "sense";
-              } else if (!authInfo || !authInfo.exists) {
                 status = "sense";
-              } else if (!authInfo.last_sign_in_at) {
-                status = "pendent";
-              } else {
+              } else if (p.onboarding_completat) {
                 status = "actiu";
+              } else {
+                status = "pendent";
               }
               const lastSignIn = authInfo?.last_sign_in_at
                 ? new Date(authInfo.last_sign_in_at).toLocaleDateString("ca-ES", { day: "2-digit", month: "2-digit" })
