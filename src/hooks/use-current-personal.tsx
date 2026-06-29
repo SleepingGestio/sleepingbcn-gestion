@@ -9,6 +9,7 @@ export type CurrentPersonal = {
   codigo: string | null;
   mail: string | null;
   activo: boolean | null;
+  onboarding_completat: boolean | null;
   roles: string[];
   roleIds: number[];
 };
@@ -18,7 +19,7 @@ async function fetchByEmail(email: string): Promise<CurrentPersonal | null> {
   const { data, error } = await supabase
     .from("personal")
     .select(
-      "id_persona, nombre, apellidos, codigo, mail, activo, personal_roles(id_rol, fecha_hasta, roles(nombre))",
+      "id_persona, nombre, apellidos, codigo, mail, activo, onboarding_completat, personal_roles(id_rol, fecha_hasta, roles(nombre))",
     )
     .ilike("mail", email)
     .maybeSingle();
@@ -49,6 +50,7 @@ async function fetchByEmail(email: string): Promise<CurrentPersonal | null> {
     codigo: (data as any).codigo,
     mail: (data as any).mail,
     activo: (data as any).activo,
+    onboarding_completat: (data as any).onboarding_completat ?? false,
     roles,
     roleIds,
   };

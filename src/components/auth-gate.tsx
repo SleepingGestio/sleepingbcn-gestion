@@ -11,8 +11,6 @@ import { ForcePasswordSetup } from "@/components/force-password-setup";
 
 export function AuthGate({ children }: { children: ReactNode }) {
   const { user, loading } = useAuth();
-  const [pwDone, setPwDone] = useState(false);
-
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center text-sm text-muted-foreground">
@@ -20,22 +18,13 @@ export function AuthGate({ children }: { children: ReactNode }) {
       </div>
     );
   }
-
   if (!user) return <LoginScreen />;
-  const needsPassword = (user.user_metadata as { password_set?: boolean } | null)?.password_set !== true;
-  if (needsPassword && !pwDone) {
-    return (
-      <>
-        <RoleRouter>{children}</RoleRouter>
-        <ForcePasswordSetup onDone={() => setPwDone(true)} />
-      </>
-    );
-  }
   return <RoleRouter>{children}</RoleRouter>;
 }
 
 function RoleRouter({ children }: { children: ReactNode }) {
-  const { notConfigured, loading } = useCurrentPersonal();
+  const { persona, notConfigured, loading } = useCurrentPersonal();
+  const [pwDone, setPwDone] = useState(false);
   const { canView, isAdmin, onlyMiDia, hasAnyAccess, loading: permLoading } = usePermissions();
   const { signOut } = useAuth();
   const router = useRouter();
@@ -95,7 +84,15 @@ function RoleRouter({ children }: { children: ReactNode }) {
       </div>
     );
   }
-  return <>{children}</>;
+  const needsPw = persona && persona.onboarding_completat === false;
+  return (
+    <>
+      {children}
+      {needsPw && !pwDone && (
+        <ForcePasswordSetup idPersona={persona!.id_persona} onDone={() => setPwDone(true)} />
+      )}
+    </>
+  );
 }
 
 function LoginScreen() {
