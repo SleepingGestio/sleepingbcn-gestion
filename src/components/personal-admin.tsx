@@ -542,3 +542,29 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
     </div>
   );
 }
+
+function CompteBadge({
+  status,
+  lastSignIn,
+  loading,
+}: {
+  status: "sense" | "pendent" | "actiu" | "revocat";
+  lastSignIn: string | null;
+  loading: boolean;
+}) {
+  if (loading) {
+    return <span className="text-xs text-muted-foreground">…</span>;
+  }
+  const cfg = {
+    sense: { dot: "bg-slate-400", text: "Sense compte", cls: "text-slate-600" },
+    pendent: { dot: "bg-amber-500", text: "Pendent", cls: "text-amber-700" },
+    actiu: { dot: "bg-emerald-500", text: lastSignIn ? `Actiu · ${lastSignIn}` : "Actiu", cls: "text-emerald-700" },
+    revocat: { dot: "bg-rose-500", text: "Revocat", cls: "text-rose-700" },
+  }[status];
+  return (
+    <div className={cn("inline-flex items-center gap-2 text-xs font-medium", cfg.cls)}>
+      <span className={cn("h-2 w-2 rounded-full", cfg.dot)} />
+      <span>{cfg.text}</span>
+    </div>
+  );
+}
