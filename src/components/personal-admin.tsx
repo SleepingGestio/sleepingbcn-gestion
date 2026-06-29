@@ -78,6 +78,19 @@ export function PersonalAdmin() {
     },
   });
 
+  const permisosQ2 = useQuery({
+    queryKey: ["rol-permisos-mi-dia"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("rol_permisos")
+        .select("id_rol, menu, pot_veure")
+        .eq("menu", "mi_dia")
+        .eq("pot_veure", true);
+      if (error) throw error;
+      return new Set(((data ?? []) as { id_rol: number }[]).map((r) => r.id_rol));
+    },
+  });
+
   const prQ = useQuery({
     queryKey: ["personal-roles"],
     queryFn: async () => {
@@ -159,10 +172,10 @@ export function PersonalAdmin() {
             )}
             {(personalQ.data ?? []).map((p) => {
               const roles = rolesOf(p.id_persona);
-              const hasAppRole = roles.some((r) => !!r.acceso_app);
+              const hasAppRole = roles.length > 0;
               const hasMail = !!(p.mail && p.mail.trim());
               const active = hasAppRole && hasMail;
-              const isWorker = roles.some((r) => r.acceso_app === "worker");
+              const canPreviewAsThis = roles.some((r) => permisosQ2.data?.has(r.id_rol));
               return (
                 <TableRow key={p.id_persona}>
                   <TableCell className="font-medium">
@@ -230,7 +243,7 @@ export function PersonalAdmin() {
                           <KeyRound className="h-4 w-4 text-rose-600" />
                         </Button>
                       )}
-                      {isWorker && (
+                      {canPreviewAsThis && (
                         <Button
                           size="icon"
                           variant="ghost"

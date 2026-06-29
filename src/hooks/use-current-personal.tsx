@@ -10,7 +10,7 @@ export type CurrentPersonal = {
   mail: string | null;
   activo: boolean | null;
   roles: string[];
-  accesoApps: string[];
+  roleIds: number[];
 };
 
 async function fetchByEmail(email: string): Promise<CurrentPersonal | null> {
@@ -18,7 +18,7 @@ async function fetchByEmail(email: string): Promise<CurrentPersonal | null> {
   const { data, error } = await supabase
     .from("personal")
     .select(
-      "id_persona, nombre, apellidos, codigo, mail, activo, personal_roles(fecha_hasta, roles(nombre, acceso_app))",
+      "id_persona, nombre, apellidos, codigo, mail, activo, personal_roles(id_rol, fecha_hasta, roles(nombre))",
     )
     .ilike("mail", email)
     .maybeSingle();
@@ -33,14 +33,14 @@ async function fetchByEmail(email: string): Promise<CurrentPersonal | null> {
   const pr = (data as any).personal_roles ?? [];
   const active = pr.filter((r: any) => !r.fecha_hasta);
   const roles: string[] = active.map((r: any) => r.roles?.nombre).filter(Boolean);
-  const accesoApps: string[] = Array.from(
-    new Set(active.map((r: any) => r.roles?.acceso_app).filter(Boolean) as string[]),
+  const roleIds: number[] = Array.from(
+    new Set(active.map((r: any) => r.id_rol).filter((x: any) => typeof x === "number")),
   );
   console.log("[useCurrentPersonal] Found personal:", {
     id_persona: (data as any).id_persona,
     mail: (data as any).mail,
     roles,
-    accesoApps,
+    roleIds,
   });
   return {
     id_persona: (data as any).id_persona,
@@ -50,7 +50,7 @@ async function fetchByEmail(email: string): Promise<CurrentPersonal | null> {
     mail: (data as any).mail,
     activo: (data as any).activo,
     roles,
-    accesoApps,
+    roleIds,
   };
 }
 
@@ -65,25 +65,14 @@ export function useCurrentPersonal() {
   });
   const persona = q.data ?? null;
   const roles = persona?.roles ?? [];
-  const accesoApps = persona?.accesoApps ?? [];
-  const isAdmin = accesoApps.includes("admin");
-  const isGestor = accesoApps.includes("gestor") || isAdmin;
-  const isWorker = accesoApps.includes("worker");
-  const isWorkerOnly = isWorker && !isAdmin && !isGestor;
-  const hasAppAccess = isAdmin || isGestor || isWorker;
+  const roleIds = persona?.roleIds ?? [];
+  const isAdmin = roleIds.includes(1);
   const notConfigured = !q.isLoading && !!email && !persona;
-  // Backwards-compat alias used elsewhere
-  const isLimpieza = isWorker;
   return {
     persona,
     roles,
-    accesoApps,
+    roleIds,
     isAdmin,
-    isGestor,
-    isWorker,
-    isLimpieza,
-    isWorkerOnly,
-    hasAppAccess,
     notConfigured,
     loading: q.isLoading,
   };
