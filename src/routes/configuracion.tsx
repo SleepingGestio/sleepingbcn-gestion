@@ -61,4 +61,101 @@ function ConfigPage() {
       </Tabs>
     </AppShell>
   );
+function ChangePasswordForm() {
+  const [isOpen, setIsOpen] = useState(false);
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  function reset() {
+    setNewPassword("");
+    setConfirmPassword("");
+    setError(null);
+  }
+
+  function toggleOpen() {
+    if (isOpen) {
+      reset();
+    }
+    setIsOpen((prev) => !prev);
+  }
+
+  async function onSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+
+    if (!newPassword || !confirmPassword) {
+      setError("Ambos campos son obligatorios");
+      return;
+    }
+
+    if (newPassword.length < 8) {
+      setError("La contraseña debe tener al menos 8 caracteres");
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      setError("Las contraseñas no coinciden");
+      return;
+    }
+
+    setBusy(true);
+    const { error: updateError } = await supabase.auth.updateUser({ password: newPassword });
+    setBusy(false);
+
+    if (updateError) {
+      setError(updateError.message);
+      toast.error("Error al actualizar la contraseña");
+      return;
+    }
+
+    toast.success("Contraseña actualizada correctamente");
+    reset();
+    setIsOpen(false);
+  }
+
+  return (
+    <div className="pt-2">
+      {!isOpen ? (
+        <Button variant="secondary" size="sm" onClick={toggleOpen}>
+          Cambiar contraseña
+        </Button>
+      ) : (
+        <form onSubmit={onSubmit} className="space-y-3 rounded-md border p-3">
+          <div className="space-y-2">
+            <Label htmlFor="new-password">Nueva contraseña</Label>
+            <Input
+              id="new-password"
+              type="password"
+              autoComplete="new-password"
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              disabled={busy}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="confirm-password">Confirmar contraseña</Label>
+            <Input
+              id="confirm-password"
+              type="password"
+              autoComplete="new-password"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              disabled={busy}
+            />
+          </div>
+          {error && <p className="text-sm text-destructive">{error}</p>}
+          <div className="flex gap-2">
+            <Button type="submit" disabled={busy}>
+              {busy ? "Guardando…" : "Guardar contraseña"}
+            </Button>
+            <Button type="button" variant="outline" onClick={toggleOpen} disabled={busy}>
+              Cancelar
+            </Button>
+          </div>
+        </form>
+      )}
+    </div>
+  );
 }
