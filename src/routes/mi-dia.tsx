@@ -209,6 +209,7 @@ function WorkerView({
   const [activeDay, setActiveDay] = useState<string>(todayISO);
   const [detailId, setDetailId] = useState<number | null>(null);
   const [hoursOpen, setHoursOpen] = useState(false);
+  const [pwOpen, setPwOpen] = useState(false);
 
   // Upcoming tasks (today + future)
   const tasksQ = useQuery({
@@ -373,14 +374,25 @@ function WorkerView({
           >
             <Clock className="h-4 w-4" /> {fmtHours(monthHours)} mes
           </button>
-          <button
-            type="button"
-            onClick={() => signOut()}
-            className="rounded-full bg-white/10 hover:bg-white/20 h-10 w-10 grid place-items-center"
-            aria-label="Cerrar sesión"
-          >
-            <LogOut className="h-4 w-4" />
-          </button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                className="rounded-full bg-white/10 hover:bg-white/20 h-10 w-10 grid place-items-center"
+                aria-label="Menú de cuenta"
+              >
+                <UserCircle2 className="h-5 w-5" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-52">
+              <DropdownMenuItem onSelect={() => setPwOpen(true)}>
+                <KeyRound className="h-4 w-4" /> Canviar contrasenya
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => signOut()}>
+                <LogOut className="h-4 w-4" /> Tancar sessió
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </header>
 
@@ -473,6 +485,8 @@ function WorkerView({
           />
         </SheetContent>
       </Sheet>
+
+      <ChangePasswordDialog open={pwOpen} onOpenChange={setPwOpen} />
     </div>
   );
 }
