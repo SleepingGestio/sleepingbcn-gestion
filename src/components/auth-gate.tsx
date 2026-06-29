@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { ForcePasswordSetup } from "@/components/force-password-setup";
 
 export function AuthGate({ children }: { children: ReactNode }) {
   const { user, loading } = useAuth();
@@ -20,6 +21,16 @@ export function AuthGate({ children }: { children: ReactNode }) {
   }
 
   if (!user) return <LoginScreen />;
+  const needsPassword = (user.user_metadata as { password_set?: boolean } | null)?.password_set !== true;
+  const [pwDone, setPwDone] = useState(false);
+  if (needsPassword && !pwDone) {
+    return (
+      <>
+        <RoleRouter>{children}</RoleRouter>
+        <ForcePasswordSetup onDone={() => setPwDone(true)} />
+      </>
+    );
+  }
   return <RoleRouter>{children}</RoleRouter>;
 }
 
