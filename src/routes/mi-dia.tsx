@@ -179,10 +179,10 @@ function MiDiaPage() {
       nombre={targetName}
       previewing={!!previewId ? targetName : null}
       onExitPreview={() => {
-        navigate({ to: "/mi-dia", replace: true });
         if (typeof window !== "undefined") {
-          window.history.replaceState({}, "", "/mi-dia");
-          window.location.reload();
+          window.location.href = "/configuracion?tab=personal";
+        } else {
+          navigate({ to: "/configuracion", replace: true });
         }
       }}
     />
@@ -460,6 +460,17 @@ function WorkerView({
   const pendingCount = activeTasks.filter((t) => t.estado === "comunicada").length;
   const dayNote = (comDiaQ.data?.observaciones ?? "").trim();
 
+  async function finishTask(task: Limpieza) {
+    if (disabled) return;
+    const { error } = await supabase
+      .from("limpiezas")
+      .update({ estado: "finalizada", finalizada_en: new Date().toISOString() })
+      .eq("id_limpieza", task.id_limpieza);
+    if (error) { toast.error("Error: " + error.message); return; }
+    refetchAll();
+    setEndSheetOpen(true);
+  }
+
   const refetchAll = () => {
     tasksQ.refetch();
     monthTasksQ.refetch();
@@ -594,6 +605,7 @@ function WorkerView({
                 resv={resvQ.data ?? new Map()}
                 onChanged={refetchAll}
                 onOpenDetail={() => setDetailId(t.id_limpieza)}
+                onFinish={() => finishTask(t)}
               />
             ))}
           </div>
@@ -712,13 +724,14 @@ function TimeChip({ time, informed }: { time: string | null; informed: boolean |
 }
 
 function TaskCard({
-  t, apt, resv, onChanged, onOpenDetail,
+  t, apt, resv, onChanged, onOpenDetail, onFinish,
 }: {
   t: Limpieza;
   apt: Apartamento | undefined;
   resv: Map<string, ResvLite>;
   onChanged: () => void;
   onOpenDetail: () => void;
+  onFinish: () => void;
 }) {
   const [rejecting, setRejecting] = useState(false);
   const [motivo, setMotivo] = useState("");
@@ -854,7 +867,7 @@ function TaskCard({
           )}
           {t.estado === "en_curso" && (
             <>
-              <Button size="sm" className="h-11 px-4 bg-emerald-600 hover:bg-emerald-700 text-white" onClick={onOpenDetail}>
+              <Button size="sm" className="h-11 px-4 bg-emerald-600 hover:bg-emerald-700 text-white" onClick={onFinish}>
                 <Check className="h-4 w-4" /> Finalizar
               </Button>
               <Button size="sm" variant="secondary" className="h-11 px-4" onClick={onOpenDetail}>
@@ -946,13 +959,7 @@ function DetailView({
     if (error) { toast.error(error.message); return; }
     onChanged(); onClose();
   };
-  const finish = async () => {
-    setBusy(true);
-    const { error } = await supabase.from("limpiezas").update({ estado: "finalizada", finalizada_en: new Date().toISOString() }).eq("id_limpieza", t.id_limpieza);
-    setBusy(false);
-    if (error) { toast.error(error.message); return; }
-    onChanged(); onClose();
-  };
+  // Finalizar is only triggered from the task list, never from the detail view.
 
   return (
     <div className="flex flex-col min-h-full">
@@ -1048,11 +1055,6 @@ function DetailView({
           {t.estado === "aceptada" && (
             <Button className="w-full h-12 bg-[#26215C] hover:bg-[#1e1a48] text-white" disabled={busy} onClick={start}>
               <Play className="h-4 w-4" /> Iniciar limpieza
-            </Button>
-          )}
-          {t.estado === "en_curso" && (
-            <Button className="w-full h-12 bg-emerald-600 hover:bg-emerald-700 text-white" disabled={busy} onClick={finish}>
-              <Check className="h-4 w-4" /> Finalizar
             </Button>
           )}
         </section>

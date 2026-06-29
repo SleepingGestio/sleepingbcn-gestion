@@ -30,9 +30,13 @@ function ConfigPage() {
     { value: "roles", label: "Roles", visible: isAdmin },
   ].filter((t) => t.visible);
   const defaultTab = tabs[0]?.value ?? "general";
+  const urlTab = typeof window !== "undefined"
+    ? new URLSearchParams(window.location.search).get("tab")
+    : null;
+  const initialTab = urlTab && tabs.some((t) => t.value === urlTab) ? urlTab : defaultTab;
   return (
     <AppShell title="Configuración">
-      <Tabs defaultValue={defaultTab} className="w-full">
+      <Tabs defaultValue={initialTab} className="w-full">
         <TabsList>
           {tabs.map((t) => (
             <TabsTrigger key={t.value} value={t.value}>{t.label}</TabsTrigger>
