@@ -460,6 +460,17 @@ function WorkerView({
   const pendingCount = activeTasks.filter((t) => t.estado === "comunicada").length;
   const dayNote = (comDiaQ.data?.observaciones ?? "").trim();
 
+  async function finishTask(task: Limpieza) {
+    if (disabled) return;
+    const { error } = await supabase
+      .from("limpiezas")
+      .update({ estado: "finalizada", finalizada_en: new Date().toISOString() })
+      .eq("id_limpieza", task.id_limpieza);
+    if (error) { toast.error("Error: " + error.message); return; }
+    refetchAll();
+    setEndSheetOpen(true);
+  }
+
   const refetchAll = () => {
     tasksQ.refetch();
     monthTasksQ.refetch();
@@ -594,6 +605,7 @@ function WorkerView({
                 resv={resvQ.data ?? new Map()}
                 onChanged={refetchAll}
                 onOpenDetail={() => setDetailId(t.id_limpieza)}
+                onFinish={() => finishTask(t)}
               />
             ))}
           </div>
