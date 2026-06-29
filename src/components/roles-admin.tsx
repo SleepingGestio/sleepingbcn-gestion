@@ -15,6 +15,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Plus, Pencil, Check, X } from "lucide-react";
 import { toast } from "sonner";
 import { ALL_MENUS, type MenuKey } from "@/hooks/use-permissions";
+import { roleColor } from "@/lib/role-colors";
 import { cn } from "@/lib/utils";
 
 type Rol = { id_rol: number; nombre: string; acceso_app: string | null };
@@ -26,17 +27,6 @@ const ACCESO_OPTIONS = [
   { value: "worker", label: "Worker" },
   { value: "__none__", label: "Cap accés" },
 ];
-
-const ACCESO_STYLE: Record<string, { bg: string; fg: string }> = {
-  admin: { bg: "#3C3489", fg: "#FFFFFF" },
-  gestor: { bg: "#0C447C", fg: "#FFFFFF" },
-  worker: { bg: "#085041", fg: "#FFFFFF" },
-};
-
-function accesoLabel(a: string | null) {
-  if (!a) return "Inactiu";
-  return a.charAt(0).toUpperCase() + a.slice(1);
-}
 
 export function RolesAdmin() {
   // One-time rename: Admin → AdminAPP for id_rol=1
@@ -165,7 +155,12 @@ function RoleRow({
             </div>
           ) : (
             <div className="flex items-center gap-2">
-              <span className="font-medium">{rol.nombre}</span>
+              <span
+                className="rounded-full px-2 py-0.5 text-[11px] font-semibold"
+                style={{ background: roleColor(rol.nombre).bg, color: roleColor(rol.nombre).fg }}
+              >
+                {rol.nombre}
+              </span>
               {!locked && (
                 <Pencil
                   className="h-3.5 w-3.5 text-muted-foreground cursor-pointer"
@@ -174,12 +169,6 @@ function RoleRow({
               )}
             </div>
           )}
-          <span
-            className="rounded-full px-2 py-0.5 text-[11px] font-semibold"
-            style={s ? { background: s.bg, color: s.fg } : { background: "#E5E7EB", color: "#374151" }}
-          >
-            {accesoLabel(rol.acceso_app)}
-          </span>
           {isCheckIn && (
             <span className="rounded-full px-2 py-0.5 text-[11px] font-semibold bg-amber-100 text-amber-800">
               Desactivat
