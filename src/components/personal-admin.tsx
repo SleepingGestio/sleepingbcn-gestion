@@ -22,6 +22,7 @@ import { Pencil, Plus, Mail, KeyRound, Eye } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { usePermissions } from "@/hooks/use-permissions";
+import { roleColor } from "@/lib/role-colors";
 
 type Persona = {
   id_persona: number;
@@ -37,14 +38,6 @@ type Rol = { id_rol: number; nombre: string; acceso_app: string | null };
 type PersonaRol = { id_persona: number; id_rol: number; fecha_hasta: string | null };
 
 const CONTRATOS = ["Indefinido", "Temporal", "Autónomo", "Prácticas", "Otro"];
-
-const ACCESO_STYLE: Record<string, { bg: string; fg: string }> = {
-  admin:  { bg: "#3C3489", fg: "#FFFFFF" },
-  gestor: { bg: "#0C447C", fg: "#FFFFFF" },
-  worker: { bg: "#085041", fg: "#FFFFFF" },
-};
-const NULL_STYLE = { bg: "#E5E7EB", fg: "#374151" };
-const roleStyle = (a: string | null) => (a && ACCESO_STYLE[a]) || NULL_STYLE;
 
 async function sendInvite(email: string) {
   const { error } = await supabase.auth.signInWithOtp({
@@ -182,7 +175,7 @@ export function PersonalAdmin() {
                       {roles.length === 0 ? (
                         <span className="text-xs text-muted-foreground">—</span>
                       ) : roles.map((r) => {
-                        const s = roleStyle(r.acceso_app);
+                        const s = roleColor(r.nombre);
                         return (
                           <span
                             key={r.id_rol}
@@ -414,14 +407,6 @@ function PersonaDialog({
                 <label key={r.id_rol} className="flex items-center gap-2 cursor-pointer text-sm">
                   <Checkbox checked={roleIds.has(r.id_rol)} onCheckedChange={() => toggleRole(r.id_rol)} />
                   <span>{r.nombre}</span>
-                  {r.acceso_app && (
-                    <span
-                      className="rounded px-1.5 py-0.5 text-[10px] font-semibold"
-                      style={{ background: roleStyle(r.acceso_app).bg, color: roleStyle(r.acceso_app).fg }}
-                    >
-                      {r.acceso_app}
-                    </span>
-                  )}
                 </label>
               ))}
               {roles.length === 0 && <span className="text-xs text-muted-foreground">Sin roles definidos</span>}
