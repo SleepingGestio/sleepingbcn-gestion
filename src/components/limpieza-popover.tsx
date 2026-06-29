@@ -468,6 +468,13 @@ export function LimpiezaPopover({ open, loadKey, onOpenChange, apt, fecha, exist
     try {
       const prevWorker = existing?.worker ?? null;
       const prevFecha = existing?.fecha_limpieza ?? null;
+      const prevEstado = existing?.estado ?? null;
+      const workerChanged = form.id_limpieza > 0 && (form.worker ?? null) !== prevWorker;
+      if (workerChanged && prevEstado && ["en_curso", "finalizada", "anulada"].includes(prevEstado)) {
+        toast.error("No es pot reasignar una tasca en curs, finalitzada o anulada");
+        setSaving(false);
+        return;
+      }
       const payload: any = {
         numero_reserva: form.numero_reserva,
         id_apt: form.id_apt,
@@ -499,6 +506,18 @@ export function LimpiezaPopover({ open, loadKey, onOpenChange, apt, fecha, exist
         affected_by_kb_change: false,
         affected_reason: null,
       };
+      // Reassigning a task to a different worker resets workflow state because
+      // the new worker has not been notified or confirmed yet.
+      if (workerChanged && form.worker != null) {
+        if (prevEstado === "comunicada") {
+          payload.estado = "activa";
+          payload.enviada_en = null;
+        } else if (prevEstado === "aceptada") {
+          payload.estado = "activa";
+          payload.enviada_en = null;
+          payload.aceptada_en = null;
+        }
+      }
       if (form.id_limpieza > 0) {
         const { error } = await supabase.from("limpiezas").update(payload).eq("id_limpieza", form.id_limpieza);
         if (error) throw error;
