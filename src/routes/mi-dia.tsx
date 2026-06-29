@@ -1219,3 +1219,150 @@ function ChangePasswordDialog({ open, onOpenChange }: { open: boolean; onOpenCha
     </Dialog>
   );
 }
+
+/* ---------------- Generic task: active banner + sheets ---------------- */
+
+function ActiveGenericBanner({
+  gen, onFinish, disabled,
+}: {
+  gen: { id_registre: number; inici: string; tipos_tarea_generica: { nombre: string } | null };
+  onFinish: () => void;
+  disabled: boolean;
+}) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 30_000);
+    return () => clearInterval(t);
+  }, []);
+  const startMs = new Date(gen.inici).getTime();
+  const elapsed = Math.max(0, (now - startMs) / 3_600_000);
+  const startHM = trimHM(gen.inici) ?? "—";
+
+  return (
+    <div className="mx-3 mt-3 rounded-xl bg-emerald-50 border border-emerald-300 p-3 shadow-sm">
+      <div className="flex items-start gap-3">
+        <div className="h-10 w-10 rounded-full bg-emerald-500 text-white grid place-items-center shrink-0">
+          <Play className="h-5 w-5" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="text-xs uppercase tracking-wide text-emerald-800 font-semibold">Tasca en curs</div>
+          <div className="text-base font-semibold text-emerald-950 truncate">
+            {gen.tipos_tarea_generica?.nombre ?? "Tasca genèrica"}
+          </div>
+          <div className="text-xs text-emerald-900 mt-0.5">
+            Inici {startHM} · {fmtHours(elapsed)} transcorregut
+          </div>
+        </div>
+      </div>
+      <div className="mt-3">
+        <Button
+          className="w-full h-11 bg-emerald-600 hover:bg-emerald-700 text-white"
+          disabled={disabled}
+          onClick={onFinish}
+        >
+          <Square className="h-4 w-4" /> Finalitzar tasca
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function StartJornadaPanel({
+  tipos, disabled, onStart, onCancel,
+}: {
+  tipos: { id_tipus: number; nombre: string }[];
+  disabled: boolean;
+  onStart: (idTipus: number, notes: string) => void;
+  onCancel: () => void;
+}) {
+  const [selected, setSelected] = useState<number | null>(tipos[0]?.id_tipus ?? null);
+  const [notes, setNotes] = useState("");
+  return (
+    <div className="pt-2 pb-6 space-y-4">
+      <div>
+        <div className="text-lg font-semibold">Iniciar jornada</div>
+        <div className="text-xs text-muted-foreground">Tria el tipus de tasca que comences</div>
+      </div>
+      <div className="grid grid-cols-1 gap-2">
+        {tipos.length === 0 && (
+          <div className="text-sm text-muted-foreground">No hi ha tipus actius. Contacta amb el gestor.</div>
+        )}
+        {tipos.map((t) => {
+          const active = selected === t.id_tipus;
+          return (
+            <button
+              key={t.id_tipus}
+              type="button"
+              onClick={() => setSelected(t.id_tipus)}
+              className={cn(
+                "text-left rounded-lg border px-3 py-3 text-sm font-medium transition-colors",
+                active
+                  ? "bg-[#26215C] text-white border-[#26215C]"
+                  : "bg-white text-slate-800 border-slate-200 hover:bg-slate-50",
+              )}
+            >
+              {t.nombre}
+            </button>
+          );
+        })}
+      </div>
+      <div>
+        <Label htmlFor="gen-notes" className="text-xs">Notes (opcional)</Label>
+        <Textarea
+          id="gen-notes"
+          value={notes}
+          onChange={(e) => setNotes(e.target.value)}
+          placeholder="Detalls opcionals…"
+          className="text-sm min-h-[70px]"
+        />
+      </div>
+      <div className="flex gap-2 pt-2">
+        <Button variant="outline" className="flex-1 h-12" onClick={onCancel}>Cancel·lar</Button>
+        <Button
+          className="flex-1 h-12 bg-[#26215C] hover:bg-[#1e1a48] text-white"
+          disabled={disabled || selected == null}
+          onClick={() => selected != null && onStart(selected, notes)}
+        >
+          <Play className="h-4 w-4" /> Iniciar
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function EndTaskPanel({
+  hasPending, disabled, onNewGeneric, onViewTasks, onClose,
+}: {
+  hasPending: boolean;
+  disabled: boolean;
+  onNewGeneric: () => void;
+  onViewTasks: () => void;
+  onClose: () => void;
+}) {
+  return (
+    <div className="pt-2 pb-6 space-y-4">
+      <div>
+        <div className="text-lg font-semibold">Tasca finalitzada ✓</div>
+        <div className="text-xs text-muted-foreground">Què vols fer ara?</div>
+      </div>
+      <div className="grid grid-cols-1 gap-2">
+        {hasPending ? (
+          <Button variant="outline" className="h-12" onClick={onViewTasks}>
+            <Menu className="h-4 w-4" /> Veure tasques pendents
+          </Button>
+        ) : (
+          <Button variant="outline" className="h-12" disabled={disabled} onClick={onNewGeneric}>
+            <ClipboardList className="h-4 w-4" /> Iniciar nova tasca genèrica
+          </Button>
+        )}
+        <Button
+          className="h-12 bg-rose-600 hover:bg-rose-700 text-white"
+          disabled={disabled}
+          onClick={onClose}
+        >
+          <LogOut className="h-4 w-4" /> Tancar jornada
+        </Button>
+      </div>
+    </div>
+  );
+}
