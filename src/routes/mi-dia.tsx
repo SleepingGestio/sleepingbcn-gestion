@@ -179,10 +179,10 @@ function MiDiaPage() {
       nombre={targetName}
       previewing={!!previewId ? targetName : null}
       onExitPreview={() => {
-        navigate({ to: "/mi-dia", replace: true });
         if (typeof window !== "undefined") {
-          window.history.replaceState({}, "", "/mi-dia");
-          window.location.reload();
+          window.location.href = "/configuracion?tab=personal";
+        } else {
+          navigate({ to: "/configuracion", replace: true });
         }
       }}
     />
