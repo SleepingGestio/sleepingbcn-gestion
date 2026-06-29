@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { useCurrentPersonal } from "@/hooks/use-current-personal";
+import { usePermissions, type MenuKey } from "@/hooks/use-permissions";
 import { useRouter, useRouterState } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -24,6 +25,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
 
 function RoleRouter({ children }: { children: ReactNode }) {
   const { isWorkerOnly, hasAppAccess, notConfigured, loading } = useCurrentPersonal();
+  const { canView, isAdmin, loading: permLoading } = usePermissions();
   const { signOut } = useAuth();
   const router = useRouter();
   const path = useRouterState({ select: (s) => s.location.pathname });
@@ -31,8 +33,30 @@ function RoleRouter({ children }: { children: ReactNode }) {
     if (loading) return;
     if (isWorkerOnly && path !== "/mi-dia") {
       router.navigate({ to: "/mi-dia", replace: true });
+      return;
     }
-  }, [isWorkerOnly, loading, path, router]);
+    if (isAdmin || permLoading || isWorkerOnly) return;
+    const ROUTE_TO_MENU: { route: string; menu: MenuKey }[] = [
+      { route: "/reservas", menu: "reservas" },
+      { route: "/checkins", menu: "checkins" },
+      { route: "/limpiezas", menu: "limpiezas_asignadas" },
+      { route: "/programacion-limpiezas", menu: "programacion_limpiezas" },
+      { route: "/comunicar-tareas", menu: "comunicar_tareas" },
+      { route: "/mi-dia", menu: "mi_dia" },
+    ];
+    const isConfig = path === "/configuracion" || path.startsWith("/configuracion/");
+    const allowed =
+      isConfig
+        ? canView("config_general") || canView("config_personal") || canView("config_apartamentos")
+        : (ROUTE_TO_MENU.find((m) => path === m.route || path.startsWith(m.route + "/"))?.menu
+            ? canView(ROUTE_TO_MENU.find((m) => path === m.route || path.startsWith(m.route + "/"))!.menu)
+            : true);
+    if (!allowed) {
+      const first = ROUTE_TO_MENU.find((m) => canView(m.menu));
+      const target = first?.route ?? "/mi-dia";
+      router.navigate({ to: target, replace: true });
+    }
+  }, [isWorkerOnly, loading, path, router, isAdmin, permLoading, canView]);
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center text-sm text-muted-foreground">
