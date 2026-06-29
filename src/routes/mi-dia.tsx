@@ -3,6 +3,7 @@ import { useMemo, useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useCurrentPersonal } from "@/hooks/use-current-personal";
+import { usePermissions } from "@/hooks/use-permissions";
 import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -113,14 +114,15 @@ function windowHours(outTime: string | null, inTime: string | null, fecha: strin
 const VISIBLE_STATES = ["comunicada", "aceptada", "en_curso", "finalizada"] as const;
 
 function MiDiaPage() {
-  const { persona, loading: loadingPersona, isWorker, isAdmin, isGestor } = useCurrentPersonal();
+  const { persona, loading: loadingPersona } = useCurrentPersonal();
+  const { canView, canEdit, isAdmin } = usePermissions();
   const { signOut } = useAuth();
   const navigate = useNavigate();
 
   const previewParam = typeof window !== "undefined"
     ? new URLSearchParams(window.location.search).get("preview")
     : null;
-  const canPreview = isAdmin || isGestor;
+  const canPreview = isAdmin || canEdit("config_personal") || canView("config_personal");
   const previewId = canPreview && previewParam ? Number(previewParam) : null;
 
   const previewQ = useQuery({
@@ -140,7 +142,7 @@ function MiDiaPage() {
   if (loadingPersona || (previewId && previewQ.isLoading)) {
     return <div className="min-h-screen grid place-items-center text-sm text-muted-foreground">Cargando…</div>;
   }
-  const allowed = !!persona && (isWorker || !!previewId);
+  const allowed = !!persona && (canView("mi_dia") || !!previewId);
   if (!allowed) {
     return (
       <div className="min-h-screen grid place-items-center px-6 text-center">
