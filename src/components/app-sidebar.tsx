@@ -24,6 +24,7 @@ const gestorItems: NavItem[] = [
   { title: "Limpiezas asignadas", url: "/limpiezas", icon: Sparkles, menu: "limpiezas_asignadas" },
   { title: "Programación limpiezas", url: "/programacion-limpiezas", icon: CalendarRange, menu: "programacion_limpiezas" },
   { title: "Comunicar tareas", url: "/comunicar-tareas", icon: Megaphone, menu: "comunicar_tareas" },
+  { title: "Mi día", url: "/mi-dia", icon: Smartphone, menu: "mi_dia" },
   { title: "Configuración", url: "/configuracion", icon: Settings, menu: null },
 ];
 const workerItems: NavItem[] = [
