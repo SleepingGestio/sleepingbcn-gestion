@@ -959,13 +959,7 @@ function DetailView({
     if (error) { toast.error(error.message); return; }
     onChanged(); onClose();
   };
-  const finish = async () => {
-    setBusy(true);
-    const { error } = await supabase.from("limpiezas").update({ estado: "finalizada", finalizada_en: new Date().toISOString() }).eq("id_limpieza", t.id_limpieza);
-    setBusy(false);
-    if (error) { toast.error(error.message); return; }
-    onChanged(); onClose();
-  };
+  // Finalizar is only triggered from the task list, never from the detail view.
 
   return (
     <div className="flex flex-col min-h-full">
@@ -1061,11 +1055,6 @@ function DetailView({
           {t.estado === "aceptada" && (
             <Button className="w-full h-12 bg-[#26215C] hover:bg-[#1e1a48] text-white" disabled={busy} onClick={start}>
               <Play className="h-4 w-4" /> Iniciar limpieza
-            </Button>
-          )}
-          {t.estado === "en_curso" && (
-            <Button className="w-full h-12 bg-emerald-600 hover:bg-emerald-700 text-white" disabled={busy} onClick={finish}>
-              <Check className="h-4 w-4" /> Finalizar
             </Button>
           )}
         </section>
