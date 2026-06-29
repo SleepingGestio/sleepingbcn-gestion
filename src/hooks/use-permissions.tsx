@@ -69,11 +69,20 @@ export function usePermissions() {
     return !!map[menu]?.e;
   }
 
+  const viewableMenus: MenuKey[] = isAdmin
+    ? ALL_MENUS.map((m) => m.key)
+    : (ALL_MENUS.map((m) => m.key).filter((k) => !!map[k]?.v));
+  const hasAnyAccess = isAdmin || viewableMenus.length > 0;
+  const onlyMiDia = !isAdmin && viewableMenus.length === 1 && viewableMenus[0] === "mi_dia";
+
   return {
     canView,
     canEdit,
     isAdmin,
     map,
+    viewableMenus,
+    hasAnyAccess,
+    onlyMiDia,
     loading: cpLoading || (!isAdmin && !!id_persona && q.isLoading),
   };
 }
