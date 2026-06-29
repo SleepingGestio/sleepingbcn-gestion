@@ -10,6 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PersonalAdmin } from "@/components/personal-admin";
 import { ApartamentosAdmin } from "@/components/apartamentos-admin";
 import { RolesAdmin } from "@/components/roles-admin";
+import { TiposGenericasAdmin } from "@/components/tipos-genericas-admin";
 import { usePermissions } from "@/hooks/use-permissions";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -20,11 +21,12 @@ export const Route = createFileRoute("/configuracion")({
 
 function ConfigPage() {
   const { user, signOut } = useAuth();
-  const { canView, isAdmin } = usePermissions();
+  const { canView, canEdit, isAdmin } = usePermissions();
   const tabs = [
     { value: "general", label: "General", visible: isAdmin || canView("config_general") },
     { value: "personal", label: "Personal", visible: isAdmin || canView("config_personal") },
     { value: "apartamentos", label: "Apartamentos", visible: isAdmin || canView("config_apartamentos") },
+    { value: "tasques", label: "Tasques genèriques", visible: isAdmin || canEdit("config_personal") },
     { value: "roles", label: "Roles", visible: isAdmin },
   ].filter((t) => t.visible);
   const defaultTab = tabs[0]?.value ?? "general";
@@ -68,6 +70,11 @@ function ConfigPage() {
         <TabsContent value="apartamentos">
           <ApartamentosAdmin />
         </TabsContent>
+        {(isAdmin || canEdit("config_personal")) && (
+          <TabsContent value="tasques">
+            <TiposGenericasAdmin />
+          </TabsContent>
+        )}
         {isAdmin && (
           <TabsContent value="roles">
             <RolesAdmin />

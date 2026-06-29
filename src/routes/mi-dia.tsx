@@ -25,7 +25,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Zap, Sofa, LogOut, Clock, ArrowLeft, Check, X, Play, Menu, UserCircle2, KeyRound } from "lucide-react";
+import { Zap, Sofa, LogOut, Clock, ArrowLeft, Check, X, Play, Menu, UserCircle2, KeyRound, Square, ClipboardList } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
@@ -210,6 +210,9 @@ function WorkerView({
   const [detailId, setDetailId] = useState<number | null>(null);
   const [hoursOpen, setHoursOpen] = useState(false);
   const [pwOpen, setPwOpen] = useState(false);
+  const [startSheetOpen, setStartSheetOpen] = useState(false);
+  const [endSheetOpen, setEndSheetOpen] = useState(false);
+  const disabled = !!previewing;
 
   // Upcoming tasks (today + future)
   const tasksQ = useQuery({
@@ -309,6 +312,126 @@ function WorkerView({
     return total;
   }, [monthTasksQ.data]);
 
+  // ---- Jornada (fichaje) + generic task ----
+  type Fichaje = { id_fichaje: number; hora_entrada: string | null; hora_salida: string | null };
+  type ActiveGen = {
+    id_registre: number;
+    id_tipus: number;
+    inici: string;
+    notes: string | null;
+    tipos_tarea_generica: { nombre: string } | null;
+  };
+  type TipoGen = { id_tipus: number; nombre: string; orden: number | null };
+
+  const fichajeQ = useQuery({
+    queryKey: ["mi-dia-fichaje", personalId, todayISO],
+    queryFn: async (): Promise<Fichaje | null> => {
+      const { data, error } = await supabase
+        .from("fichajes")
+        .select("id_fichaje, hora_entrada, hora_salida")
+        .eq("id_persona", personalId)
+        .eq("fecha", todayISO)
+        .is("hora_salida", null)
+        .order("hora_entrada", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (error) throw error;
+      return (data as Fichaje | null) ?? null;
+    },
+  });
+
+  const activeGenQ = useQuery({
+    queryKey: ["mi-dia-active-gen", personalId, todayISO],
+    queryFn: async (): Promise<ActiveGen | null> => {
+      const { data, error } = await supabase
+        .from("registre_temps_generic")
+        .select("id_registre, id_tipus, inici, notes, tipos_tarea_generica(nombre)")
+        .eq("id_persona", personalId)
+        .is("fi", null)
+        .order("inici", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (error) throw error;
+      return (data as unknown as ActiveGen | null) ?? null;
+    },
+    refetchInterval: 60_000,
+  });
+
+  const tiposQ = useQuery({
+    queryKey: ["tipos-tarea-generica-active"],
+    queryFn: async (): Promise<TipoGen[]> => {
+      const { data, error } = await supabase
+        .from("tipos_tarea_generica")
+        .select("id_tipus, nombre, orden")
+        .eq("actiu", true)
+        .order("orden", { ascending: true, nullsFirst: false })
+        .order("id_tipus");
+      if (error) throw error;
+      return (data ?? []) as TipoGen[];
+    },
+  });
+
+  const activeGen = activeGenQ.data ?? null;
+  const fichaje = fichajeQ.data ?? null;
+
+  const refetchJornada = () => {
+    fichajeQ.refetch();
+    activeGenQ.refetch();
+    monthTasksQ.refetch();
+  };
+
+  async function startGeneric(idTipus: number, notes: string) {
+    if (disabled) return;
+    const nowIso = new Date().toISOString();
+    // 1. Asegurar fichaje abierto hoy
+    let fichajeId = fichaje?.id_fichaje ?? null;
+    if (!fichajeId) {
+      const { data: f, error: fErr } = await supabase
+        .from("fichajes")
+        .insert({ id_persona: personalId, fecha: todayISO, hora_entrada: nowIso })
+        .select("id_fichaje")
+        .single();
+      if (fErr) { toast.error("Error fichaje: " + fErr.message); return; }
+      fichajeId = (f as { id_fichaje: number }).id_fichaje;
+    }
+    // 2. Insert registre genèric
+    const { error: rErr } = await supabase
+      .from("registre_temps_generic")
+      .insert({ id_persona: personalId, id_tipus: idTipus, inici: nowIso, notes: notes.trim() || null });
+    if (rErr) { toast.error("Error: " + rErr.message); return; }
+    toast.success("Tasca iniciada");
+    setStartSheetOpen(false);
+    refetchJornada();
+  }
+
+  async function finishGeneric() {
+    if (disabled || !activeGen) return;
+    const nowIso = new Date().toISOString();
+    const hores = diffHoursMinutes(activeGen.inici, nowIso);
+    const { error } = await supabase
+      .from("registre_temps_generic")
+      .update({ fi: nowIso, hores_totals: hores })
+      .eq("id_registre", activeGen.id_registre);
+    if (error) { toast.error("Error: " + error.message); return; }
+    toast.success("Tasca finalitzada");
+    setEndSheetOpen(true);
+    refetchJornada();
+  }
+
+  async function tancarJornada() {
+    if (disabled || !fichaje) { setEndSheetOpen(false); return; }
+    const nowIso = new Date().toISOString();
+    const hores = diffHoursMinutes(fichaje.hora_entrada, nowIso);
+    const { error } = await supabase
+      .from("fichajes")
+      .update({ hora_salida: nowIso, horas_totales: hores })
+      .eq("id_fichaje", fichaje.id_fichaje);
+    if (error) { toast.error("Error: " + error.message); return; }
+    toast.success("Jornada tancada");
+    setEndSheetOpen(false);
+    refetchJornada();
+  }
+
   // Group by day
   const daysWithTasks = useMemo(() => {
     const m = new Map<string, Limpieza[]>();
@@ -343,6 +466,10 @@ function WorkerView({
   };
 
   const detailTask = detailId != null ? (tasksQ.data ?? []).find((t) => t.id_limpieza === detailId) ?? null : null;
+
+  const todayHasTasks = daysWithTasks.some((d) => d.fecha === todayISO);
+  const todayPendingAssigned = (daysWithTasks.find((d) => d.fecha === todayISO)?.tasks ?? [])
+    .filter((t) => t.estado !== "finalizada").length;
 
   return (
     <div className="min-h-screen bg-slate-50 pb-12">
@@ -397,9 +524,30 @@ function WorkerView({
       </header>
 
       {/* Day tabs */}
+      {/* Active generic task banner (always shown if active) */}
+      {activeGen && (
+        <ActiveGenericBanner
+          gen={activeGen}
+          onFinish={finishGeneric}
+          disabled={disabled}
+        />
+      )}
+
       {daysWithTasks.length === 0 ? (
-        <div className="p-8 text-center text-sm text-muted-foreground">
-          No tienes tareas asignadas próximamente.
+        <div className="p-8 text-center">
+          {!activeGen && (
+            <>
+              <p className="text-sm text-muted-foreground mb-4">No tens tasques assignades avui.</p>
+              <Button
+                size="lg"
+                className="h-14 px-6 bg-[#26215C] hover:bg-[#1e1a48] text-white text-base"
+                disabled={disabled}
+                onClick={() => setStartSheetOpen(true)}
+              >
+                <Play className="h-5 w-5" /> Iniciar jornada
+              </Button>
+            </>
+          )}
         </div>
       ) : (
         <>
@@ -457,6 +605,20 @@ function WorkerView({
               <div className="text-slate-800 whitespace-pre-wrap">{dayNote}</div>
             </div>
           )}
+
+          {/* Extra CTA: also let workers start a generic task on days they have assignments */}
+          {!activeGen && (
+            <div className="px-3 mt-4">
+              <Button
+                variant="outline"
+                className="w-full h-12"
+                disabled={disabled}
+                onClick={() => setStartSheetOpen(true)}
+              >
+                <ClipboardList className="h-4 w-4" /> Iniciar tasca genèrica
+              </Button>
+            </div>
+          )}
         </>
       )}
 
@@ -487,6 +649,31 @@ function WorkerView({
       </Sheet>
 
       <ChangePasswordDialog open={pwOpen} onOpenChange={setPwOpen} />
+
+      {/* Start jornada / generic task sheet */}
+      <Sheet open={startSheetOpen} onOpenChange={setStartSheetOpen}>
+        <SheetContent side="bottom" className="rounded-t-2xl max-h-[85vh] overflow-y-auto">
+          <StartJornadaPanel
+            tipos={tiposQ.data ?? []}
+            disabled={disabled}
+            onStart={startGeneric}
+            onCancel={() => setStartSheetOpen(false)}
+          />
+        </SheetContent>
+      </Sheet>
+
+      {/* End-of-task sheet */}
+      <Sheet open={endSheetOpen} onOpenChange={setEndSheetOpen}>
+        <SheetContent side="bottom" className="rounded-t-2xl">
+          <EndTaskPanel
+            hasPending={todayHasTasks && todayPendingAssigned > 0}
+            disabled={disabled}
+            onNewGeneric={() => { setEndSheetOpen(false); setStartSheetOpen(true); }}
+            onViewTasks={() => setEndSheetOpen(false)}
+            onClose={tancarJornada}
+          />
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }
@@ -1030,5 +1217,152 @@ function ChangePasswordDialog({ open, onOpenChange }: { open: boolean; onOpenCha
         </form>
       </DialogContent>
     </Dialog>
+  );
+}
+
+/* ---------------- Generic task: active banner + sheets ---------------- */
+
+function ActiveGenericBanner({
+  gen, onFinish, disabled,
+}: {
+  gen: { id_registre: number; inici: string; tipos_tarea_generica: { nombre: string } | null };
+  onFinish: () => void;
+  disabled: boolean;
+}) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 30_000);
+    return () => clearInterval(t);
+  }, []);
+  const startMs = new Date(gen.inici).getTime();
+  const elapsed = Math.max(0, (now - startMs) / 3_600_000);
+  const startHM = trimHM(gen.inici) ?? "—";
+
+  return (
+    <div className="mx-3 mt-3 rounded-xl bg-emerald-50 border border-emerald-300 p-3 shadow-sm">
+      <div className="flex items-start gap-3">
+        <div className="h-10 w-10 rounded-full bg-emerald-500 text-white grid place-items-center shrink-0">
+          <Play className="h-5 w-5" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="text-xs uppercase tracking-wide text-emerald-800 font-semibold">Tasca en curs</div>
+          <div className="text-base font-semibold text-emerald-950 truncate">
+            {gen.tipos_tarea_generica?.nombre ?? "Tasca genèrica"}
+          </div>
+          <div className="text-xs text-emerald-900 mt-0.5">
+            Inici {startHM} · {fmtHours(elapsed)} transcorregut
+          </div>
+        </div>
+      </div>
+      <div className="mt-3">
+        <Button
+          className="w-full h-11 bg-emerald-600 hover:bg-emerald-700 text-white"
+          disabled={disabled}
+          onClick={onFinish}
+        >
+          <Square className="h-4 w-4" /> Finalitzar tasca
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function StartJornadaPanel({
+  tipos, disabled, onStart, onCancel,
+}: {
+  tipos: { id_tipus: number; nombre: string }[];
+  disabled: boolean;
+  onStart: (idTipus: number, notes: string) => void;
+  onCancel: () => void;
+}) {
+  const [selected, setSelected] = useState<number | null>(tipos[0]?.id_tipus ?? null);
+  const [notes, setNotes] = useState("");
+  return (
+    <div className="pt-2 pb-6 space-y-4">
+      <div>
+        <div className="text-lg font-semibold">Iniciar jornada</div>
+        <div className="text-xs text-muted-foreground">Tria el tipus de tasca que comences</div>
+      </div>
+      <div className="grid grid-cols-1 gap-2">
+        {tipos.length === 0 && (
+          <div className="text-sm text-muted-foreground">No hi ha tipus actius. Contacta amb el gestor.</div>
+        )}
+        {tipos.map((t) => {
+          const active = selected === t.id_tipus;
+          return (
+            <button
+              key={t.id_tipus}
+              type="button"
+              onClick={() => setSelected(t.id_tipus)}
+              className={cn(
+                "text-left rounded-lg border px-3 py-3 text-sm font-medium transition-colors",
+                active
+                  ? "bg-[#26215C] text-white border-[#26215C]"
+                  : "bg-white text-slate-800 border-slate-200 hover:bg-slate-50",
+              )}
+            >
+              {t.nombre}
+            </button>
+          );
+        })}
+      </div>
+      <div>
+        <Label htmlFor="gen-notes" className="text-xs">Notes (opcional)</Label>
+        <Textarea
+          id="gen-notes"
+          value={notes}
+          onChange={(e) => setNotes(e.target.value)}
+          placeholder="Detalls opcionals…"
+          className="text-sm min-h-[70px]"
+        />
+      </div>
+      <div className="flex gap-2 pt-2">
+        <Button variant="outline" className="flex-1 h-12" onClick={onCancel}>Cancel·lar</Button>
+        <Button
+          className="flex-1 h-12 bg-[#26215C] hover:bg-[#1e1a48] text-white"
+          disabled={disabled || selected == null}
+          onClick={() => selected != null && onStart(selected, notes)}
+        >
+          <Play className="h-4 w-4" /> Iniciar
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function EndTaskPanel({
+  hasPending, disabled, onNewGeneric, onViewTasks, onClose,
+}: {
+  hasPending: boolean;
+  disabled: boolean;
+  onNewGeneric: () => void;
+  onViewTasks: () => void;
+  onClose: () => void;
+}) {
+  return (
+    <div className="pt-2 pb-6 space-y-4">
+      <div>
+        <div className="text-lg font-semibold">Tasca finalitzada ✓</div>
+        <div className="text-xs text-muted-foreground">Què vols fer ara?</div>
+      </div>
+      <div className="grid grid-cols-1 gap-2">
+        {hasPending ? (
+          <Button variant="outline" className="h-12" onClick={onViewTasks}>
+            <Menu className="h-4 w-4" /> Veure tasques pendents
+          </Button>
+        ) : (
+          <Button variant="outline" className="h-12" disabled={disabled} onClick={onNewGeneric}>
+            <ClipboardList className="h-4 w-4" /> Iniciar nova tasca genèrica
+          </Button>
+        )}
+        <Button
+          className="h-12 bg-rose-600 hover:bg-rose-700 text-white"
+          disabled={disabled}
+          onClick={onClose}
+        >
+          <LogOut className="h-4 w-4" /> Tancar jornada
+        </Button>
+      </div>
+    </div>
   );
 }
