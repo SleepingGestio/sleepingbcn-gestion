@@ -524,9 +524,30 @@ function WorkerView({
       </header>
 
       {/* Day tabs */}
+      {/* Active generic task banner (always shown if active) */}
+      {activeGen && (
+        <ActiveGenericBanner
+          gen={activeGen}
+          onFinish={finishGeneric}
+          disabled={disabled}
+        />
+      )}
+
       {daysWithTasks.length === 0 ? (
-        <div className="p-8 text-center text-sm text-muted-foreground">
-          No tienes tareas asignadas próximamente.
+        <div className="p-8 text-center">
+          {!activeGen && (
+            <>
+              <p className="text-sm text-muted-foreground mb-4">No tens tasques assignades avui.</p>
+              <Button
+                size="lg"
+                className="h-14 px-6 bg-[#26215C] hover:bg-[#1e1a48] text-white text-base"
+                disabled={disabled}
+                onClick={() => setStartSheetOpen(true)}
+              >
+                <Play className="h-5 w-5" /> Iniciar jornada
+              </Button>
+            </>
+          )}
         </div>
       ) : (
         <>
@@ -584,6 +605,20 @@ function WorkerView({
               <div className="text-slate-800 whitespace-pre-wrap">{dayNote}</div>
             </div>
           )}
+
+          {/* Extra CTA: also let workers start a generic task on days they have assignments */}
+          {!activeGen && (
+            <div className="px-3 mt-4">
+              <Button
+                variant="outline"
+                className="w-full h-12"
+                disabled={disabled}
+                onClick={() => setStartSheetOpen(true)}
+              >
+                <ClipboardList className="h-4 w-4" /> Iniciar tasca genèrica
+              </Button>
+            </div>
+          )}
         </>
       )}
 
@@ -614,6 +649,31 @@ function WorkerView({
       </Sheet>
 
       <ChangePasswordDialog open={pwOpen} onOpenChange={setPwOpen} />
+
+      {/* Start jornada / generic task sheet */}
+      <Sheet open={startSheetOpen} onOpenChange={setStartSheetOpen}>
+        <SheetContent side="bottom" className="rounded-t-2xl max-h-[85vh] overflow-y-auto">
+          <StartJornadaPanel
+            tipos={tiposQ.data ?? []}
+            disabled={disabled}
+            onStart={startGeneric}
+            onCancel={() => setStartSheetOpen(false)}
+          />
+        </SheetContent>
+      </Sheet>
+
+      {/* End-of-task sheet */}
+      <Sheet open={endSheetOpen} onOpenChange={setEndSheetOpen}>
+        <SheetContent side="bottom" className="rounded-t-2xl">
+          <EndTaskPanel
+            hasPending={todayHasTasks && todayPendingAssigned > 0}
+            disabled={disabled}
+            onNewGeneric={() => { setEndSheetOpen(false); setStartSheetOpen(true); }}
+            onViewTasks={() => setEndSheetOpen(false)}
+            onClose={tancarJornada}
+          />
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }
