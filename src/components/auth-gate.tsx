@@ -24,18 +24,18 @@ export function AuthGate({ children }: { children: ReactNode }) {
 }
 
 function RoleRouter({ children }: { children: ReactNode }) {
-  const { isWorkerOnly, hasAppAccess, notConfigured, loading } = useCurrentPersonal();
-  const { canView, isAdmin, loading: permLoading } = usePermissions();
+  const { notConfigured, loading } = useCurrentPersonal();
+  const { canView, isAdmin, onlyMiDia, hasAnyAccess, loading: permLoading } = usePermissions();
   const { signOut } = useAuth();
   const router = useRouter();
   const path = useRouterState({ select: (s) => s.location.pathname });
   useEffect(() => {
-    if (loading) return;
-    if (isWorkerOnly && path !== "/mi-dia") {
+    if (loading || permLoading) return;
+    if (onlyMiDia && path !== "/mi-dia") {
       router.navigate({ to: "/mi-dia", replace: true });
       return;
     }
-    if (isAdmin || permLoading || isWorkerOnly) return;
+    if (isAdmin || onlyMiDia) return;
     const ROUTE_TO_MENU: { route: string; menu: MenuKey }[] = [
       { route: "/reservas", menu: "reservas" },
       { route: "/checkins", menu: "checkins" },
@@ -56,15 +56,15 @@ function RoleRouter({ children }: { children: ReactNode }) {
       const target = first?.route ?? "/mi-dia";
       router.navigate({ to: target, replace: true });
     }
-  }, [isWorkerOnly, loading, path, router, isAdmin, permLoading, canView]);
-  if (loading) {
+  }, [onlyMiDia, loading, path, router, isAdmin, permLoading, canView]);
+  if (loading || permLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center text-sm text-muted-foreground">
         Cargando…
       </div>
     );
   }
-  if (notConfigured || !hasAppAccess) {
+  if (notConfigured || !hasAnyAccess) {
     return (
       <div className="min-h-screen flex items-center justify-center px-6 text-center">
         <div className="space-y-3 max-w-sm">
@@ -77,7 +77,7 @@ function RoleRouter({ children }: { children: ReactNode }) {
       </div>
     );
   }
-  if (isWorkerOnly && path !== "/mi-dia") {
+  if (onlyMiDia && path !== "/mi-dia") {
     return (
       <div className="min-h-screen flex items-center justify-center text-sm text-muted-foreground">
         Cargando…
