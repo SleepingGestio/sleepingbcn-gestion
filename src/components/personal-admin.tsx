@@ -24,7 +24,6 @@ import { cn } from "@/lib/utils";
 import { usePermissions } from "@/hooks/use-permissions";
 import { useCurrentPersonal } from "@/hooks/use-current-personal";
 import { roleColor } from "@/lib/role-colors";
-import { listAuthUsersByEmails } from "@/lib/auth-users.functions";
 
 type Persona = {
   id_persona: number;
@@ -69,31 +68,6 @@ export function PersonalAdmin() {
       return (data ?? []) as Persona[];
     },
   });
-
-  const emails = (personalQ.data ?? [])
-    .map((p) => p.mail?.trim())
-    .filter((e): e is string => !!e);
-  const emailsKey = emails.map((e) => e.toLowerCase()).sort().join(",");
-
-  const authUsersQ = useQuery({
-    queryKey: ["auth-users-info", emailsKey],
-    enabled: isAdmin && emails.length > 0,
-    staleTime: 30_000,
-    queryFn: async () => {
-      const { data: sess } = await supabase.auth.getSession();
-      const token = sess.session?.access_token;
-      if (!token) return [] as { email: string; exists: boolean; last_sign_in_at: string | null; created_at: string | null }[];
-      try {
-        return await listAuthUsersByEmails({ data: { emails, accessToken: token } });
-      } catch (e) {
-        console.warn("[PersonalAdmin] auth users lookup failed", e);
-        return [];
-      }
-    },
-  });
-  const authByEmail = new Map(
-    (authUsersQ.data ?? []).map((u) => [u.email.toLowerCase(), u]),
-  );
 
   const rolesQ = useQuery({
     queryKey: ["roles"],
@@ -166,7 +140,6 @@ export function PersonalAdmin() {
     toast.success("Acceso revocado");
     setRevokeFor(null);
     personalQ.refetch();
-    authUsersQ.refetch();
   }
 
   async function sendMagicLink(p: Persona) {
@@ -174,7 +147,6 @@ export function PersonalAdmin() {
     try {
       await sendInvite(p.mail);
       toast.success("Magic link enviat a " + p.mail);
-      authUsersQ.refetch();
     } catch (e) {
       toast.error("Error: " + (e as Error).message);
     }
@@ -226,7 +198,6 @@ export function PersonalAdmin() {
               const hasMail = !!(p.mail && p.mail.trim());
               const active = hasAppRole && hasMail;
               const canPreviewAsThis = roles.some((r) => permisosQ2.data?.has(r.id_rol));
-              const authInfo = hasMail ? authByEmail.get(p.mail!.toLowerCase()) : undefined;
               // status: 'sense' | 'pendent' | 'actiu' | 'revocat'
               let status: "sense" | "pendent" | "actiu" | "revocat";
               if (!hasMail) {
@@ -236,9 +207,7 @@ export function PersonalAdmin() {
               } else {
                 status = "pendent";
               }
-              const lastSignIn = authInfo?.last_sign_in_at
-                ? new Date(authInfo.last_sign_in_at).toLocaleDateString("ca-ES", { day: "2-digit", month: "2-digit" })
-                : null;
+              const lastSignIn: string | null = null;
               return (
                 <TableRow key={p.id_persona}>
                   <TableCell className="font-medium">
@@ -273,7 +242,7 @@ export function PersonalAdmin() {
                   </TableCell>
                   <TableCell>
                     {isAdmin ? (
-                      <CompteBadge status={status} lastSignIn={lastSignIn} loading={authUsersQ.isLoading && hasMail} />
+                      <CompteBadge status={status} lastSignIn={lastSignIn} loading={false} />
                     ) : (
                       <div className="inline-flex items-center gap-2 text-xs">
                         <span className={cn("h-2 w-2 rounded-full", active ? "bg-emerald-500" : "bg-slate-400")} />
