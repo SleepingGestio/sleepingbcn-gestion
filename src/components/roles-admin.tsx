@@ -6,7 +6,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
@@ -21,12 +20,12 @@ import { cn } from "@/lib/utils";
 type Rol = { id_rol: number; nombre: string; acceso_app: string | null };
 type RolPermiso = { id_rol: number; menu: string; pot_veure: boolean; pot_editar: boolean };
 
-const ACCESO_OPTIONS = [
-  { value: "admin", label: "Admin" },
-  { value: "gestor", label: "Gestor" },
-  { value: "worker", label: "Worker" },
-  { value: "__none__", label: "Cap accés" },
-];
+function deriveAccesoApp(perms: { menu: string; pot_veure: boolean }[]): string | null {
+  const viewable = perms.filter((p) => p.pot_veure).map((p) => p.menu);
+  if (viewable.length === 0) return null;
+  if (viewable.some((m) => m !== "mi_dia")) return "gestor";
+  return "worker";
+}
 
 export function RolesAdmin() {
   // One-time rename: Admin → AdminAPP for id_rol=1
@@ -129,6 +128,15 @@ function RoleRow({
         { onConflict: "id_rol,menu" },
       );
     if (error) { toast.error("Error: " + error.message); return; }
+    if (!isAdminApp) {
+      const merged = ALL_MENUS.map(({ key }) => {
+        if (key === menu) return { menu: key, pot_veure: next.pot_veure };
+        const p = permByMenu(key);
+        return { menu: key, pot_veure: p.pot_veure };
+      });
+      const acceso = deriveAccesoApp(merged);
+      await supabase.from("roles").update({ acceso_app: acceso }).eq("id_rol", rol.id_rol);
+    }
     onChanged();
   }
 
@@ -228,22 +236,38 @@ function RoleRow({
 
 function NewRoleDialog({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
   const [nombre, setNombre] = useState("");
-  const [acceso, setAcceso] = useState<string>("__none__");
+  const [activo, setActivo] = useState(true);
+  const [perms, setPerms] = useState<Record<string, { v: boolean; e: boolean }>>(
+    () => Object.fromEntries(ALL_MENUS.map(({ key }) => [key, { v: false, e: false }])),
+  );
   const [saving, setSaving] = useState(false);
+
+  function setPerm(menu: string, patch: Partial<{ v: boolean; e: boolean }>) {
+    setPerms((prev) => {
+      const cur = prev[menu] ?? { v: false, e: false };
+      const next = { ...cur, ...patch };
+      if (!next.v) next.e = false;
+      return { ...prev, [menu]: next };
+    });
+  }
 
   async function create() {
     if (!nombre.trim()) { toast.error("El nom és obligatori"); return; }
     setSaving(true);
+    const permRows = ALL_MENUS.map(({ key }) => ({
+      menu: key,
+      pot_veure: !!perms[key]?.v,
+      pot_editar: !!perms[key]?.e,
+    }));
+    const acceso = activo ? deriveAccesoApp(permRows) : null;
     const { data, error } = await supabase
       .from("roles")
-      .insert({ nombre: nombre.trim(), acceso_app: acceso === "__none__" ? null : acceso })
+      .insert({ nombre: nombre.trim(), acceso_app: acceso })
       .select("id_rol")
       .single();
     if (error || !data) { setSaving(false); toast.error("Error: " + (error?.message ?? "")); return; }
     const id_rol = (data as { id_rol: number }).id_rol;
-    const rows = ALL_MENUS.map(({ key }) => ({
-      id_rol, menu: key, pot_veure: false, pot_editar: false,
-    }));
+    const rows = permRows.map((r) => ({ id_rol, ...r }));
     const { error: pErr } = await supabase.from("rol_permisos").insert(rows);
     setSaving(false);
     if (pErr) { toast.error("Error permisos: " + pErr.message); return; }
@@ -254,26 +278,49 @@ function NewRoleDialog({ onClose, onCreated }: { onClose: () => void; onCreated:
 
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Nou rol</DialogTitle>
-          <DialogDescription>Defineix el nom i el nivell d'accés.</DialogDescription>
+          <DialogDescription>Defineix el nom i els permisos del rol.</DialogDescription>
         </DialogHeader>
         <div className="space-y-3">
           <div className="space-y-1">
             <Label className="text-xs">Nom *</Label>
             <Input value={nombre} onChange={(e) => setNombre(e.target.value)} />
           </div>
-          <div className="space-y-1">
-            <Label className="text-xs">Accés app</Label>
-            <Select value={acceso} onValueChange={setAcceso}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>
-                {ACCESO_OPTIONS.map((o) => (
-                  <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+          <div className="flex items-center gap-2">
+            <Switch checked={activo} onCheckedChange={setActivo} id="new-role-activo" />
+            <Label htmlFor="new-role-activo" className="text-xs">Actiu</Label>
+          </div>
+          <div>
+            <Label className="text-xs mb-2 block">Permisos</Label>
+            <Card className="overflow-hidden">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Menú</TableHead>
+                    <TableHead className="w-28 text-center">Pot veure</TableHead>
+                    <TableHead className="w-28 text-center">Pot editar</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {ALL_MENUS.map(({ key, label }) => {
+                    const p = perms[key] ?? { v: false, e: false };
+                    return (
+                      <TableRow key={key}>
+                        <TableCell>{label}</TableCell>
+                        <TableCell className="text-center">
+                          <Switch checked={p.v} onCheckedChange={(v) => setPerm(key, { v })} />
+                        </TableCell>
+                        <TableCell className={cn("text-center", !p.v && "opacity-50")}>
+                          <Switch checked={p.e} disabled={!p.v} onCheckedChange={(e) => setPerm(key, { e })} />
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </Card>
           </div>
         </div>
         <DialogFooter>
