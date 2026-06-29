@@ -9,7 +9,23 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
-import { Zap, Sofa, LogOut, Clock, ArrowLeft, Check, X, Play, Menu } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from "@/components/ui/dropdown-menu";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Zap, Sofa, LogOut, Clock, ArrowLeft, Check, X, Play, Menu, UserCircle2, KeyRound } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
@@ -193,6 +209,7 @@ function WorkerView({
   const [activeDay, setActiveDay] = useState<string>(todayISO);
   const [detailId, setDetailId] = useState<number | null>(null);
   const [hoursOpen, setHoursOpen] = useState(false);
+  const [pwOpen, setPwOpen] = useState(false);
 
   // Upcoming tasks (today + future)
   const tasksQ = useQuery({
@@ -357,14 +374,25 @@ function WorkerView({
           >
             <Clock className="h-4 w-4" /> {fmtHours(monthHours)} mes
           </button>
-          <button
-            type="button"
-            onClick={() => signOut()}
-            className="rounded-full bg-white/10 hover:bg-white/20 h-10 w-10 grid place-items-center"
-            aria-label="Cerrar sesión"
-          >
-            <LogOut className="h-4 w-4" />
-          </button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                className="rounded-full bg-white/10 hover:bg-white/20 h-10 w-10 grid place-items-center"
+                aria-label="Menú de cuenta"
+              >
+                <UserCircle2 className="h-5 w-5" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-52">
+              <DropdownMenuItem onSelect={() => setPwOpen(true)}>
+                <KeyRound className="h-4 w-4" /> Canviar contrasenya
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => signOut()}>
+                <LogOut className="h-4 w-4" /> Tancar sessió
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </header>
 
@@ -457,6 +485,8 @@ function WorkerView({
           />
         </SheetContent>
       </Sheet>
+
+      <ChangePasswordDialog open={pwOpen} onOpenChange={setPwOpen} />
     </div>
   );
 }
@@ -909,5 +939,96 @@ function HoursPanel({
         )}
       </div>
     </div>
+  );
+}
+
+function ChangePasswordDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (o: boolean) => void }) {
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  function reset() {
+    setNewPassword("");
+    setConfirmPassword("");
+    setError(null);
+  }
+
+  async function onSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    if (!newPassword || !confirmPassword) {
+      setError("Ambdós camps són obligatoris");
+      return;
+    }
+    if (newPassword.length < 8) {
+      setError("La contrasenya ha de tenir almenys 8 caràcters");
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setError("Les contrasenyes no coincideixen");
+      return;
+    }
+    setBusy(true);
+    const { error: updateError } = await supabase.auth.updateUser({ password: newPassword });
+    setBusy(false);
+    if (updateError) {
+      setError(updateError.message);
+      toast.error("Error en actualitzar la contrasenya");
+      return;
+    }
+    toast.success("Contrasenya actualitzada correctament");
+    reset();
+    onOpenChange(false);
+  }
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(o) => {
+        if (!o) reset();
+        onOpenChange(o);
+      }}
+    >
+      <DialogContent className="sm:max-w-sm">
+        <DialogHeader>
+          <DialogTitle>Canviar contrasenya</DialogTitle>
+          <DialogDescription>Mínim 8 caràcters.</DialogDescription>
+        </DialogHeader>
+        <form onSubmit={onSubmit} className="space-y-3">
+          <div className="space-y-2">
+            <Label htmlFor="mi-dia-new-pw">Nova contrasenya</Label>
+            <Input
+              id="mi-dia-new-pw"
+              type="password"
+              autoComplete="new-password"
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              disabled={busy}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="mi-dia-confirm-pw">Confirmar contrasenya</Label>
+            <Input
+              id="mi-dia-confirm-pw"
+              type="password"
+              autoComplete="new-password"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              disabled={busy}
+            />
+          </div>
+          {error && <p className="text-sm text-destructive">{error}</p>}
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={busy}>
+              Cancel·lar
+            </Button>
+            <Button type="submit" disabled={busy}>
+              {busy ? "Guardant…" : "Guardar"}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }
