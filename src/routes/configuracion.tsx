@@ -61,6 +61,8 @@ function ConfigPage() {
       </Tabs>
     </AppShell>
   );
+}
+
 function ChangePasswordForm() {
   const [isOpen, setIsOpen] = useState(false);
   const [newPassword, setNewPassword] = useState("");
