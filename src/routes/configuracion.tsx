@@ -38,6 +38,7 @@ function ConfigPage() {
               <span className="font-medium">{user?.email}</span>
             </div>
             <Button variant="outline" onClick={() => signOut()}>Cerrar sesión</Button>
+            <ChangePasswordForm />
           </CardContent>
           </Card>
           <Card>
