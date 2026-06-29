@@ -132,8 +132,6 @@ function RoleRow({
     onChanged();
   }
 
-  const s = rol.acceso_app ? ACCESO_STYLE[rol.acceso_app] : null;
-
   return (
     <AccordionItem value={String(rol.id_rol)} className="border rounded-md bg-white">
       <AccordionTrigger className="px-4 hover:no-underline">
