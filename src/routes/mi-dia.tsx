@@ -941,3 +941,94 @@ function HoursPanel({
     </div>
   );
 }
+
+function ChangePasswordDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (o: boolean) => void }) {
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  function reset() {
+    setNewPassword("");
+    setConfirmPassword("");
+    setError(null);
+  }
+
+  async function onSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    if (!newPassword || !confirmPassword) {
+      setError("Ambdós camps són obligatoris");
+      return;
+    }
+    if (newPassword.length < 8) {
+      setError("La contrasenya ha de tenir almenys 8 caràcters");
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setError("Les contrasenyes no coincideixen");
+      return;
+    }
+    setBusy(true);
+    const { error: updateError } = await supabase.auth.updateUser({ password: newPassword });
+    setBusy(false);
+    if (updateError) {
+      setError(updateError.message);
+      toast.error("Error en actualitzar la contrasenya");
+      return;
+    }
+    toast.success("Contrasenya actualitzada correctament");
+    reset();
+    onOpenChange(false);
+  }
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(o) => {
+        if (!o) reset();
+        onOpenChange(o);
+      }}
+    >
+      <DialogContent className="sm:max-w-sm">
+        <DialogHeader>
+          <DialogTitle>Canviar contrasenya</DialogTitle>
+          <DialogDescription>Mínim 8 caràcters.</DialogDescription>
+        </DialogHeader>
+        <form onSubmit={onSubmit} className="space-y-3">
+          <div className="space-y-2">
+            <Label htmlFor="mi-dia-new-pw">Nova contrasenya</Label>
+            <Input
+              id="mi-dia-new-pw"
+              type="password"
+              autoComplete="new-password"
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              disabled={busy}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="mi-dia-confirm-pw">Confirmar contrasenya</Label>
+            <Input
+              id="mi-dia-confirm-pw"
+              type="password"
+              autoComplete="new-password"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              disabled={busy}
+            />
+          </div>
+          {error && <p className="text-sm text-destructive">{error}</p>}
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={busy}>
+              Cancel·lar
+            </Button>
+            <Button type="submit" disabled={busy}>
+              {busy ? "Guardant…" : "Guardar"}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
