@@ -210,6 +210,9 @@ function WorkerView({
   const [detailId, setDetailId] = useState<number | null>(null);
   const [hoursOpen, setHoursOpen] = useState(false);
   const [pwOpen, setPwOpen] = useState(false);
+  const [startSheetOpen, setStartSheetOpen] = useState(false);
+  const [endSheetOpen, setEndSheetOpen] = useState(false);
+  const disabled = !!previewing;
 
   // Upcoming tasks (today + future)
   const tasksQ = useQuery({
