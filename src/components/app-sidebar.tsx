@@ -14,24 +14,35 @@ import {
 } from "@/components/ui/sidebar";
 import { useAuth } from "@/hooks/use-auth";
 import { useCurrentPersonal } from "@/hooks/use-current-personal";
+import { usePermissions, type MenuKey } from "@/hooks/use-permissions";
 
-const gestorItems = [
-  { title: "Reservas", url: "/reservas", icon: Calendar },
-  { title: "Check-ins de hoy", url: "/checkins", icon: LogIn },
-  { title: "Limpiezas asignadas", url: "/limpiezas", icon: Sparkles },
-  { title: "Programación limpiezas", url: "/programacion-limpiezas", icon: CalendarRange },
-  { title: "Comunicar tareas", url: "/comunicar-tareas", icon: Megaphone },
-  { title: "Configuración", url: "/configuracion", icon: Settings },
+type NavItem = { title: string; url: string; icon: typeof Calendar; menu: MenuKey | null };
+
+const gestorItems: NavItem[] = [
+  { title: "Reservas", url: "/reservas", icon: Calendar, menu: "reservas" },
+  { title: "Check-ins de hoy", url: "/checkins", icon: LogIn, menu: "checkins" },
+  { title: "Limpiezas asignadas", url: "/limpiezas", icon: Sparkles, menu: "limpiezas_asignadas" },
+  { title: "Programación limpiezas", url: "/programacion-limpiezas", icon: CalendarRange, menu: "programacion_limpiezas" },
+  { title: "Comunicar tareas", url: "/comunicar-tareas", icon: Megaphone, menu: "comunicar_tareas" },
+  { title: "Configuración", url: "/configuracion", icon: Settings, menu: null },
 ];
-const workerItems = [
-  { title: "Mi día", url: "/mi-dia", icon: Smartphone },
+const workerItems: NavItem[] = [
+  { title: "Mi día", url: "/mi-dia", icon: Smartphone, menu: "mi_dia" },
 ];
 
 export function AppSidebar() {
   const path = useRouterState({ select: (s) => s.location.pathname });
   const { user, signOut } = useAuth();
   const { isWorkerOnly } = useCurrentPersonal();
-  const items = isWorkerOnly ? workerItems : gestorItems;
+  const { canView, isAdmin } = usePermissions();
+  const base = isWorkerOnly ? workerItems : gestorItems;
+  const items = base.filter((it) => {
+    if (isAdmin) return true;
+    if (it.url === "/configuracion") {
+      return canView("config_general") || canView("config_personal") || canView("config_apartamentos");
+    }
+    return it.menu ? canView(it.menu) : true;
+  });
 
   return (
     <Sidebar collapsible="icon">

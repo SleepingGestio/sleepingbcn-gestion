@@ -21,7 +21,7 @@ import {
 import { Pencil, Plus, Mail, KeyRound, Eye } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { useCurrentPersonal } from "@/hooks/use-current-personal";
+import { usePermissions } from "@/hooks/use-permissions";
 
 type Persona = {
   id_persona: number;
@@ -58,8 +58,8 @@ async function sendInvite(email: string) {
 }
 
 export function PersonalAdmin() {
-  const { isAdmin } = useCurrentPersonal();
-  const canEdit = isAdmin;
+  const { canEdit: canEditMenu } = usePermissions();
+  const canEdit = canEditMenu("config_personal");
 
   const personalQ = useQuery({
     queryKey: ["personal-all"],
