@@ -9,6 +9,8 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PersonalAdmin } from "@/components/personal-admin";
 import { ApartamentosAdmin } from "@/components/apartamentos-admin";
+import { RolesAdmin } from "@/components/roles-admin";
+import { usePermissions } from "@/hooks/use-permissions";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -18,13 +20,21 @@ export const Route = createFileRoute("/configuracion")({
 
 function ConfigPage() {
   const { user, signOut } = useAuth();
+  const { canView, isAdmin } = usePermissions();
+  const tabs = [
+    { value: "general", label: "General", visible: isAdmin || canView("config_general") },
+    { value: "personal", label: "Personal", visible: isAdmin || canView("config_personal") },
+    { value: "apartamentos", label: "Apartamentos", visible: isAdmin || canView("config_apartamentos") },
+    { value: "roles", label: "Roles", visible: isAdmin },
+  ].filter((t) => t.visible);
+  const defaultTab = tabs[0]?.value ?? "general";
   return (
     <AppShell title="Configuración">
-      <Tabs defaultValue="general" className="w-full">
+      <Tabs defaultValue={defaultTab} className="w-full">
         <TabsList>
-          <TabsTrigger value="general">General</TabsTrigger>
-          <TabsTrigger value="personal">Personal</TabsTrigger>
-          <TabsTrigger value="apartamentos">Apartamentos</TabsTrigger>
+          {tabs.map((t) => (
+            <TabsTrigger key={t.value} value={t.value}>{t.label}</TabsTrigger>
+          ))}
         </TabsList>
         <TabsContent value="general" className="max-w-2xl space-y-4">
           <Card>
@@ -58,6 +68,11 @@ function ConfigPage() {
         <TabsContent value="apartamentos">
           <ApartamentosAdmin />
         </TabsContent>
+        {isAdmin && (
+          <TabsContent value="roles">
+            <RolesAdmin />
+          </TabsContent>
+        )}
       </Tabs>
     </AppShell>
   );
