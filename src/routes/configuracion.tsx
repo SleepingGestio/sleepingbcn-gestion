@@ -21,7 +21,7 @@ export const Route = createFileRoute("/configuracion")({
 
 function ConfigPage() {
   const { user, signOut } = useAuth();
-  const { canView, isAdmin } = usePermissions();
+  const { canView, canEdit, isAdmin } = usePermissions();
   const tabs = [
     { value: "general", label: "General", visible: isAdmin || canView("config_general") },
     { value: "personal", label: "Personal", visible: isAdmin || canView("config_personal") },
