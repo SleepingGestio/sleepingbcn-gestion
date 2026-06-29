@@ -257,22 +257,12 @@ export function PersonalAdmin() {
                   </TableCell>
                   <TableCell>
                     <div className="flex items-center justify-end gap-1">
-                      {isAdmin && hasMail && (status === "sense" || status === "pendent") && (
+                      {canEdit && hasMail && !p.onboarding_completat && (
                         <Button
                           size="icon"
                           variant="ghost"
                           title="Enviar magic link"
                           onClick={() => sendMagicLink(p)}
-                        >
-                          <Mail className="h-4 w-4" />
-                        </Button>
-                      )}
-                      {!isAdmin && canEdit && hasMail && (
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          title={active ? "Reenviar invitación" : "Invitar"}
-                          onClick={() => invite(p)}
                         >
                           <Mail className="h-4 w-4" />
                         </Button>
