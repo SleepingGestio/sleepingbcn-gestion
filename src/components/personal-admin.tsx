@@ -18,11 +18,13 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Pencil, Plus, Mail, KeyRound, Eye } from "lucide-react";
+import { Pencil, Plus, Mail, KeyRound, Eye, Ban } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { usePermissions } from "@/hooks/use-permissions";
+import { useCurrentPersonal } from "@/hooks/use-current-personal";
 import { roleColor } from "@/lib/role-colors";
+import { listAuthUsersByEmails } from "@/lib/auth-users.functions";
 
 type Persona = {
   id_persona: number;
@@ -53,6 +55,7 @@ async function sendInvite(email: string) {
 export function PersonalAdmin() {
   const { canEdit: canEditMenu } = usePermissions();
   const canEdit = canEditMenu("config_personal");
+  const { isAdmin } = useCurrentPersonal();
 
   const personalQ = useQuery({
     queryKey: ["personal-all"],
@@ -65,6 +68,31 @@ export function PersonalAdmin() {
       return (data ?? []) as Persona[];
     },
   });
+
+  const emails = (personalQ.data ?? [])
+    .map((p) => p.mail?.trim())
+    .filter((e): e is string => !!e);
+  const emailsKey = emails.map((e) => e.toLowerCase()).sort().join(",");
+
+  const authUsersQ = useQuery({
+    queryKey: ["auth-users-info", emailsKey],
+    enabled: isAdmin && emails.length > 0,
+    staleTime: 30_000,
+    queryFn: async () => {
+      const { data: sess } = await supabase.auth.getSession();
+      const token = sess.session?.access_token;
+      if (!token) return [] as { email: string; exists: boolean; last_sign_in_at: string | null; created_at: string | null }[];
+      try {
+        return await listAuthUsersByEmails({ data: { emails, accessToken: token } });
+      } catch (e) {
+        console.warn("[PersonalAdmin] auth users lookup failed", e);
+        return [];
+      }
+    },
+  });
+  const authByEmail = new Map(
+    (authUsersQ.data ?? []).map((u) => [u.email.toLowerCase(), u]),
+  );
 
   const rolesQ = useQuery({
     queryKey: ["roles"],
@@ -137,6 +165,27 @@ export function PersonalAdmin() {
     toast.success("Acceso revocado");
     setRevokeFor(null);
     personalQ.refetch();
+    authUsersQ.refetch();
+  }
+
+  async function sendMagicLink(p: Persona) {
+    if (!p.mail) return;
+    try {
+      await sendInvite(p.mail);
+      toast.success("Magic link enviat a " + p.mail);
+      authUsersQ.refetch();
+    } catch (e) {
+      toast.error("Error: " + (e as Error).message);
+    }
+  }
+
+  async function forceReset(p: Persona) {
+    if (!p.mail) return;
+    const { error } = await supabase.auth.resetPasswordForEmail(p.mail, {
+      redirectTo: typeof window !== "undefined" ? window.location.origin : undefined,
+    });
+    if (error) { toast.error("Error: " + error.message); return; }
+    toast.success("Email de reset enviat");
   }
 
   return (
@@ -158,7 +207,7 @@ export function PersonalAdmin() {
               <TableHead>Teléfono</TableHead>
               <TableHead>Rol(s)</TableHead>
               <TableHead>Email</TableHead>
-              <TableHead>Acceso app</TableHead>
+              <TableHead>{isAdmin ? "Compte" : "Acceso app"}</TableHead>
               <TableHead>Activo</TableHead>
               <TableHead className="text-right">Acciones</TableHead>
             </TableRow>
@@ -176,6 +225,21 @@ export function PersonalAdmin() {
               const hasMail = !!(p.mail && p.mail.trim());
               const active = hasAppRole && hasMail;
               const canPreviewAsThis = roles.some((r) => permisosQ2.data?.has(r.id_rol));
+              const authInfo = hasMail ? authByEmail.get(p.mail!.toLowerCase()) : undefined;
+              // status: 'sense' | 'pendent' | 'actiu' | 'revocat'
+              let status: "sense" | "pendent" | "actiu" | "revocat" = "sense";
+              if (!hasMail) {
+                status = hasAppRole ? "revocat" : "sense";
+              } else if (!authInfo || !authInfo.exists) {
+                status = "sense";
+              } else if (!authInfo.last_sign_in_at) {
+                status = "pendent";
+              } else {
+                status = "actiu";
+              }
+              const lastSignIn = authInfo?.last_sign_in_at
+                ? new Date(authInfo.last_sign_in_at).toLocaleDateString("ca-ES", { day: "2-digit", month: "2-digit" })
+                : null;
               return (
                 <TableRow key={p.id_persona}>
                   <TableCell className="font-medium">
@@ -209,10 +273,14 @@ export function PersonalAdmin() {
                     )}
                   </TableCell>
                   <TableCell>
-                    <div className="inline-flex items-center gap-2 text-xs">
-                      <span className={cn("h-2 w-2 rounded-full", active ? "bg-emerald-500" : "bg-slate-400")} />
-                      <span>{active ? "Activo" : "Sin acceso"}</span>
-                    </div>
+                    {isAdmin ? (
+                      <CompteBadge status={status} lastSignIn={lastSignIn} loading={authUsersQ.isLoading && hasMail} />
+                    ) : (
+                      <div className="inline-flex items-center gap-2 text-xs">
+                        <span className={cn("h-2 w-2 rounded-full", active ? "bg-emerald-500" : "bg-slate-400")} />
+                        <span>{active ? "Activo" : "Sin acceso"}</span>
+                      </div>
+                    )}
                   </TableCell>
                   <TableCell>
                     <Switch
@@ -223,7 +291,37 @@ export function PersonalAdmin() {
                   </TableCell>
                   <TableCell>
                     <div className="flex items-center justify-end gap-1">
-                      {canEdit && hasMail && (
+                      {isAdmin && hasMail && (status === "sense" || status === "pendent") && (
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          title="Enviar magic link"
+                          onClick={() => sendMagicLink(p)}
+                        >
+                          <Mail className="h-4 w-4" />
+                        </Button>
+                      )}
+                      {isAdmin && status === "actiu" && (
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          title="Forçar reset PW"
+                          onClick={() => forceReset(p)}
+                        >
+                          <KeyRound className="h-4 w-4 text-amber-600" />
+                        </Button>
+                      )}
+                      {isAdmin && (status === "actiu" || status === "pendent") && (
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          title="Revocar accés"
+                          onClick={() => setRevokeFor(p)}
+                        >
+                          <Ban className="h-4 w-4 text-rose-600" />
+                        </Button>
+                      )}
+                      {!isAdmin && canEdit && hasMail && (
                         <Button
                           size="icon"
                           variant="ghost"
@@ -231,16 +329,6 @@ export function PersonalAdmin() {
                           onClick={() => invite(p)}
                         >
                           <Mail className="h-4 w-4" />
-                        </Button>
-                      )}
-                      {canEdit && active && (
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          title="Revocar acceso"
-                          onClick={() => setRevokeFor(p)}
-                        >
-                          <KeyRound className="h-4 w-4 text-rose-600" />
                         </Button>
                       )}
                       {canPreviewAsThis && (
