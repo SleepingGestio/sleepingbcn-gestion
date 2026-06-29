@@ -312,6 +312,126 @@ function WorkerView({
     return total;
   }, [monthTasksQ.data]);
 
+  // ---- Jornada (fichaje) + generic task ----
+  type Fichaje = { id_fichaje: number; hora_entrada: string | null; hora_salida: string | null };
+  type ActiveGen = {
+    id_registre: number;
+    id_tipus: number;
+    inici: string;
+    notes: string | null;
+    tipos_tarea_generica: { nombre: string } | null;
+  };
+  type TipoGen = { id_tipus: number; nombre: string; orden: number | null };
+
+  const fichajeQ = useQuery({
+    queryKey: ["mi-dia-fichaje", personalId, todayISO],
+    queryFn: async (): Promise<Fichaje | null> => {
+      const { data, error } = await supabase
+        .from("fichajes")
+        .select("id_fichaje, hora_entrada, hora_salida")
+        .eq("id_persona", personalId)
+        .eq("fecha", todayISO)
+        .is("hora_salida", null)
+        .order("hora_entrada", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (error) throw error;
+      return (data as Fichaje | null) ?? null;
+    },
+  });
+
+  const activeGenQ = useQuery({
+    queryKey: ["mi-dia-active-gen", personalId, todayISO],
+    queryFn: async (): Promise<ActiveGen | null> => {
+      const { data, error } = await supabase
+        .from("registre_temps_generic")
+        .select("id_registre, id_tipus, inici, notes, tipos_tarea_generica(nombre)")
+        .eq("id_persona", personalId)
+        .is("fi", null)
+        .order("inici", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (error) throw error;
+      return (data as unknown as ActiveGen | null) ?? null;
+    },
+    refetchInterval: 60_000,
+  });
+
+  const tiposQ = useQuery({
+    queryKey: ["tipos-tarea-generica-active"],
+    queryFn: async (): Promise<TipoGen[]> => {
+      const { data, error } = await supabase
+        .from("tipos_tarea_generica")
+        .select("id_tipus, nombre, orden")
+        .eq("actiu", true)
+        .order("orden", { ascending: true, nullsFirst: false })
+        .order("id_tipus");
+      if (error) throw error;
+      return (data ?? []) as TipoGen[];
+    },
+  });
+
+  const activeGen = activeGenQ.data ?? null;
+  const fichaje = fichajeQ.data ?? null;
+
+  const refetchJornada = () => {
+    fichajeQ.refetch();
+    activeGenQ.refetch();
+    monthTasksQ.refetch();
+  };
+
+  async function startGeneric(idTipus: number, notes: string) {
+    if (disabled) return;
+    const nowIso = new Date().toISOString();
+    // 1. Asegurar fichaje abierto hoy
+    let fichajeId = fichaje?.id_fichaje ?? null;
+    if (!fichajeId) {
+      const { data: f, error: fErr } = await supabase
+        .from("fichajes")
+        .insert({ id_persona: personalId, fecha: todayISO, hora_entrada: nowIso })
+        .select("id_fichaje")
+        .single();
+      if (fErr) { toast.error("Error fichaje: " + fErr.message); return; }
+      fichajeId = (f as { id_fichaje: number }).id_fichaje;
+    }
+    // 2. Insert registre genèric
+    const { error: rErr } = await supabase
+      .from("registre_temps_generic")
+      .insert({ id_persona: personalId, id_tipus: idTipus, inici: nowIso, notes: notes.trim() || null });
+    if (rErr) { toast.error("Error: " + rErr.message); return; }
+    toast.success("Tasca iniciada");
+    setStartSheetOpen(false);
+    refetchJornada();
+  }
+
+  async function finishGeneric() {
+    if (disabled || !activeGen) return;
+    const nowIso = new Date().toISOString();
+    const hores = diffHoursMinutes(activeGen.inici, nowIso);
+    const { error } = await supabase
+      .from("registre_temps_generic")
+      .update({ fi: nowIso, hores_totals: hores })
+      .eq("id_registre", activeGen.id_registre);
+    if (error) { toast.error("Error: " + error.message); return; }
+    toast.success("Tasca finalitzada");
+    setEndSheetOpen(true);
+    refetchJornada();
+  }
+
+  async function tancarJornada() {
+    if (disabled || !fichaje) { setEndSheetOpen(false); return; }
+    const nowIso = new Date().toISOString();
+    const hores = diffHoursMinutes(fichaje.hora_entrada, nowIso);
+    const { error } = await supabase
+      .from("fichajes")
+      .update({ hora_salida: nowIso, horas_totales: hores })
+      .eq("id_fichaje", fichaje.id_fichaje);
+    if (error) { toast.error("Error: " + error.message); return; }
+    toast.success("Jornada tancada");
+    setEndSheetOpen(false);
+    refetchJornada();
+  }
+
   // Group by day
   const daysWithTasks = useMemo(() => {
     const m = new Map<string, Limpieza[]>();
@@ -346,6 +466,10 @@ function WorkerView({
   };
 
   const detailTask = detailId != null ? (tasksQ.data ?? []).find((t) => t.id_limpieza === detailId) ?? null : null;
+
+  const todayHasTasks = daysWithTasks.some((d) => d.fecha === todayISO);
+  const todayPendingAssigned = (daysWithTasks.find((d) => d.fecha === todayISO)?.tasks ?? [])
+    .filter((t) => t.estado !== "finalizada").length;
 
   return (
     <div className="min-h-screen bg-slate-50 pb-12">
