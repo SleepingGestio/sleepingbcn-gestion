@@ -24,6 +24,7 @@ import {
   DropdownMenuItem,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
 import { Label } from "@/components/ui/label";
 import { Zap, Sofa, LogOut, Clock, ArrowLeft, Check, X, Play, Menu, UserCircle2, KeyRound, Square, ClipboardList } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -1252,9 +1253,8 @@ function ChangePasswordDialog({ open, onOpenChange }: { open: boolean; onOpenCha
         <form onSubmit={onSubmit} className="space-y-3">
           <div className="space-y-2">
             <Label htmlFor="mi-dia-new-pw">Nova contrasenya</Label>
-            <Input
+            <PasswordInput
               id="mi-dia-new-pw"
-              type="password"
               autoComplete="new-password"
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
@@ -1263,9 +1263,8 @@ function ChangePasswordDialog({ open, onOpenChange }: { open: boolean; onOpenCha
           </div>
           <div className="space-y-2">
             <Label htmlFor="mi-dia-confirm-pw">Confirmar contrasenya</Label>
-            <Input
+            <PasswordInput
               id="mi-dia-confirm-pw"
-              type="password"
               autoComplete="new-password"
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}

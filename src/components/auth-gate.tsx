@@ -5,6 +5,7 @@ import { usePermissions, type MenuKey } from "@/hooks/use-permissions";
 import { useRouter, useRouterState } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { ForcePasswordSetup } from "@/components/force-password-setup";
@@ -136,9 +137,8 @@ function LoginScreen() {
             </div>
             <div className="space-y-2">
               <Label htmlFor="password">Contraseña</Label>
-              <Input
+              <PasswordInput
                 id="password"
-                type="password"
                 required
                 autoComplete="current-password"
                 value={password}
