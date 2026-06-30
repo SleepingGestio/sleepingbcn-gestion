@@ -73,7 +73,7 @@ type Limpieza = {
 };
 
 type Apartamento = { id_apt: number; nombre: string };
-type ResvLite = { Número: string; "Check in": string | null; "Check-out": string | null };
+type ResvLite = { Número: string; "Check in": string | null; "Check-out": string | null; "Huéspedes": number | null };
 type ComDia = { worker: number; fecha: string; observaciones: string | null };
 
 function toISO(d: Date): string {
@@ -267,7 +267,7 @@ function WorkerView({
     queryFn: async (): Promise<Map<string, ResvLite>> => {
       const { data, error } = await supabase
         .from("reservas_kb")
-        .select(`"Número","Check in","Check-out"`)
+        .select(`"Número","Check in","Check-out","Huéspedes"`)
         .in("Número", numeros);
       if (error) throw error;
       const m = new Map<string, ResvLite>();
