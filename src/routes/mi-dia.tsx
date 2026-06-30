@@ -784,7 +784,7 @@ function TimeChip({ time, informed }: { time: string | null; informed: boolean |
   return (
     <span className={cn(
       "inline-flex items-center rounded-md px-2 py-0.5 text-xs font-semibold",
-      informed ? "bg-emerald-100 text-emerald-900" : "bg-slate-200 text-slate-700",
+      informed ? "bg-emerald-500 text-white" : "bg-gray-300 text-gray-700",
     )}>{t}</span>
   );
 }
@@ -805,10 +805,15 @@ function TaskCard({
 
   const next = t.proxima_reserva_numero ? resv.get(t.proxima_reserva_numero) ?? null : null;
   const nentran = !t.hora_in_time || !next || next["Check in"] !== t.fecha_limpieza;
+  const sourceResv = t.numero_reserva ? resv.get(t.numero_reserva) ?? null : null;
+  const isVacio = t.tipo === "salida" && !!sourceResv?.["Check-out"] && sourceResv["Check-out"] < t.fecha_limpieza;
+  const isIntermedia = t.tipo === "intermedia";
+  const nextGuests = next?.["Huéspedes"] ?? null;
   const win = windowHours(t.hora_out_time, t.hora_in_time, t.fecha_limpieza, next?.["Check in"] ?? null);
 
   const isPriority = t.prioritaria_manual != null ? !!t.prioritaria_manual : !!t.prioritaria;
-  const sfc = !!t.sfc_montar || !!t.sfc_desmontar;
+  const sfcMontar = !!t.sfc_montar;
+  const sfcDesmontar = !!t.sfc_desmontar;
 
   const update = async (patch: Partial<Limpieza>) => {
     setBusy(true);
@@ -849,30 +854,51 @@ function TaskCard({
 
         {/* Times */}
         <div className="mt-2 flex items-center gap-2 text-xs text-slate-600 flex-wrap">
-          <span>Sale:</span> <TimeChip time={t.hora_out_time} informed={t.hora_out_informed} />
-          <span className="ml-1">Entra:</span> <TimeChip time={t.hora_in_time} informed={t.hora_in_informed} />
+          <span>Sale:</span>
+          {isVacio ? (
+            <span className="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-bold bg-rose-200 text-rose-900">VACÍA</span>
+          ) : (
+            <TimeChip time={t.hora_out_time} informed={t.hora_out_informed} />
+          )}
+          <span className="ml-1">Entra:</span>
+          {nentran ? (
+            <span className="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-bold bg-gray-200 text-gray-700">NOENTRAN</span>
+          ) : (
+            <TimeChip time={t.hora_in_time} informed={t.hora_in_informed} />
+          )}
+          {nextGuests != null && nextGuests > 0 && !nentran && (
+            <span className="ml-1 text-xs font-medium text-slate-800">
+              👤 {nextGuests} {nextGuests === 1 ? "hoste" : "hostes"}
+            </span>
+          )}
         </div>
 
         {/* Window */}
         <div className="mt-1.5 text-xs text-slate-700">
-          {nentran ? (
-            <span>⏱ Sin próxima entrada (NENTRAN)</span>
-          ) : (
-            <span>⏱ Ventana: {win ?? "—"}</span>
-          )}
+          {!nentran && <span>⏱ Ventana: {win ?? "—"}</span>}
         </div>
 
         {/* Tags */}
-        {(isPriority || sfc || !!t.check_checkin) && (
+        {(isPriority || sfcMontar || sfcDesmontar || isIntermedia || !!t.check_checkin) && (
           <div className="mt-2 flex flex-wrap gap-1.5">
+            {isIntermedia && (
+              <span className="rounded bg-fuchsia-200 text-fuchsia-900 px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide">
+                LIMPIEZA EXTRA-CR
+              </span>
+            )}
             {isPriority && (
               <span className="inline-flex items-center gap-0.5 rounded bg-amber-100 text-amber-900 px-2 py-0.5 text-[11px] font-semibold">
                 <Zap className="h-3 w-3" /> Prioritaria
               </span>
             )}
-            {sfc && (
+            {sfcMontar && (
               <span className="inline-flex items-center gap-0.5 rounded bg-indigo-100 text-indigo-900 px-2 py-0.5 text-[11px] font-semibold">
-                <Sofa className="h-3 w-3" /> SFC
+                <Sofa className="h-3 w-3" /> Montar SFC
+              </span>
+            )}
+            {sfcDesmontar && (
+              <span className="inline-flex items-center gap-0.5 rounded bg-orange-100 text-orange-900 px-2 py-0.5 text-[11px] font-semibold">
+                <Sofa className="h-3 w-3" /> Desmontar SFC
               </span>
             )}
             {!!t.check_checkin && (
