@@ -371,6 +371,35 @@ function WorkerView({
     },
   });
 
+  type GrupoLite = { id_grupo: number; nombre: string; orden: number | null };
+  type AptLite = { id_apt: number; nombre: string; id_grupo: number | null };
+
+  const gruposQ = useQuery({
+    queryKey: ["mi-dia-grupos"],
+    queryFn: async (): Promise<GrupoLite[]> => {
+      const { data, error } = await supabase
+        .from("grupos_apartamentos")
+        .select("id_grupo, nombre, orden")
+        .order("orden", { ascending: true, nullsFirst: false })
+        .order("nombre");
+      if (error) throw error;
+      return (data ?? []) as GrupoLite[];
+    },
+  });
+
+  const aptsAllQ = useQuery({
+    queryKey: ["mi-dia-apts-all"],
+    queryFn: async (): Promise<AptLite[]> => {
+      const { data, error } = await supabase
+        .from("apartamentos")
+        .select("id_apt, nombre, id_grupo")
+        .eq("activo", true)
+        .order("nombre");
+      if (error) throw error;
+      return (data ?? []) as AptLite[];
+    },
+  });
+
   const activeGen = activeGenQ.data ?? null;
   const fichaje = fichajeQ.data ?? null;
 
@@ -380,7 +409,12 @@ function WorkerView({
     monthTasksQ.refetch();
   };
 
-  async function startGeneric(idTipus: number, notes: string) {
+  async function startGeneric(
+    idTipus: number,
+    notes: string,
+    idGrupo: number | null,
+    idApt: number | null,
+  ) {
     if (disabled) return;
     const nowIso = new Date().toISOString();
     // 1. Asegurar fichaje abierto hoy
@@ -395,9 +429,17 @@ function WorkerView({
       fichajeId = (f as { id_fichaje: number }).id_fichaje;
     }
     // 2. Insert registre genèric
+    const payload: Record<string, unknown> = {
+      id_persona: personalId,
+      id_tipus: idTipus,
+      inici: nowIso,
+      notes: notes.trim() || null,
+    };
+    if (idApt != null) payload.id_apt = idApt;
+    if (idGrupo != null) payload.id_grupo = idGrupo;
     const { error: rErr } = await supabase
       .from("registre_temps_generic")
-      .insert({ id_persona: personalId, id_tipus: idTipus, inici: nowIso, notes: notes.trim() || null });
+      .insert(payload);
     if (rErr) { toast.error("Error: " + rErr.message); return; }
     toast.success("Tasca iniciada");
     setStartSheetOpen(false);
@@ -667,6 +709,8 @@ function WorkerView({
         <SheetContent side="bottom" className="rounded-t-2xl max-h-[85vh] overflow-y-auto">
           <StartJornadaPanel
             tipos={tiposQ.data ?? []}
+            grupos={gruposQ.data ?? []}
+            apartamentos={aptsAllQ.data ?? []}
             disabled={disabled}
             onStart={startGeneric}
             onCancel={() => setStartSheetOpen(false)}
@@ -1270,44 +1314,137 @@ function ActiveGenericBanner({
 }
 
 function StartJornadaPanel({
-  tipos, disabled, onStart, onCancel,
+  tipos, grupos, apartamentos, disabled, onStart, onCancel,
 }: {
   tipos: { id_tipus: number; nombre: string }[];
+  grupos: { id_grupo: number; nombre: string }[];
+  apartamentos: { id_apt: number; nombre: string; id_grupo: number | null }[];
   disabled: boolean;
-  onStart: (idTipus: number, notes: string) => void;
+  onStart: (
+    idTipus: number,
+    notes: string,
+    idGrupo: number | null,
+    idApt: number | null,
+  ) => void;
   onCancel: () => void;
 }) {
-  const [selected, setSelected] = useState<number | null>(tipos[0]?.id_tipus ?? null);
+  const [selected, setSelected] = useState<number | null>(null);
   const [notes, setNotes] = useState("");
+  const [query, setQuery] = useState("");
+  const [propOpen, setPropOpen] = useState(false);
+  const [idGrupo, setIdGrupo] = useState<number | null>(null);
+  const [idApt, setIdApt] = useState<number | null>(null);
+
+  const sortedTipos = useMemo(
+    () => [...tipos].sort((a, b) => a.nombre.localeCompare(b.nombre, "ca", { sensitivity: "base" })),
+    [tipos],
+  );
+  const filteredTipos = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return sortedTipos;
+    return sortedTipos.filter((t) => t.nombre.toLowerCase().includes(q));
+  }, [sortedTipos, query]);
+
+  const filteredApts = useMemo(() => {
+    const list = idGrupo == null
+      ? apartamentos
+      : apartamentos.filter((a) => a.id_grupo === idGrupo);
+    return [...list].sort((a, b) => a.nombre.localeCompare(b.nombre, "ca", { sensitivity: "base" }));
+  }, [apartamentos, idGrupo]);
+
   return (
     <div className="pt-2 pb-6 space-y-4">
       <div>
         <div className="text-lg font-semibold">Iniciar jornada</div>
         <div className="text-xs text-muted-foreground">Tria el tipus de tasca que comences</div>
       </div>
-      <div className="grid grid-cols-1 gap-2">
-        {tipos.length === 0 && (
-          <div className="text-sm text-muted-foreground">No hi ha tipus actius. Contacta amb el gestor.</div>
-        )}
-        {tipos.map((t) => {
-          const active = selected === t.id_tipus;
-          return (
-            <button
-              key={t.id_tipus}
-              type="button"
-              onClick={() => setSelected(t.id_tipus)}
-              className={cn(
-                "text-left rounded-lg border px-3 py-3 text-sm font-medium transition-colors",
-                active
-                  ? "bg-[#26215C] text-white border-[#26215C]"
-                  : "bg-white text-slate-800 border-slate-200 hover:bg-slate-50",
-              )}
-            >
-              {t.nombre}
-            </button>
-          );
-        })}
+      <div className="space-y-2">
+        <Input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Cercar tipus de tasca..."
+          className="text-sm"
+        />
+        <div className="border border-slate-200 rounded-lg overflow-y-auto max-h-[300px] divide-y divide-slate-100">
+          {tipos.length === 0 && (
+            <div className="px-3 py-3 text-sm text-muted-foreground">
+              No hi ha tipus actius. Contacta amb el gestor.
+            </div>
+          )}
+          {tipos.length > 0 && filteredTipos.length === 0 && (
+            <div className="px-3 py-3 text-sm text-muted-foreground">Sense resultats</div>
+          )}
+          {filteredTipos.map((t) => {
+            const active = selected === t.id_tipus;
+            return (
+              <button
+                key={t.id_tipus}
+                type="button"
+                onClick={() => setSelected(t.id_tipus)}
+                className={cn(
+                  "w-full text-left px-3 py-3 text-sm font-medium transition-colors",
+                  active
+                    ? "bg-[#26215C] text-white"
+                    : "bg-white text-slate-800 hover:bg-slate-50",
+                )}
+              >
+                {t.nombre}
+              </button>
+            );
+          })}
+        </div>
       </div>
+
+      <div className="rounded-lg border border-slate-200 bg-white">
+        <button
+          type="button"
+          onClick={() => setPropOpen((v) => !v)}
+          className="w-full flex items-center justify-between px-3 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
+        >
+          <span>Associar a una propietat (opcional)</span>
+          <span className="text-xs text-muted-foreground">
+            {propOpen ? "−" : "+"}
+          </span>
+        </button>
+        {propOpen && (
+          <div className="px-3 pb-3 pt-1 space-y-3 border-t border-slate-100">
+            <div className="space-y-1">
+              <Label className="text-xs">Grup</Label>
+              <select
+                value={idGrupo ?? ""}
+                onChange={(e) => {
+                  const v = e.target.value ? Number(e.target.value) : null;
+                  setIdGrupo(v);
+                  if (idApt != null) {
+                    const apt = apartamentos.find((a) => a.id_apt === idApt);
+                    if (v != null && apt && apt.id_grupo !== v) setIdApt(null);
+                  }
+                }}
+                className="w-full h-9 rounded-md border border-input bg-transparent px-3 text-sm"
+              >
+                <option value="">— Cap —</option>
+                {grupos.map((g) => (
+                  <option key={g.id_grupo} value={g.id_grupo}>{g.nombre}</option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Apartament</Label>
+              <select
+                value={idApt ?? ""}
+                onChange={(e) => setIdApt(e.target.value ? Number(e.target.value) : null)}
+                className="w-full h-9 rounded-md border border-input bg-transparent px-3 text-sm"
+              >
+                <option value="">— Cap —</option>
+                {filteredApts.map((a) => (
+                  <option key={a.id_apt} value={a.id_apt}>{a.nombre}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+        )}
+      </div>
+
       <div>
         <Label htmlFor="gen-notes" className="text-xs">Notes (opcional)</Label>
         <Textarea
@@ -1323,7 +1460,7 @@ function StartJornadaPanel({
         <Button
           className="flex-1 h-12 bg-[#26215C] hover:bg-[#1e1a48] text-white"
           disabled={disabled || selected == null}
-          onClick={() => selected != null && onStart(selected, notes)}
+          onClick={() => selected != null && onStart(selected, notes, idGrupo, idApt)}
         >
           <Play className="h-4 w-4" /> Iniciar
         </Button>
