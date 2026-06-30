@@ -434,7 +434,7 @@ function WorkerColumn({
   return (
     <div className="w-[320px] shrink-0 flex flex-col gap-2">
       {/* Header */}
-      <Card className="p-3 flex items-center gap-3 bg-slate-100">
+      <Card className="p-3 flex items-center gap-3 bg-slate-200">
         <Avatar codigo={worker.codigo ?? null} />
         <div className="min-w-0 flex-1">
           <div className="text-sm font-medium truncate">{fullName(worker)}</div>
@@ -584,9 +584,6 @@ function TaskCard({
                 <span>→</span>
                 <TimeBadge value={horaIn ?? "—"} informed={!!t.hora_in_informed} />
               </>
-            )}
-            {!isVacio && !isNentran && !isIntermedia && t.tipo && (
-              <span className="ml-1 capitalize">{t.tipo}</span>
             )}
             {nextGuests != null && nextGuests > 0 && (
               <span className="ml-1 inline-flex items-center gap-0.5 text-[11px] font-medium text-foreground">

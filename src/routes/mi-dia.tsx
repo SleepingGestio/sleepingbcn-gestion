@@ -605,7 +605,7 @@ function WorkerView({
         </div>
       ) : (
         <>
-          <div className={cn("sticky z-20 bg-slate-50 border-b", previewing ? "top-[96px]" : "top-[60px]")}>
+          <div className={cn("sticky z-20 bg-slate-200 border-b", previewing ? "top-[96px]" : "top-[60px]")}>
             <div className="flex gap-2 overflow-x-auto px-3 py-2">
               {daysWithTasks.map((d) => {
                 const active = d.fecha === activeDay;
@@ -868,8 +868,10 @@ function TaskCard({
             </>
           ) : (
             <>
+              <span className="text-slate-600">Sale:</span>
               <TimeChip time={t.hora_out_time} informed={t.hora_out_informed} />
               <span>→</span>
+              <span className="text-slate-600 ml-1">Entra:</span>
               <TimeChip time={t.hora_in_time} informed={t.hora_in_informed} />
             </>
           )}
