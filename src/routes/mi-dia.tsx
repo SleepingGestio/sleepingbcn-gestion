@@ -854,21 +854,25 @@ function TaskCard({
 
         {/* Times */}
         <div className="mt-2 flex items-center gap-2 text-xs text-slate-600 flex-wrap">
-          <span>Sale:</span>
           {isVacio ? (
             <span className="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-bold bg-rose-200 text-rose-900">VACÍA</span>
           ) : (
-            <TimeChip time={t.hora_out_time} informed={t.hora_out_informed} />
+            <>
+              <span>Sale:</span>
+              <TimeChip time={t.hora_out_time} informed={t.hora_out_informed} />
+            </>
           )}
-          <span className="ml-1">Entra:</span>
           {nentran ? (
             <span className="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-bold bg-gray-200 text-gray-700">NOENTRAN</span>
           ) : (
-            <TimeChip time={t.hora_in_time} informed={t.hora_in_informed} />
+            <>
+              <span className="ml-1">Entra:</span>
+              <TimeChip time={t.hora_in_time} informed={t.hora_in_informed} />
+            </>
           )}
-          {nextGuests != null && nextGuests > 0 && !nentran && (
+          {nextGuests != null && nextGuests > 0 && (
             <span className="ml-1 text-xs font-medium text-slate-800">
-              👤 {nextGuests} {nextGuests === 1 ? "hoste" : "hostes"}
+              👤 {nextGuests} {nextGuests === 1 ? "huésped" : "huéspedes"}
             </span>
           )}
         </div>
@@ -1083,7 +1087,7 @@ function DetailView({
               <span className="font-medium">{next?.["Check in"] ?? "—"}</span>
               <TimeChip time={t.hora_in_time} informed={t.hora_in_informed} />
               {nentran && (
-                <span className="rounded bg-slate-200 text-slate-800 px-2 py-0.5 text-[11px] font-semibold">NENTRAN</span>
+                <span className="rounded bg-slate-200 text-slate-800 px-2 py-0.5 text-[11px] font-semibold">NOENTRAN</span>
               )}
             </div>
             <div className="text-xs text-slate-600">⏱ Ventana: {win ?? (nentran ? "—" : "—")}</div>

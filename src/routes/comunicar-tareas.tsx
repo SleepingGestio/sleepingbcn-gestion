@@ -577,10 +577,12 @@ function TaskCard({
             ) : (
               <TimeBadge value={horaIn ?? "—"} informed={!!t.hora_in_informed} />
             )}
-            <span className="ml-1 capitalize">{t.tipo ?? ""}</span>
-            {nextGuests != null && nextGuests > 0 && !isNentran && (
+            {!isVacio && !isNentran && !isIntermedia && t.tipo && (
+              <span className="ml-1 capitalize">{t.tipo}</span>
+            )}
+            {nextGuests != null && nextGuests > 0 && (
               <span className="ml-1 inline-flex items-center gap-0.5 text-[11px] font-medium text-foreground">
-                👤 {nextGuests} {nextGuests === 1 ? "hoste" : "hostes"}
+                👤 {nextGuests} {nextGuests === 1 ? "huésped" : "huéspedes"}
               </span>
             )}
           </div>
