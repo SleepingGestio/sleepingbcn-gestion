@@ -868,8 +868,10 @@ function TaskCard({
             </>
           ) : (
             <>
+              <span className="text-slate-600">Sale:</span>
               <TimeChip time={t.hora_out_time} informed={t.hora_out_informed} />
               <span>→</span>
+              <span className="text-slate-600 ml-1">Entra:</span>
               <TimeChip time={t.hora_in_time} informed={t.hora_in_informed} />
             </>
           )}
