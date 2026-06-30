@@ -379,6 +379,19 @@ function Avatar({ codigo }: { codigo: string | null }) {
   );
 }
 
+function TimeBadge({ value, informed }: { value: string; informed: boolean }) {
+  return (
+    <span
+      className={cn(
+        "shrink-0 rounded px-1.5 py-0.5 text-[10px] leading-4 font-semibold",
+        informed ? "bg-emerald-500 text-white" : "bg-gray-300 text-gray-700",
+      )}
+    >
+      {value}
+    </span>
+  );
+}
+
 function WorkerColumn({
   worker,
   tasks,
