@@ -1087,7 +1087,7 @@ function DetailView({
               <span className="font-medium">{next?.["Check in"] ?? "—"}</span>
               <TimeChip time={t.hora_in_time} informed={t.hora_in_informed} />
               {nentran && (
-                <span className="rounded bg-slate-200 text-slate-800 px-2 py-0.5 text-[11px] font-semibold">NENTRAN</span>
+                <span className="rounded bg-slate-200 text-slate-800 px-2 py-0.5 text-[11px] font-semibold">NOENTRAN</span>
               )}
             </div>
             <div className="text-xs text-slate-600">⏱ Ventana: {win ?? (nentran ? "—" : "—")}</div>
