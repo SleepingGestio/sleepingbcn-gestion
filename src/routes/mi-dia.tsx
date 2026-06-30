@@ -1335,7 +1335,7 @@ function ActiveGenericBanner({
 }
 
 function StartJornadaPanel({
-  tipos, grupos, apartamentos, disabled, onStart, onCancel,
+  tipos, grupos, apartamentos, disabled, onStart, onCancel, onCreateType,
 }: {
   tipos: { id_tipus: number; nombre: string }[];
   grupos: { id_grupo: number; nombre: string }[];
@@ -1348,6 +1348,7 @@ function StartJornadaPanel({
     idApt: number | null,
   ) => void;
   onCancel: () => void;
+  onCreateType: (nombre: string) => Promise<number | null>;
 }) {
   const [selected, setSelected] = useState<number | null>(null);
   const [notes, setNotes] = useState("");
@@ -1355,6 +1356,7 @@ function StartJornadaPanel({
   const [propOpen, setPropOpen] = useState(false);
   const [idGrupo, setIdGrupo] = useState<number | null>(null);
   const [idApt, setIdApt] = useState<number | null>(null);
+  const [creating, setCreating] = useState(false);
 
   const sortedTipos = useMemo(
     () => [...tipos].sort((a, b) => a.nombre.localeCompare(b.nombre, "ca", { sensitivity: "base" })),
@@ -1386,7 +1388,7 @@ function StartJornadaPanel({
           placeholder="Cercar tipus de tasca..."
           className="text-sm"
         />
-        <div className="border border-slate-200 rounded-lg overflow-y-auto max-h-[300px] divide-y divide-slate-100">
+        <div className="border border-slate-200 rounded-lg overflow-y-auto max-h-[280px] divide-y divide-slate-100">
           {tipos.length === 0 && (
             <div className="px-3 py-3 text-sm text-muted-foreground">
               No hi ha tipus actius. Contacta amb el gestor.
@@ -1413,6 +1415,28 @@ function StartJornadaPanel({
               </button>
             );
           })}
+          {query.trim() &&
+            !sortedTipos.some(
+              (t) => t.nombre.toLowerCase() === query.trim().toLowerCase(),
+            ) && (
+              <button
+                type="button"
+                disabled={creating || disabled}
+                onClick={async () => {
+                  const name = query.trim();
+                  setCreating(true);
+                  const newId = await onCreateType(name);
+                  setCreating(false);
+                  if (newId != null) {
+                    setSelected(newId);
+                    setQuery("");
+                  }
+                }}
+                className="w-full text-left px-3 py-3 text-sm font-medium text-[#26215C] hover:bg-slate-50 disabled:opacity-50"
+              >
+                {creating ? "Creant…" : `+ Crear "${query.trim()}"`}
+              </button>
+            )}
         </div>
       </div>
 
