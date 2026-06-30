@@ -786,12 +786,17 @@ export function LimpiezaPopover({ open, loadKey, onOpenChange, apt, fecha, exist
                   badge={
                     (nextReservation?.["Check in"] ?? null) !== form.fecha_limpieza
                       ? {
-                          label: "NENTRAN",
+                          label: "NOENTRAN",
                           title: "No entra ningún huésped el día de la limpieza",
                         }
                       : undefined
                   }
                 />
+                {nextReservation?.["Huéspedes"] != null && nextReservation["Huéspedes"] > 0 && (
+                  <div className="text-xs font-medium text-foreground pl-1">
+                    👤 {nextReservation["Huéspedes"]} {nextReservation["Huéspedes"] === 1 ? "huésped entrante" : "huéspedes entrantes"}
+                  </div>
+                )}
               </div>
             </section>
             )}
