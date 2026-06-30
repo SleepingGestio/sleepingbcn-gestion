@@ -33,6 +33,7 @@ type ResvLite = {
   Número: string;
   "Check in": string | null;
   "Check-out": string | null;
+  "Huéspedes": number | null;
 };
 
 const DOW_ES = ["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"];
@@ -84,7 +85,7 @@ async function fetchReservasLite(numeros: string[]): Promise<Map<string, ResvLit
   if (numeros.length === 0) return new Map();
   const { data, error } = await supabase
     .from("reservas_kb")
-    .select(`"Número","Check in","Check-out"`)
+    .select(`"Número","Check in","Check-out","Huéspedes"`)
     .in("Número", numeros);
   if (error) throw error;
   const m = new Map<string, ResvLite>();
