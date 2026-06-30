@@ -1252,9 +1252,8 @@ function ChangePasswordDialog({ open, onOpenChange }: { open: boolean; onOpenCha
         <form onSubmit={onSubmit} className="space-y-3">
           <div className="space-y-2">
             <Label htmlFor="mi-dia-new-pw">Nova contrasenya</Label>
-            <Input
+            <PasswordInput
               id="mi-dia-new-pw"
-              type="password"
               autoComplete="new-password"
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
@@ -1263,9 +1262,8 @@ function ChangePasswordDialog({ open, onOpenChange }: { open: boolean; onOpenCha
           </div>
           <div className="space-y-2">
             <Label htmlFor="mi-dia-confirm-pw">Confirmar contrasenya</Label>
-            <Input
+            <PasswordInput
               id="mi-dia-confirm-pw"
-              type="password"
               autoComplete="new-password"
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
