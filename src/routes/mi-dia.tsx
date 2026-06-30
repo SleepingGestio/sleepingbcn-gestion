@@ -371,6 +371,35 @@ function WorkerView({
     },
   });
 
+  type GrupoLite = { id_grupo: number; nombre: string; orden: number | null };
+  type AptLite = { id_apt: number; nombre: string; id_grupo: number | null };
+
+  const gruposQ = useQuery({
+    queryKey: ["mi-dia-grupos"],
+    queryFn: async (): Promise<GrupoLite[]> => {
+      const { data, error } = await supabase
+        .from("grupos_apartamentos")
+        .select("id_grupo, nombre, orden")
+        .order("orden", { ascending: true, nullsFirst: false })
+        .order("nombre");
+      if (error) throw error;
+      return (data ?? []) as GrupoLite[];
+    },
+  });
+
+  const aptsAllQ = useQuery({
+    queryKey: ["mi-dia-apts-all"],
+    queryFn: async (): Promise<AptLite[]> => {
+      const { data, error } = await supabase
+        .from("apartamentos")
+        .select("id_apt, nombre, id_grupo")
+        .eq("activo", true)
+        .order("nombre");
+      if (error) throw error;
+      return (data ?? []) as AptLite[];
+    },
+  });
+
   const activeGen = activeGenQ.data ?? null;
   const fichaje = fichajeQ.data ?? null;
 
@@ -380,7 +409,12 @@ function WorkerView({
     monthTasksQ.refetch();
   };
 
-  async function startGeneric(idTipus: number, notes: string) {
+  async function startGeneric(
+    idTipus: number,
+    notes: string,
+    idGrupo: number | null,
+    idApt: number | null,
+  ) {
     if (disabled) return;
     const nowIso = new Date().toISOString();
     // 1. Asegurar fichaje abierto hoy
@@ -395,9 +429,17 @@ function WorkerView({
       fichajeId = (f as { id_fichaje: number }).id_fichaje;
     }
     // 2. Insert registre genèric
+    const payload: Record<string, unknown> = {
+      id_persona: personalId,
+      id_tipus: idTipus,
+      inici: nowIso,
+      notes: notes.trim() || null,
+    };
+    if (idApt != null) payload.id_apt = idApt;
+    if (idGrupo != null) payload.id_grupo = idGrupo;
     const { error: rErr } = await supabase
       .from("registre_temps_generic")
-      .insert({ id_persona: personalId, id_tipus: idTipus, inici: nowIso, notes: notes.trim() || null });
+      .insert(payload);
     if (rErr) { toast.error("Error: " + rErr.message); return; }
     toast.success("Tasca iniciada");
     setStartSheetOpen(false);
@@ -667,6 +709,8 @@ function WorkerView({
         <SheetContent side="bottom" className="rounded-t-2xl max-h-[85vh] overflow-y-auto">
           <StartJornadaPanel
             tipos={tiposQ.data ?? []}
+            grupos={gruposQ.data ?? []}
+            apartamentos={aptsAllQ.data ?? []}
             disabled={disabled}
             onStart={startGeneric}
             onCancel={() => setStartSheetOpen(false)}
