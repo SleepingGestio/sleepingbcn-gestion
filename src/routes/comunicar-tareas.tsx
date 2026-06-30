@@ -516,7 +516,10 @@ function TaskCard({
 
   const isPriority =
     t.prioritaria_manual != null ? !!t.prioritaria_manual : !!t.prioritaria;
-  const sfc = !!t.sfc_montar || !!t.sfc_desmontar;
+  const sfcMontar = !!t.sfc_montar;
+  const sfcDesmontar = !!t.sfc_desmontar;
+  const isIntermedia = t.tipo === "intermedia";
+  const nextGuests = nxt?.["Huéspedes"] ?? null;
 
   const estadoKey = (t.estado ?? "activa") as keyof typeof ESTADO_BADGE;
   const estadoCls = ESTADO_BADGE[estadoKey] ?? "bg-slate-200 text-slate-800";
@@ -549,31 +552,44 @@ function TaskCard({
               {t.estado ?? "activa"}
             </span>
           </div>
-          <div className="mt-1 text-xs text-muted-foreground">
-            <span className="font-medium text-foreground">{horaOut ?? "—"}</span>
-            <span className="mx-1">→</span>
-            <span className="font-medium text-foreground">{horaIn ?? "—"}</span>
-            <span className="ml-2 capitalize">{t.tipo ?? ""}</span>
+          <div className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground flex-wrap">
+            {isVacio ? (
+              <span className="rounded px-1.5 py-0.5 text-[10px] font-semibold bg-rose-200 text-rose-900">VACÍA</span>
+            ) : (
+              <TimeBadge value={horaOut ?? "—"} informed={!!t.hora_out_informed} />
+            )}
+            <span>→</span>
+            {isNentran ? (
+              <span className="rounded px-1.5 py-0.5 text-[10px] font-semibold bg-gray-200 text-gray-700">NOENTRAN</span>
+            ) : (
+              <TimeBadge value={horaIn ?? "—"} informed={!!t.hora_in_informed} />
+            )}
+            <span className="ml-1 capitalize">{t.tipo ?? ""}</span>
+            {nextGuests != null && nextGuests > 0 && !isNentran && (
+              <span className="ml-1 inline-flex items-center gap-0.5 text-[11px] font-medium text-foreground">
+                👤 {nextGuests} {nextGuests === 1 ? "hoste" : "hostes"}
+              </span>
+            )}
           </div>
           <div className="mt-1.5 flex flex-wrap gap-1">
+            {isIntermedia && (
+              <span className="rounded bg-fuchsia-200 text-fuchsia-900 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide">
+                LIMPIEZA EXTRA-CR
+              </span>
+            )}
             {isPriority && (
               <span className="inline-flex items-center gap-0.5 rounded bg-amber-100 text-amber-900 px-1.5 py-0.5 text-[10px] font-semibold">
                 <Zap className="h-3 w-3" /> Prioritaria
               </span>
             )}
-            {sfc && (
+            {sfcMontar && (
               <span className="inline-flex items-center gap-0.5 rounded bg-indigo-100 text-indigo-900 px-1.5 py-0.5 text-[10px] font-semibold">
-                <Sofa className="h-3 w-3" /> SFC
+                <Sofa className="h-3 w-3" /> Montar SFC
               </span>
             )}
-            {isNentran && t.tipo === "salida" && (
-              <span className="rounded bg-slate-200 text-slate-800 px-1.5 py-0.5 text-[10px] font-semibold">
-                NENTRAN
-              </span>
-            )}
-            {isVacio && (
-              <span className="rounded bg-rose-200 text-rose-900 px-1.5 py-0.5 text-[10px] font-semibold">
-                VACÍO
+            {sfcDesmontar && (
+              <span className="inline-flex items-center gap-0.5 rounded bg-orange-100 text-orange-900 px-1.5 py-0.5 text-[10px] font-semibold">
+                <Sofa className="h-3 w-3" /> Desmontar SFC
               </span>
             )}
           </div>
