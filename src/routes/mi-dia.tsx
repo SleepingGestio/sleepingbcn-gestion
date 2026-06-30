@@ -714,6 +714,27 @@ function WorkerView({
             disabled={disabled}
             onStart={startGeneric}
             onCancel={() => setStartSheetOpen(false)}
+            onCreateType={async (nombre) => {
+              const nextOrden =
+                (tiposQ.data ?? []).reduce((m, t) => Math.max(m, t.orden ?? 0), 0) + 1;
+              const { data, error } = await supabase
+                .from("tipos_tarea_generica")
+                .insert({
+                  nombre,
+                  actiu: true,
+                  requiere_apartamento: false,
+                  computable_hores: true,
+                  orden: nextOrden,
+                })
+                .select("id_tipus")
+                .single();
+              if (error) {
+                toast.error("Error: " + error.message);
+                return null;
+              }
+              await tiposQ.refetch();
+              return (data as { id_tipus: number }).id_tipus;
+            }}
           />
         </SheetContent>
       </Sheet>
