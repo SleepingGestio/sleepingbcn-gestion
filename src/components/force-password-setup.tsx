@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
 import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -75,12 +76,12 @@ export function ForcePasswordSetup({ onDone, idPersona }: { onDone: () => void; 
         <form onSubmit={onSubmit} className="space-y-3">
           <div className="space-y-2">
             <Label htmlFor="fps-pw">Nova contrasenya</Label>
-            <Input id="fps-pw" type="password" autoComplete="new-password" value={pw}
+            <PasswordInput id="fps-pw" autoComplete="new-password" value={pw}
               onChange={(e) => setPw(e.target.value)} disabled={busy} />
           </div>
           <div className="space-y-2">
             <Label htmlFor="fps-confirm">Confirmar contrasenya</Label>
-            <Input id="fps-confirm" type="password" autoComplete="new-password" value={confirm}
+            <PasswordInput id="fps-confirm" autoComplete="new-password" value={confirm}
               onChange={(e) => setConfirm(e.target.value)} disabled={busy} />
           </div>
           {error && <p className="text-sm text-destructive">{error}</p>}
