@@ -854,19 +854,22 @@ function TaskCard({
 
         {/* Times */}
         <div className="mt-2 flex items-center gap-2 text-xs text-slate-600 flex-wrap">
-          {isVacio ? (
-            <span className="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-bold bg-rose-200 text-rose-900">VACÍA</span>
-          ) : (
+          {isVacio || nentran ? (
             <>
-              <span>Sale:</span>
-              <TimeChip time={t.hora_out_time} informed={t.hora_out_informed} />
+              {isVacio && (
+                <span className="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-bold bg-rose-200 text-rose-900">VACÍA</span>
+              )}
+              {isVacio && nentran && (
+                <span className="text-slate-400">·</span>
+              )}
+              {nentran && (
+                <span className="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-bold bg-gray-200 text-gray-700">NOENTRAN</span>
+              )}
             </>
-          )}
-          {nentran ? (
-            <span className="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-bold bg-gray-200 text-gray-700">NOENTRAN</span>
           ) : (
             <>
-              <span className="ml-1">Entra:</span>
+              <TimeChip time={t.hora_out_time} informed={t.hora_out_informed} />
+              <span>→</span>
               <TimeChip time={t.hora_in_time} informed={t.hora_in_informed} />
             </>
           )}
