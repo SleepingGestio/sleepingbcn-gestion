@@ -63,6 +63,13 @@ function fmtHours(h: number): string {
   return `${sign}${hh}h ${pad(mm)}m`;
 }
 
+function fmtAjustSigned(h: number): { text: string; className: string } {
+  if (h < 0) {
+    return { text: `−${fmtHours(Math.abs(h))}`, className: "text-red-600" };
+  }
+  return { text: `+${fmtHours(h)}`, className: "text-emerald-600" };
+}
+
 function fmtHM(v: string | null): string {
   if (!v) return "—";
   const d = new Date(v);
@@ -223,7 +230,7 @@ function DetallPage() {
         inici: l.iniciada_en,
         fi: l.finalizada_en,
         propietat: aptName.get(l.id_apt) ?? `Apt #${l.id_apt}`,
-        tipus: isSalida ? "Check-out" : "Extra-CR",
+        tipus: isSalida ? "Limpieza STD" : "Extra-CR",
         hores: diffHours(l.iniciada_en, l.finalizada_en),
         raw: l as unknown as Record<string, unknown>,
       });
@@ -420,8 +427,8 @@ function DetallPage() {
                           <td className="p-3">
                             <RowTypeBadge kind={r.kind} label={r.tipus} />
                           </td>
-                          <td className={`p-3 text-right tabular-nums ${r.kind === "ajust" ? "text-emerald-600 font-medium" : ""}`}>
-                            {r.kind === "ajust" ? `+${fmtHours(r.hores)}` : fmtHours(r.hores)}
+                          <td className={`p-3 text-right tabular-nums ${r.kind === "ajust" ? fmtAjustSigned(r.hores).className : ""}`}>
+                            {r.kind === "ajust" ? fmtAjustSigned(r.hores).text : fmtHours(r.hores)}
                           </td>
                           <td className="p-3">
                             {r.kind === "ajust" && (
@@ -504,7 +511,8 @@ function DetailPopoverDialog({ row, onClose }: { row: Row | null; onClose: () =>
             )}
             <Field
               label="Hores"
-              value={row.kind === "ajust" ? `+${fmtHours(row.hores)}` : fmtHours(row.hores)}
+              value={row.kind === "ajust" ? fmtAjustSigned(row.hores).text : fmtHours(row.hores)}
+              valueClassName={row.kind === "ajust" ? fmtAjustSigned(row.hores).className : ""}
             />
             {(row.raw as { notes?: string | null; notas?: string | null }).notes && (
               <Field label="Notes" value={String((row.raw as { notes: string }).notes)} />
@@ -519,11 +527,11 @@ function DetailPopoverDialog({ row, onClose }: { row: Row | null; onClose: () =>
   );
 }
 
-function Field({ label, value }: { label: string; value: string }) {
+function Field({ label, value, valueClassName = "" }: { label: string; value: string; valueClassName?: string }) {
   return (
     <div className="flex justify-between gap-4 border-b pb-1 last:border-b-0">
       <span className="text-muted-foreground">{label}</span>
-      <span className="font-medium text-right">{value}</span>
+      <span className={`font-medium text-right ${valueClassName}`}>{value}</span>
     </div>
   );
 }
