@@ -35,11 +35,20 @@ type Persona = {
   mail: string | null;
   activo: boolean | null;
   onboarding_completat: boolean | null;
+  control_horario?: boolean | null;
+  horas_objetivo_mes?: number | null;
 };
 type Rol = { id_rol: number; nombre: string; acceso_app: string | null };
 type PersonaRol = { id_persona: number; id_rol: number; fecha_hasta: string | null };
 
-const CONTRATOS = ["Indefinido", "Temporal", "Autónomo", "Prácticas", "Otro"];
+const CONTRATOS: { value: string; label: string }[] = [
+  { value: "fijo", label: "Fijo" },
+  { value: "discontinuo", label: "Discontinu" },
+  { value: "autonomo", label: "Autònom" },
+  { value: "temporal", label: "Temporal" },
+  { value: "practicas", label: "Pràctiques" },
+  { value: "otro", label: "Otro" },
+];
 
 async function sendInvite(email: string) {
   const { error } = await supabase.auth.signInWithOtp({
@@ -62,7 +71,7 @@ export function PersonalAdmin() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("personal")
-        .select("id_persona,nombre,apellidos,codigo,tipo_contrato,telefono,mail,activo,onboarding_completat")
+        .select("id_persona,nombre,apellidos,codigo,tipo_contrato,telefono,mail,activo,onboarding_completat,control_horario,horas_objetivo_mes")
         .order("apellidos", { ascending: true, nullsFirst: false });
       if (error) throw error;
       return (data ?? []) as Persona[];
@@ -336,6 +345,10 @@ function PersonaDialog({
   const [telefono, setTelefono] = useState(persona?.telefono ?? "");
   const [mail, setMail] = useState(persona?.mail ?? "");
   const [tipoContrato, setTipoContrato] = useState<string | null>(persona?.tipo_contrato ?? null);
+  const [controlHorario, setControlHorario] = useState<boolean>(!!persona?.control_horario);
+  const [horasObjetivo, setHorasObjetivo] = useState<string>(
+    persona?.horas_objetivo_mes != null ? String(persona.horas_objetivo_mes) : "",
+  );
   const [roleIds, setRoleIds] = useState<Set<number>>(new Set(currentRoleIds));
   const [saving, setSaving] = useState(false);
 
@@ -355,6 +368,11 @@ function PersonaDialog({
       telefono: telefono.trim() || null,
       mail: mail.trim() || null,
       tipo_contrato: tipoContrato,
+      control_horario: controlHorario,
+      horas_objetivo_mes:
+        controlHorario && tipoContrato !== "autonomo" && horasObjetivo.trim() !== ""
+          ? Number(horasObjetivo)
+          : null,
     };
     let id_persona: number;
     if (persona) {
@@ -435,10 +453,30 @@ function PersonaDialog({
               <SelectTrigger><SelectValue placeholder="—" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="none">—</SelectItem>
-                {CONTRATOS.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                {CONTRATOS.map((c) => <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>)}
               </SelectContent>
             </Select>
           </Field>
+          <div className="col-span-2 space-y-2 rounded-md border p-3">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <Label className="text-sm">Inclou al registre horari</Label>
+                <p className="text-xs text-muted-foreground">Apareix al dashboard de Registre horari</p>
+              </div>
+              <Switch checked={controlHorario} onCheckedChange={setControlHorario} />
+            </div>
+            {controlHorario && tipoContrato !== "autonomo" && (
+              <Field label="Hores objectiu/mes">
+                <Input
+                  type="number"
+                  min={0}
+                  step="0.5"
+                  value={horasObjetivo}
+                  onChange={(e) => setHorasObjetivo(e.target.value)}
+                />
+              </Field>
+            )}
+          </div>
           <div className="col-span-2 space-y-2 pt-2">
             <Label>Roles</Label>
             <div className="grid grid-cols-2 gap-2">
