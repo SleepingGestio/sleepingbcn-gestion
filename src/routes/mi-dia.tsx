@@ -716,16 +716,20 @@ function WorkerView({
             onStart={startGeneric}
             onCancel={() => setStartSheetOpen(false)}
             onCreateType={async (nombre) => {
+              const cleanName = nombre.toUpperCase().trim();
+              if (!cleanName) return null;
               const nextOrden =
                 (tiposQ.data ?? []).reduce((m, t) => Math.max(m, t.orden ?? 0), 0) + 1;
               const { data, error } = await supabase
                 .from("tipos_tarea_generica")
                 .insert({
-                  nombre,
+                  nombre: cleanName,
                   actiu: true,
                   requiere_apartamento: false,
                   computable_hores: true,
                   orden: nextOrden,
+                  creado_por: personalId,
+                  creado_en: new Date().toISOString(),
                 })
                 .select("id_tipus")
                 .single();
