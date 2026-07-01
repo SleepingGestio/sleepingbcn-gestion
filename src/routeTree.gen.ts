@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as ReservasRouteImport } from './routes/reservas'
+import { Route as RegistreHorariRouteImport } from './routes/registre-horari'
 import { Route as ProgramacionLimpiezasRouteImport } from './routes/programacion-limpiezas'
 import { Route as MiDiaRouteImport } from './routes/mi-dia'
 import { Route as LimpiezasRouteImport } from './routes/limpiezas'
@@ -21,6 +22,11 @@ import { Route as IndexRouteImport } from './routes/index'
 const ReservasRoute = ReservasRouteImport.update({
   id: '/reservas',
   path: '/reservas',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const RegistreHorariRoute = RegistreHorariRouteImport.update({
+  id: '/registre-horari',
+  path: '/registre-horari',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ProgramacionLimpiezasRoute = ProgramacionLimpiezasRouteImport.update({
@@ -67,6 +73,7 @@ export interface FileRoutesByFullPath {
   '/limpiezas': typeof LimpiezasRoute
   '/mi-dia': typeof MiDiaRoute
   '/programacion-limpiezas': typeof ProgramacionLimpiezasRoute
+  '/registre-horari': typeof RegistreHorariRoute
   '/reservas': typeof ReservasRoute
 }
 export interface FileRoutesByTo {
@@ -77,6 +84,7 @@ export interface FileRoutesByTo {
   '/limpiezas': typeof LimpiezasRoute
   '/mi-dia': typeof MiDiaRoute
   '/programacion-limpiezas': typeof ProgramacionLimpiezasRoute
+  '/registre-horari': typeof RegistreHorariRoute
   '/reservas': typeof ReservasRoute
 }
 export interface FileRoutesById {
@@ -88,6 +96,7 @@ export interface FileRoutesById {
   '/limpiezas': typeof LimpiezasRoute
   '/mi-dia': typeof MiDiaRoute
   '/programacion-limpiezas': typeof ProgramacionLimpiezasRoute
+  '/registre-horari': typeof RegistreHorariRoute
   '/reservas': typeof ReservasRoute
 }
 export interface FileRouteTypes {
@@ -100,6 +109,7 @@ export interface FileRouteTypes {
     | '/limpiezas'
     | '/mi-dia'
     | '/programacion-limpiezas'
+    | '/registre-horari'
     | '/reservas'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -110,6 +120,7 @@ export interface FileRouteTypes {
     | '/limpiezas'
     | '/mi-dia'
     | '/programacion-limpiezas'
+    | '/registre-horari'
     | '/reservas'
   id:
     | '__root__'
@@ -120,6 +131,7 @@ export interface FileRouteTypes {
     | '/limpiezas'
     | '/mi-dia'
     | '/programacion-limpiezas'
+    | '/registre-horari'
     | '/reservas'
   fileRoutesById: FileRoutesById
 }
@@ -131,6 +143,7 @@ export interface RootRouteChildren {
   LimpiezasRoute: typeof LimpiezasRoute
   MiDiaRoute: typeof MiDiaRoute
   ProgramacionLimpiezasRoute: typeof ProgramacionLimpiezasRoute
+  RegistreHorariRoute: typeof RegistreHorariRoute
   ReservasRoute: typeof ReservasRoute
 }
 
@@ -141,6 +154,13 @@ declare module '@tanstack/react-router' {
       path: '/reservas'
       fullPath: '/reservas'
       preLoaderRoute: typeof ReservasRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/registre-horari': {
+      id: '/registre-horari'
+      path: '/registre-horari'
+      fullPath: '/registre-horari'
+      preLoaderRoute: typeof RegistreHorariRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/programacion-limpiezas': {
@@ -203,6 +223,7 @@ const rootRouteChildren: RootRouteChildren = {
   LimpiezasRoute: LimpiezasRoute,
   MiDiaRoute: MiDiaRoute,
   ProgramacionLimpiezasRoute: ProgramacionLimpiezasRoute,
+  RegistreHorariRoute: RegistreHorariRoute,
   ReservasRoute: ReservasRoute,
 }
 export const routeTree = rootRouteImport
