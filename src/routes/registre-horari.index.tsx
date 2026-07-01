@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { AppShell } from "@/components/app-shell";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 
-export const Route = createFileRoute("/registre-horari")({
+export const Route = createFileRoute("/registre-horari/")({
   component: RegistreHorariPage,
 });
 
