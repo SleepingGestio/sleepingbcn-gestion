@@ -18,6 +18,7 @@ import { Route as ConfiguracionRouteImport } from './routes/configuracion'
 import { Route as ComunicarTareasRouteImport } from './routes/comunicar-tareas'
 import { Route as CheckinsRouteImport } from './routes/checkins'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as RegistreHorariIdRouteImport } from './routes/registre-horari.$id'
 
 const ReservasRoute = ReservasRouteImport.update({
   id: '/reservas',
@@ -64,6 +65,11 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const RegistreHorariIdRoute = RegistreHorariIdRouteImport.update({
+  id: '/$id',
+  path: '/$id',
+  getParentRoute: () => RegistreHorariRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -73,8 +79,9 @@ export interface FileRoutesByFullPath {
   '/limpiezas': typeof LimpiezasRoute
   '/mi-dia': typeof MiDiaRoute
   '/programacion-limpiezas': typeof ProgramacionLimpiezasRoute
-  '/registre-horari': typeof RegistreHorariRoute
+  '/registre-horari': typeof RegistreHorariRouteWithChildren
   '/reservas': typeof ReservasRoute
+  '/registre-horari/$id': typeof RegistreHorariIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -84,8 +91,9 @@ export interface FileRoutesByTo {
   '/limpiezas': typeof LimpiezasRoute
   '/mi-dia': typeof MiDiaRoute
   '/programacion-limpiezas': typeof ProgramacionLimpiezasRoute
-  '/registre-horari': typeof RegistreHorariRoute
+  '/registre-horari': typeof RegistreHorariRouteWithChildren
   '/reservas': typeof ReservasRoute
+  '/registre-horari/$id': typeof RegistreHorariIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -96,8 +104,9 @@ export interface FileRoutesById {
   '/limpiezas': typeof LimpiezasRoute
   '/mi-dia': typeof MiDiaRoute
   '/programacion-limpiezas': typeof ProgramacionLimpiezasRoute
-  '/registre-horari': typeof RegistreHorariRoute
+  '/registre-horari': typeof RegistreHorariRouteWithChildren
   '/reservas': typeof ReservasRoute
+  '/registre-horari/$id': typeof RegistreHorariIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -111,6 +120,7 @@ export interface FileRouteTypes {
     | '/programacion-limpiezas'
     | '/registre-horari'
     | '/reservas'
+    | '/registre-horari/$id'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -122,6 +132,7 @@ export interface FileRouteTypes {
     | '/programacion-limpiezas'
     | '/registre-horari'
     | '/reservas'
+    | '/registre-horari/$id'
   id:
     | '__root__'
     | '/'
@@ -133,6 +144,7 @@ export interface FileRouteTypes {
     | '/programacion-limpiezas'
     | '/registre-horari'
     | '/reservas'
+    | '/registre-horari/$id'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -143,7 +155,7 @@ export interface RootRouteChildren {
   LimpiezasRoute: typeof LimpiezasRoute
   MiDiaRoute: typeof MiDiaRoute
   ProgramacionLimpiezasRoute: typeof ProgramacionLimpiezasRoute
-  RegistreHorariRoute: typeof RegistreHorariRoute
+  RegistreHorariRoute: typeof RegistreHorariRouteWithChildren
   ReservasRoute: typeof ReservasRoute
 }
 
@@ -212,8 +224,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/registre-horari/$id': {
+      id: '/registre-horari/$id'
+      path: '/$id'
+      fullPath: '/registre-horari/$id'
+      preLoaderRoute: typeof RegistreHorariIdRouteImport
+      parentRoute: typeof RegistreHorariRoute
+    }
   }
 }
+
+interface RegistreHorariRouteChildren {
+  RegistreHorariIdRoute: typeof RegistreHorariIdRoute
+}
+
+const RegistreHorariRouteChildren: RegistreHorariRouteChildren = {
+  RegistreHorariIdRoute: RegistreHorariIdRoute,
+}
+
+const RegistreHorariRouteWithChildren = RegistreHorariRoute._addFileChildren(
+  RegistreHorariRouteChildren,
+)
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
@@ -223,9 +254,19 @@ const rootRouteChildren: RootRouteChildren = {
   LimpiezasRoute: LimpiezasRoute,
   MiDiaRoute: MiDiaRoute,
   ProgramacionLimpiezasRoute: ProgramacionLimpiezasRoute,
-  RegistreHorariRoute: RegistreHorariRoute,
+  RegistreHorariRoute: RegistreHorariRouteWithChildren,
   ReservasRoute: ReservasRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { startInstance } from './start.ts'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+  }
+}
