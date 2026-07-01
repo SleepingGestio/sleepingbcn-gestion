@@ -1465,9 +1465,14 @@ function StartJornadaPanel({
                     setQuery("");
                   }
                 }}
-                className="w-full text-left px-3 py-3 text-sm font-medium text-[#26215C] hover:bg-slate-50 disabled:opacity-50"
+                className="w-full flex items-center gap-2 px-3 py-3 text-sm font-semibold rounded-md border border-[#5DCAA5] bg-[#E1F5EE] text-[#085041] hover:bg-[#d3efe4] disabled:opacity-50"
               >
-                {creating ? "Creant…" : `+ Crear "${query.trim()}"`}
+                <Plus className="h-4 w-4" />
+                <span>
+                  {creating
+                    ? "Creant…"
+                    : `Crear "${query.trim().toUpperCase()}" com a nova tasca`}
+                </span>
               </button>
             )}
         </div>
