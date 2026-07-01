@@ -854,31 +854,21 @@ function TaskCard({
 
         {/* Times */}
         <div className="mt-2 flex items-center gap-2 text-xs text-slate-600 flex-wrap">
-          {isVacio || nentran ? (
-            <>
-              {isVacio && (
-                <span className="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-bold bg-rose-200 text-rose-900">VACÍA</span>
-              )}
-              {isVacio && nentran && (
-                <span className="text-slate-400">·</span>
-              )}
-              {nentran && (
-                <span className="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-bold bg-gray-200 text-gray-700">NOENTRAN</span>
-              )}
-            </>
+          <span>Sale:</span>
+          {isVacio ? (
+            <span className="rounded px-1.5 py-px font-semibold bg-rose-200 text-rose-900">VACÍA</span>
           ) : (
-            <>
-              <span className="text-slate-600">Sale:</span>
-              <TimeChip time={t.hora_out_time} informed={t.hora_out_informed} />
-              <span>→</span>
-              <span className="text-slate-600 ml-1">Entra:</span>
-              <TimeChip time={t.hora_in_time} informed={t.hora_in_informed} />
-            </>
+            <TimeChip time={t.hora_out_time} informed={t.hora_out_informed} />
+          )}
+          <span>→</span>
+          <span>Entra:</span>
+          {nentran ? (
+            <span className="rounded px-1.5 py-px font-semibold bg-gray-200 text-gray-700">NOENTRAN</span>
+          ) : (
+            <TimeChip time={t.hora_in_time} informed={t.hora_in_informed} />
           )}
           {nextGuests != null && nextGuests > 0 && (
-            <span className="ml-1 text-xs font-medium text-slate-800">
-              👤 {nextGuests} {nextGuests === 1 ? "huésped" : "huéspedes"}
-            </span>
+            <span>👤 {nextGuests} {nextGuests === 1 ? "huésped" : "huéspedes"}</span>
           )}
         </div>
 
