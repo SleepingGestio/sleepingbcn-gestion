@@ -70,6 +70,22 @@ function fmtAjustSigned(h: number): { text: string; className: string } {
   return { text: `+${fmtHours(h)}`, className: "text-emerald-600" };
 }
 
+function ajustCellText(r: { kind: RowKind; hores: number; tipus_computa?: "treballades" | "objectiu" | "ajust" | null }): string {
+  if (r.kind !== "ajust") return fmtHours(r.hores);
+  const tc = r.tipus_computa ?? "ajust";
+  if (tc === "treballades") return `+${fmtHours(Math.abs(r.hores))}`;
+  if (tc === "objectiu") return `−${fmtHours(Math.abs(r.hores))} obj.`;
+  return fmtAjustSigned(r.hores).text;
+}
+
+function ajustCellClass(r: { kind: RowKind; hores: number; tipus_computa?: "treballades" | "objectiu" | "ajust" | null }): string {
+  if (r.kind !== "ajust") return "";
+  const tc = r.tipus_computa ?? "ajust";
+  if (tc === "treballades") return "text-emerald-600";
+  if (tc === "objectiu") return "text-amber-600";
+  return fmtAjustSigned(r.hores).className;
+}
+
 function fmtHM(v: string | null): string {
   if (!v) return "—";
   const d = new Date(v);
