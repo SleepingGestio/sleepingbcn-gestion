@@ -170,7 +170,7 @@ function DetallPage() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("personal_ajustos_hores")
-        .select("id, id_persona, fecha, tipo, horas, notas")
+        .select("id_ajuste, id_persona, fecha, tipo, horas, notas")
         .eq("id_persona", idPersona)
         .gte("fecha", start)
         .lte("fecha", end);
@@ -179,7 +179,7 @@ function DetallPage() {
         return [];
       }
       return (data ?? []) as Array<{
-        id: number; id_persona: number; fecha: string; tipo: string | null;
+        id_ajuste: number; id_persona: number; fecha: string; tipo: string | null;
         horas: number | null; notas: string | null;
       }>;
     },
@@ -243,7 +243,7 @@ function DetallPage() {
     }
     for (const a of ajustosQ.data ?? []) {
       out.push({
-        key: `aj-${a.id}`,
+        key: `aj-${a.id_ajuste}`,
         kind: "ajust",
         fecha: a.fecha,
         inici: null,
@@ -296,7 +296,7 @@ function DetallPage() {
 
   const deleteAjust = useMutation({
     mutationFn: async (ajustId: number) => {
-      const { error } = await supabase.from("personal_ajustos_hores").delete().eq("id", ajustId);
+      const { error } = await supabase.from("personal_ajustos_hores").delete().eq("id_ajuste", ajustId);
       if (error) throw error;
     },
     onSuccess: () => {
@@ -430,7 +430,7 @@ function DetallPage() {
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   if (confirm("Eliminar aquest ajust?")) {
-                                    deleteAjust.mutate((r.raw as { id: number }).id);
+                                    deleteAjust.mutate((r.raw as { id_ajuste: number }).id_ajuste);
                                   }
                                 }}
                                 aria-label="Eliminar ajust"
