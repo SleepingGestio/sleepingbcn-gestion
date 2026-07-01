@@ -826,11 +826,14 @@ function BaixaDialog({
         </DialogHeader>
         <div className="grid gap-3 text-sm">
           <Field label="Fecha baja *"><Input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} /></Field>
-          <Field label="Motivo baja"><Input value={motivo} onChange={(e) => setMotivo(e.target.value)} placeholder="Motiu de la baixa" /></Field>
+          <Field label="Motivo baja *">
+            <Input value={motivo} onChange={(e) => setMotivo(e.target.value)} placeholder="Motiu de la baixa" />
+            {motivo.trim() === "" && <p className="text-xs text-rose-600 mt-1">El motiu és obligatori</p>}
+          </Field>
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={onClose} disabled={saving}>Cancel·lar</Button>
-          <Button variant="destructive" onClick={save} disabled={saving}>{saving ? "Guardant…" : "Confirmar baixa"}</Button>
+          <Button variant="destructive" onClick={save} disabled={saving || !motivo.trim()}>{saving ? "Guardant…" : "Confirmar baixa"}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
