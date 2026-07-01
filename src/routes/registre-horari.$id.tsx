@@ -310,11 +310,15 @@ function DetallPage() {
     ? [personaQ.data.nombre, personaQ.data.apellidos].filter(Boolean).join(" ").trim() || `#${idPersona}`
     : `#${idPersona}`;
 
-  const contractLabel =
-    personaQ.data?.tipo_contrato === "autonomo" ? "autònom" :
-    personaQ.data?.tipo_contrato === "fijo_discontinuo" ? "discontinuo" :
-    personaQ.data?.tipo_contrato === "fijo" ? "fijo" :
-    (personaQ.data?.tipo_contrato ?? "");
+  const CONTRACT_LABELS: Record<string, string> = {
+    fijo: "Fijo",
+    discontinuo: "Discontinu",
+    autonomo: "Autònom",
+    temporal: "Temporal",
+    practicas: "Pràctiques",
+    otro: "Otro",
+  };
+  const contractLabel = CONTRACT_LABELS[personaQ.data?.tipo_contrato ?? ""] ?? "";
 
   return (
     <AppShell title="Registre horari">
@@ -339,7 +343,7 @@ function DetallPage() {
 
         <div className="flex items-center gap-3 mb-6">
           <h1 className="text-2xl font-semibold">{fullName}</h1>
-          {contractLabel && <Badge variant="secondary" className="capitalize">{contractLabel}</Badge>}
+          {contractLabel && <Badge variant="secondary">{contractLabel}</Badge>}
         </div>
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
