@@ -566,24 +566,16 @@ function TaskCard({
             </span>
           </div>
           <div className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground flex-wrap">
-            {isVacio || isNentran ? (
-              <>
-                {isVacio && (
-                  <span className="rounded px-1.5 py-0.5 text-[10px] font-semibold bg-rose-200 text-rose-900">VACÍA</span>
-                )}
-                {isVacio && isNentran && (
-                  <span className="text-muted-foreground">·</span>
-                )}
-                {isNentran && (
-                  <span className="rounded px-1.5 py-0.5 text-[10px] font-semibold bg-gray-200 text-gray-700">NOENTRAN</span>
-                )}
-              </>
+            {isVacio ? (
+              <span className="rounded px-1.5 py-0.5 text-[10px] font-semibold bg-rose-200 text-rose-900">VACÍA</span>
             ) : (
-              <>
-                <TimeBadge value={horaOut ?? "—"} informed={!!t.hora_out_informed} />
-                <span>→</span>
-                <TimeBadge value={horaIn ?? "—"} informed={!!t.hora_in_informed} />
-              </>
+              <TimeBadge value={horaOut ?? "—"} informed={!!t.hora_out_informed} />
+            )}
+            <span>→</span>
+            {isNentran ? (
+              <span className="rounded px-1.5 py-0.5 text-[10px] font-semibold bg-gray-200 text-gray-700">NOENTRAN</span>
+            ) : (
+              <TimeBadge value={horaIn ?? "—"} informed={!!t.hora_in_informed} />
             )}
             {nextGuests != null && nextGuests > 0 && (
               <span className="ml-1 inline-flex items-center gap-0.5 text-[11px] font-medium text-foreground">
