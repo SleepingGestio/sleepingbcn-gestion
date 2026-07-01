@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
@@ -273,13 +273,14 @@ function EditTaskModal({
   const [actiu, setActiu] = useState(true);
   const [busy, setBusy] = useState(false);
 
-  // Sync on open
+  // Sync on open / when tipus changes
   const openId = tipus?.id_tipus ?? null;
-  useMemoSync(openId, () => {
+  useEffect(() => {
     setNombre(tipus?.nombre ?? "");
     setNotas(tipus?.notas ?? "");
     setActiu(!!tipus?.actiu);
-  });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openId]);
 
   async function guardar() {
     if (!tipus) return;
@@ -433,10 +434,4 @@ function RecordsPanel({
       </DialogContent>
     </Dialog>
   );
-}
-
-// Small helper: run a side-effect whenever `key` changes (used to sync form state on open).
-function useMemoSync(key: unknown, fn: () => void) {
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useMemo(() => { fn(); return null; }, [key]);
 }
