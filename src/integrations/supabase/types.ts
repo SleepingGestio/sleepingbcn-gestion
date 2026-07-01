@@ -23,6 +23,7 @@ export type Database = {
           id_persona: number
           notas: string | null
           tipo: string | null
+          tipus_computa: string
         }
         Insert: {
           created_at?: string
@@ -32,6 +33,7 @@ export type Database = {
           id_persona: number
           notas?: string | null
           tipo?: string | null
+          tipus_computa?: string
         }
         Update: {
           created_at?: string
@@ -41,6 +43,7 @@ export type Database = {
           id_persona?: number
           notas?: string | null
           tipo?: string | null
+          tipus_computa?: string
         }
         Relationships: []
       }

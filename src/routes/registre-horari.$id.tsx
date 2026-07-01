@@ -70,6 +70,22 @@ function fmtAjustSigned(h: number): { text: string; className: string } {
   return { text: `+${fmtHours(h)}`, className: "text-emerald-600" };
 }
 
+function ajustCellText(r: { kind: RowKind; hores: number; tipus_computa?: "treballades" | "objectiu" | "ajust" | null }): string {
+  if (r.kind !== "ajust") return fmtHours(r.hores);
+  const tc = r.tipus_computa ?? "ajust";
+  if (tc === "treballades") return `+${fmtHours(Math.abs(r.hores))}`;
+  if (tc === "objectiu") return `−${fmtHours(Math.abs(r.hores))} obj.`;
+  return fmtAjustSigned(r.hores).text;
+}
+
+function ajustCellClass(r: { kind: RowKind; hores: number; tipus_computa?: "treballades" | "objectiu" | "ajust" | null }): string {
+  if (r.kind !== "ajust") return "";
+  const tc = r.tipus_computa ?? "ajust";
+  if (tc === "treballades") return "text-emerald-600";
+  if (tc === "objectiu") return "text-amber-600";
+  return fmtAjustSigned(r.hores).className;
+}
+
 function fmtHM(v: string | null): string {
   if (!v) return "—";
   const d = new Date(v);
@@ -92,6 +108,7 @@ type Row = {
   propietat: string;
   tipus: string;
   hores: number;
+  tipus_computa?: "treballades" | "objectiu" | "ajust" | null;
   raw: Record<string, unknown>;
 };
 
@@ -177,7 +194,7 @@ function DetallPage() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("personal_ajustos_hores")
-        .select("id_ajuste, id_persona, fecha, tipo, horas, notas")
+        .select("id_ajuste, id_persona, fecha, tipo, horas, notas, tipus_computa")
         .eq("id_persona", idPersona)
         .gte("fecha", start)
         .lte("fecha", end);
@@ -188,6 +205,7 @@ function DetallPage() {
       return (data ?? []) as Array<{
         id_ajuste: number; id_persona: number; fecha: string; tipo: string | null;
         horas: number | null; notas: string | null;
+        tipus_computa: "treballades" | "objectiu" | "ajust" | null;
       }>;
     },
   });
@@ -277,6 +295,7 @@ function DetallPage() {
         propietat: "—",
         tipus: a.tipo ?? "Ajust manual",
         hores: Number(a.horas ?? 0),
+        tipus_computa: a.tipus_computa ?? "ajust",
         raw: a as unknown as Record<string, unknown>,
       });
     }
@@ -304,26 +323,28 @@ function DetallPage() {
   }, [rows, typeFilter, search, sortKey, sortDir]);
 
   const totals = useMemo(() => {
-    let worked = 0, adjustments = 0, reductions = 0;
+    let worked = 0, otherAdjustments = 0, reductions = 0;
     let reductionTipo: string | null = null;
     for (const l of limpiezasQ.data ?? []) worked += diffHours(l.iniciada_en, l.finalizada_en);
     for (const r of genericQ.data ?? []) worked += diffHours(r.inici, r.fi);
     for (const a of ajustosQ.data ?? []) {
       const h = Number(a.horas ?? 0);
-      if (a.tipo === "vacaciones" || a.tipo === "baja") {
+      const tc = a.tipus_computa ?? "ajust";
+      if (tc === "treballades") {
+        worked += h;
+      } else if (tc === "objectiu") {
         reductions += Math.abs(h);
         if (!reductionTipo) reductionTipo = a.tipo;
       } else {
-        adjustments += h;
+        otherAdjustments += h;
       }
     }
     const objective = activePeriodQ.data?.horas_objetivo_mes ?? null;
     const isAutonom = personaQ.data?.tipo_contrato === "autonomo";
     const baseObjective = objective != null ? Number(objective) : null;
     const effectiveObjective = baseObjective != null ? Math.max(0, baseObjective - reductions) : null;
-    const total = worked + adjustments;
-    const saldo = !isAutonom && effectiveObjective != null ? total - effectiveObjective : 0;
-    return { worked, adjustments, reductions, reductionTipo, objective: baseObjective, effectiveObjective, isAutonom, total, saldo };
+    const saldo = !isAutonom && effectiveObjective != null ? worked - effectiveObjective + otherAdjustments : 0;
+    return { worked, adjustments: otherAdjustments, reductions, reductionTipo, objective: baseObjective, effectiveObjective, isAutonom, saldo };
   }, [limpiezasQ.data, genericQ.data, ajustosQ.data, personaQ.data, activePeriodQ.data]);
 
   function toggleSort(k: SortKey) {
@@ -457,8 +478,8 @@ function DetallPage() {
                           <td className="p-3">
                             <RowTypeBadge kind={r.kind} label={r.tipus} />
                           </td>
-                          <td className={`p-3 text-right tabular-nums ${r.kind === "ajust" ? fmtAjustSigned(r.hores).className : ""}`}>
-                            {r.kind === "ajust" ? fmtAjustSigned(r.hores).text : fmtHours(r.hores)}
+                          <td className={`p-3 text-right tabular-nums ${ajustCellClass(r)}`}>
+                            {ajustCellText(r)}
                           </td>
                           <td className="p-3">
                             {r.kind === "ajust" && (
@@ -682,6 +703,7 @@ function AjustModal({
   open: boolean; onClose: () => void; idPersona: number; defaultDate: string; onSaved: () => void;
 }) {
   const [fecha, setFecha] = useState(defaultDate);
+  const [tipusComputa, setTipusComputa] = useState<"treballades" | "objectiu" | "ajust">("objectiu");
   const [tipo, setTipo] = useState("vacaciones");
   const [horas, setHoras] = useState<string>("");
   const [notas, setNotas] = useState("");
@@ -696,7 +718,8 @@ function AjustModal({
     setSaving(true);
     const { error } = await supabase.from("personal_ajustos_hores").insert({
       id_persona: idPersona, fecha, tipo, horas: h, notas: notas.trim() || null,
-    });
+      tipus_computa: tipusComputa,
+    } as never);
     setSaving(false);
     if (error) { toast.error(error.message); return; }
     toast.success("Ajust creat");
@@ -712,6 +735,17 @@ function AjustModal({
           <div>
             <label className="text-sm font-medium">Data</label>
             <Input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} />
+          </div>
+          <div>
+            <label className="text-sm font-medium">Com computa</label>
+            <Select value={tipusComputa} onValueChange={(v) => setTipusComputa(v as "treballades" | "objectiu" | "ajust")}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="treballades">Hores treballades no registrades</SelectItem>
+                <SelectItem value="objectiu">Reducció d'objectiu (vacances/baixa)</SelectItem>
+                <SelectItem value="ajust">Ajust de saldo</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
           <div>
             <label className="text-sm font-medium">Tipus</label>
