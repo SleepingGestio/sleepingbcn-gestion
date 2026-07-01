@@ -1086,6 +1086,11 @@ function DetailView({
               )}
             </div>
             <div className="text-xs text-slate-600">⏱ Ventana: {win ?? (nentran ? "—" : "—")}</div>
+            {next?.["Huéspedes"] != null && next["Huéspedes"] > 0 && (
+              <div className="text-xs font-medium text-foreground">
+                👤 {next["Huéspedes"]} {next["Huéspedes"] === 1 ? "huésped" : "huéspedes"} entrantes
+              </div>
+            )}
           </div>
         </section>
 
