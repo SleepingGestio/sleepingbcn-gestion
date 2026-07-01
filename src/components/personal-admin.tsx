@@ -241,6 +241,7 @@ export function PersonalAdmin() {
                 <TableRow key={p.id_persona}>
                   <TableCell className="font-medium">
                     {[p.nombre, p.apellidos].filter(Boolean).join(" ") || "—"}
+                    <ContractBadge tipo={p.tipo_contrato} />
                   </TableCell>
                   <TableCell>{p.codigo ?? "—"}</TableCell>
                   <TableCell>{p.telefono ?? "—"}</TableCell>
