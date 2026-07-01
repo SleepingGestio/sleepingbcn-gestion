@@ -3,6 +3,7 @@ import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
+import { AppShell } from "@/components/app-shell";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 
 export const Route = createFileRoute("/registre-horari")({
@@ -45,8 +46,9 @@ function diffHours(a: string | null, b: string | null): number {
 function fmtHours(h: number): string {
   const sign = h < 0 ? "-" : "";
   const abs = Math.abs(h);
-  const hh = Math.floor(abs);
-  const mm = Math.round((abs - hh) * 60);
+  const totalMin = Math.round(abs * 60);
+  const hh = Math.floor(totalMin / 60);
+  const mm = totalMin % 60;
   if (mm === 0) return `${sign}${hh}h`;
   return `${sign}${hh}h ${pad(mm)}m`;
 }
@@ -141,7 +143,8 @@ function RegistreHorariPage() {
   const loading = workersQ.isLoading || limpiezasQ.isLoading || genericQ.isLoading;
 
   return (
-    <div className="p-4 md:p-6 max-w-6xl mx-auto">
+    <AppShell title="Registre horari">
+    <div className="max-w-6xl mx-auto">
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-semibold">Registre horari</h1>
       </div>
@@ -179,6 +182,7 @@ function RegistreHorariPage() {
         </div>
       )}
     </div>
+    </AppShell>
   );
 }
 
