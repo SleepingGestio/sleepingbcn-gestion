@@ -557,6 +557,116 @@ function DetailPopoverDialog({ row, onClose }: { row: Row | null; onClose: () =>
   );
 }
 
+function HoresProgress({
+  worked, adjustments, reductions, reductionTipo,
+  baseObjective, effectiveObjective, saldo, isAutonom,
+}: {
+  worked: number; adjustments: number; reductions: number; reductionTipo: string | null;
+  baseObjective: number | null; effectiveObjective: number | null; saldo: number; isAutonom: boolean;
+}) {
+  const BASE_PCT = 80;
+  const hasObjective = baseObjective != null && baseObjective > 0 && effectiveObjective != null;
+  const total = worked + adjustments;
+
+  // Positions relative to bar container width (%). Base objective sits at 80%.
+  const effPct = hasObjective ? (effectiveObjective! / baseObjective!) * BASE_PCT : 0;
+  const workedPct = hasObjective ? Math.min(100, (total / baseObjective!) * BASE_PCT) : 0;
+
+  // Progress bar color
+  let workedColor = "#1D9E75";
+  if (isAutonom) {
+    workedColor = "#378ADD";
+  } else if (hasObjective) {
+    if (total >= effectiveObjective!) workedColor = "#1D9E75";
+    else {
+      const deficit = (effectiveObjective! - total) / effectiveObjective!;
+      workedColor = deficit >= 0.15 ? "#E24B4A" : "#EF9F27";
+    }
+  }
+
+  // Saldo pill color
+  let saldoBg = "#E1F5EE", saldoFg = "#085041", saldoText: string;
+  if (isAutonom || !hasObjective) {
+    saldoBg = "#F1F1EE"; saldoFg = "#6B7280"; saldoText = "—";
+  } else {
+    if (saldo >= 0) {
+      saldoBg = "#E1F5EE"; saldoFg = "#085041";
+    } else {
+      const deficitPct = effectiveObjective! > 0 ? Math.abs(saldo) / effectiveObjective! : 0;
+      if (deficitPct >= 0.15) { saldoBg = "#FDEAEA"; saldoFg = "#A32D2D"; }
+      else { saldoBg = "#FEF3E2"; saldoFg = "#B35C00"; }
+    }
+    saldoText = `${saldo >= 0 ? "+" : "−"}${fmtHours(Math.abs(saldo))}`;
+  }
+
+  const reductionLabel = reductionTipo === "vacaciones" ? "vacances" : reductionTipo === "baja" ? "baixa" : reductionTipo ?? "";
+  const infoText = !hasObjective
+    ? (isAutonom ? "Autònom" : "Sense objectiu")
+    : reductions > 0
+      ? `Obj. ${fmtHours(baseObjective!)} · −${fmtHours(reductions)} ${reductionLabel} → ${fmtHours(effectiveObjective!)} efectiu`
+      : `Obj. ${fmtHours(baseObjective!)}`;
+
+  return (
+    <div className="mb-6 flex items-end gap-4">
+      <div className="flex-1 min-w-0">
+        <div className="text-xs text-muted-foreground mb-1">{infoText}</div>
+        <div className="relative w-full">
+          {/* Bar 1 - objective breakdown */}
+          <div className="relative w-full" style={{ height: 10 }}>
+            <div className="absolute inset-y-0 left-0" style={{ width: `${effPct}%`, background: "#D3D1C7" }} />
+            {hasObjective && reductions > 0 && (
+              <div
+                className="absolute inset-y-0 flex items-center justify-center text-[10px] font-medium"
+                style={{
+                  left: `${effPct}%`,
+                  width: `${Math.max(0, BASE_PCT - effPct)}%`,
+                  background: "#FAEEDA",
+                  borderLeft: "2px solid #EF9F27",
+                  color: "#B35C00",
+                }}
+              >
+                −{fmtHours(reductions)}
+              </div>
+            )}
+          </div>
+          {/* Bar 2 - progress */}
+          <div className="relative w-full" style={{ height: 20 }}>
+            <div
+              className="absolute inset-y-0 left-0 flex items-center justify-end pr-2 text-xs font-semibold text-white"
+              style={{ width: `${workedPct}%`, background: workedColor }}
+            >
+              {workedPct > 8 ? fmtHours(worked) : ""}
+            </div>
+          </div>
+          {/* Vertical marker at effectiveObjective */}
+          {hasObjective && (
+            <div
+              className="absolute pointer-events-none"
+              style={{
+                left: `${effPct}%`,
+                top: 0,
+                bottom: 0,
+                width: 2,
+                background: "#26215C",
+                transform: "translateX(-1px)",
+              }}
+            />
+          )}
+        </div>
+      </div>
+      <div className="flex flex-col items-center shrink-0">
+        <div
+          className="rounded-full px-3 py-1 tabular-nums"
+          style={{ background: saldoBg, color: saldoFg, fontSize: 16, fontWeight: 700 }}
+        >
+          {saldoText}
+        </div>
+        <div className="text-[11px] text-muted-foreground mt-1">saldo mes</div>
+      </div>
+    </div>
+  );
+}
+
 function Field({ label, value, valueClassName = "" }: { label: string; value: string; valueClassName?: string }) {
   return (
     <div className="flex justify-between gap-4 border-b pb-1 last:border-b-0">
