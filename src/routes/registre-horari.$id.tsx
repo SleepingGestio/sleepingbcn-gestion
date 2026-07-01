@@ -157,7 +157,7 @@ function DetallPage() {
         .gte("inici", `${start}T00:00:00`)
         .lte("inici", `${end}T23:59:59`);
       if (error) throw error;
-      return (data ?? []) as Array<{
+      return (data ?? []) as unknown as Array<{
         id_registre: number; id_persona: number; id_tipus: number; id_apt: number | null;
         inici: string | null; fi: string | null; notes: string | null;
         tipos_tarea_generica: { nombre: string } | null;
