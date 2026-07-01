@@ -26,7 +26,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { PasswordInput } from "@/components/ui/password-input";
 import { Label } from "@/components/ui/label";
-import { Zap, Sofa, LogOut, Clock, ArrowLeft, Check, X, Play, Menu, UserCircle2, KeyRound, Square, ClipboardList } from "lucide-react";
+import { Zap, Sofa, LogOut, Clock, ArrowLeft, Check, X, Play, Menu, UserCircle2, KeyRound, Square, ClipboardList, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
@@ -716,16 +716,20 @@ function WorkerView({
             onStart={startGeneric}
             onCancel={() => setStartSheetOpen(false)}
             onCreateType={async (nombre) => {
+              const cleanName = nombre.toUpperCase().trim();
+              if (!cleanName) return null;
               const nextOrden =
                 (tiposQ.data ?? []).reduce((m, t) => Math.max(m, t.orden ?? 0), 0) + 1;
               const { data, error } = await supabase
                 .from("tipos_tarea_generica")
                 .insert({
-                  nombre,
+                  nombre: cleanName,
                   actiu: true,
                   requiere_apartamento: false,
                   computable_hores: true,
                   orden: nextOrden,
+                  creado_por: personalId,
+                  creado_en: new Date().toISOString(),
                 })
                 .select("id_tipus")
                 .single();
@@ -1461,9 +1465,14 @@ function StartJornadaPanel({
                     setQuery("");
                   }
                 }}
-                className="w-full text-left px-3 py-3 text-sm font-medium text-[#26215C] hover:bg-slate-50 disabled:opacity-50"
+                className="w-full flex items-center gap-2 px-3 py-3 text-sm font-semibold rounded-md border border-[#5DCAA5] bg-[#E1F5EE] text-[#085041] hover:bg-[#d3efe4] disabled:opacity-50"
               >
-                {creating ? "Creant…" : `+ Crear "${query.trim()}"`}
+                <Plus className="h-4 w-4" />
+                <span>
+                  {creating
+                    ? "Creant…"
+                    : `Crear "${query.trim().toUpperCase()}" com a nova tasca`}
+                </span>
               </button>
             )}
         </div>
