@@ -703,6 +703,7 @@ function AjustModal({
   open: boolean; onClose: () => void; idPersona: number; defaultDate: string; onSaved: () => void;
 }) {
   const [fecha, setFecha] = useState(defaultDate);
+  const [tipusComputa, setTipusComputa] = useState<"treballades" | "objectiu" | "ajust">("objectiu");
   const [tipo, setTipo] = useState("vacaciones");
   const [horas, setHoras] = useState<string>("");
   const [notas, setNotas] = useState("");
@@ -717,7 +718,8 @@ function AjustModal({
     setSaving(true);
     const { error } = await supabase.from("personal_ajustos_hores").insert({
       id_persona: idPersona, fecha, tipo, horas: h, notas: notas.trim() || null,
-    });
+      tipus_computa: tipusComputa,
+    } as never);
     setSaving(false);
     if (error) { toast.error(error.message); return; }
     toast.success("Ajust creat");
@@ -733,6 +735,17 @@ function AjustModal({
           <div>
             <label className="text-sm font-medium">Data</label>
             <Input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} />
+          </div>
+          <div>
+            <label className="text-sm font-medium">Com computa</label>
+            <Select value={tipusComputa} onValueChange={(v) => setTipusComputa(v as "treballades" | "objectiu" | "ajust")}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="treballades">Hores treballades no registrades</SelectItem>
+                <SelectItem value="objectiu">Reducció d'objectiu (vacances/baixa)</SelectItem>
+                <SelectItem value="ajust">Ajust de saldo</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
           <div>
             <label className="text-sm font-medium">Tipus</label>
