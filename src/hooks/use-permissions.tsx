@@ -9,6 +9,7 @@ export type MenuKey =
   | "programacion_limpiezas"
   | "comunicar_tareas"
   | "mi_dia"
+  | "registre_horari"
   | "config_general"
   | "config_personal"
   | "config_apartamentos";
@@ -20,6 +21,7 @@ export const ALL_MENUS: { key: MenuKey; label: string }[] = [
   { key: "programacion_limpiezas", label: "Programación limpiezas" },
   { key: "comunicar_tareas", label: "Comunicar tareas" },
   { key: "mi_dia", label: "Mi día" },
+  { key: "registre_horari", label: "Registre horari" },
   { key: "config_general", label: "Configuración · General" },
   { key: "config_personal", label: "Configuración · Personal" },
   { key: "config_apartamentos", label: "Configuración · Apartamentos" },
