@@ -1,5 +1,5 @@
 import { Link, useRouterState } from "@tanstack/react-router";
-import { Calendar, LogIn, Sparkles, CalendarRange, Megaphone, Settings, LogOut, Smartphone } from "lucide-react";
+import { Calendar, LogIn, Sparkles, CalendarRange, Megaphone, Settings, LogOut, Smartphone, Clock } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -23,6 +23,7 @@ const NAV_ITEMS: NavItem[] = [
   { title: "Limpiezas asignadas", url: "/limpiezas", icon: Sparkles, menu: "limpiezas_asignadas" },
   { title: "Programación limpiezas", url: "/programacion-limpiezas", icon: CalendarRange, menu: "programacion_limpiezas" },
   { title: "Comunicar tareas", url: "/comunicar-tareas", icon: Megaphone, menu: "comunicar_tareas" },
+  { title: "Registre horari", url: "/registre-horari", icon: Clock, menu: "registre_horari" },
   { title: "Mi día", url: "/mi-dia", icon: Smartphone, menu: "mi_dia" },
   { title: "Configuración", url: "/configuracion", icon: Settings, menu: null },
 ];
