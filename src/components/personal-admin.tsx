@@ -808,7 +808,7 @@ function BaixaDialog({
     if (currentPeriod) {
       const { error: pErr } = await (supabase as any)
         .from("personal_periodos_actividad")
-        .update({ fecha_fin: fecha })
+        .update({ fecha_fin: fecha, motivo: motivo.trim() || null })
         .eq("id_periodo", currentPeriod.id_periodo);
       if (pErr) { setSaving(false); toast.error("Error període: " + pErr.message); return; }
     }
