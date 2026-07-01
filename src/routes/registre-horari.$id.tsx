@@ -192,6 +192,25 @@ function DetallPage() {
     },
   });
 
+  const activePeriodQ = useQuery({
+    queryKey: ["reg-horari-active-period", idPersona],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("personal_periodos_actividad")
+        .select("id_periodo, horas_objetivo_mes, fecha_inicio, fecha_fin")
+        .eq("id_persona", idPersona)
+        .is("fecha_fin", null)
+        .order("fecha_inicio", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (error) {
+        console.warn("active period query", error);
+        return null;
+      }
+      return data as { id_periodo: number; horas_objetivo_mes: number | null; fecha_inicio: string; fecha_fin: string | null } | null;
+    },
+  });
+
   const aptIds = useMemo(() => {
     const s = new Set<number>();
     for (const l of limpiezasQ.data ?? []) s.add(l.id_apt);
@@ -285,16 +304,27 @@ function DetallPage() {
   }, [rows, typeFilter, search, sortKey, sortDir]);
 
   const totals = useMemo(() => {
-    let worked = 0, adjustments = 0;
+    let worked = 0, adjustments = 0, reductions = 0;
+    let reductionTipo: string | null = null;
     for (const l of limpiezasQ.data ?? []) worked += diffHours(l.iniciada_en, l.finalizada_en);
     for (const r of genericQ.data ?? []) worked += diffHours(r.inici, r.fi);
-    for (const a of ajustosQ.data ?? []) adjustments += Number(a.horas ?? 0);
-    const objective = personaQ.data?.horas_objetivo_mes ?? null;
+    for (const a of ajustosQ.data ?? []) {
+      const h = Number(a.horas ?? 0);
+      if (a.tipo === "vacaciones" || a.tipo === "baja") {
+        reductions += Math.abs(h);
+        if (!reductionTipo) reductionTipo = a.tipo;
+      } else {
+        adjustments += h;
+      }
+    }
+    const objective = activePeriodQ.data?.horas_objetivo_mes ?? null;
     const isAutonom = personaQ.data?.tipo_contrato === "autonomo";
+    const baseObjective = objective != null ? Number(objective) : null;
+    const effectiveObjective = baseObjective != null ? Math.max(0, baseObjective - reductions) : null;
     const total = worked + adjustments;
-    const saldo = !isAutonom && objective != null ? total - Number(objective) : 0;
-    return { worked, adjustments, objective, isAutonom, total, saldo };
-  }, [limpiezasQ.data, genericQ.data, ajustosQ.data, personaQ.data]);
+    const saldo = !isAutonom && effectiveObjective != null ? total - effectiveObjective : 0;
+    return { worked, adjustments, reductions, reductionTipo, objective: baseObjective, effectiveObjective, isAutonom, total, saldo };
+  }, [limpiezasQ.data, genericQ.data, ajustosQ.data, personaQ.data, activePeriodQ.data]);
 
   function toggleSort(k: SortKey) {
     if (sortKey === k) setSortDir(sortDir === "asc" ? "desc" : "asc");
@@ -353,16 +383,16 @@ function DetallPage() {
           {contractLabel && <Badge variant="secondary">{contractLabel}</Badge>}
         </div>
 
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
-          <SummaryCard label="Hores treballades" value={fmtHours(totals.worked)} />
-          <SummaryCard label="Ajustos" value={fmtHours(totals.adjustments)} />
-          <SummaryCard label="Objectiu" value={totals.isAutonom || totals.objective == null ? "autònom" : fmtHours(Number(totals.objective))} />
-          <SummaryCard
-            label="Saldo"
-            value={totals.isAutonom || totals.objective == null ? "—" : `${totals.saldo >= 0 ? "+" : ""}${fmtHours(totals.saldo)}`}
-            valueClassName={totals.isAutonom || totals.objective == null ? "" : totals.saldo >= 0 ? "text-emerald-600" : "text-red-600"}
-          />
-        </div>
+        <HoresProgress
+          worked={totals.worked}
+          adjustments={totals.adjustments}
+          reductions={totals.reductions}
+          reductionTipo={totals.reductionTipo}
+          baseObjective={totals.objective}
+          effectiveObjective={totals.effectiveObjective}
+          saldo={totals.saldo}
+          isAutonom={totals.isAutonom}
+        />
 
         <div className="flex flex-wrap items-center gap-3 mb-3">
           <Select value={typeFilter} onValueChange={setTypeFilter}>
