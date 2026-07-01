@@ -14,7 +14,36 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      personal_ajustos_hores: {
+        Row: {
+          created_at: string
+          fecha: string
+          horas: number
+          id_ajuste: number
+          id_persona: number
+          notas: string | null
+          tipo: string | null
+        }
+        Insert: {
+          created_at?: string
+          fecha: string
+          horas: number
+          id_ajuste?: never
+          id_persona: number
+          notas?: string | null
+          tipo?: string | null
+        }
+        Update: {
+          created_at?: string
+          fecha?: string
+          horas?: number
+          id_ajuste?: never
+          id_persona?: number
+          notas?: string | null
+          tipo?: string | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
