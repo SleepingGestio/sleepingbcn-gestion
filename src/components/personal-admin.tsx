@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
@@ -49,6 +49,28 @@ const CONTRATOS: { value: string; label: string }[] = [
   { value: "practicas", label: "Pràctiques" },
   { value: "otro", label: "Otro" },
 ];
+
+const CONTRATO_LABEL: Record<string, string> = Object.fromEntries(
+  CONTRATOS.map((c) => [c.value, c.label]),
+);
+
+function ContractBadge({ tipo }: { tipo: string | null | undefined }) {
+  if (!tipo || !CONTRATO_LABEL[tipo]) return null;
+  return (
+    <span className="ml-2 inline-flex items-center rounded-md border px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground align-middle">
+      {CONTRATO_LABEL[tipo]}
+    </span>
+  );
+}
+
+type PeriodoActividad = {
+  id_periodo: number;
+  id_persona: number;
+  fecha_inicio: string;
+  fecha_fin: string | null;
+  motivo: string | null;
+  horas_objetivo_mes: number | null;
+};
 
 async function sendInvite(email: string) {
   const { error } = await supabase.auth.signInWithOtp({
