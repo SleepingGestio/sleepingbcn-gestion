@@ -26,6 +26,7 @@ import { SortHeader } from "@/components/sort-header";
 import { ArrowLeft, ChevronLeft, ChevronRight, Plus, Trash2, Search } from "lucide-react";
 import { fmtDate } from "@/lib/format";
 import { toast } from "sonner";
+import { LimpiezaPopover, type Limpieza } from "@/components/limpieza-popover";
 
 export const Route = createFileRoute("/registre-horari/$id")({
   component: DetallPage,
@@ -130,6 +131,40 @@ function DetallPage() {
   const [search, setSearch] = useState("");
   const [ajustOpen, setAjustOpen] = useState(false);
   const [detailRow, setDetailRow] = useState<Row | null>(null);
+  const [limpiezaPopover, setLimpiezaPopover] = useState<null | {
+    loadKey: number;
+    apt: { id_apt: number; nombre: string; camas_fijas?: number | null; tiene_sofa_cama?: boolean | null };
+    fecha: string;
+    existing: Limpieza | null;
+  }>(null);
+
+  async function openRow(r: Row) {
+    if (r.kind === "checkout" || r.kind === "extra_cr") {
+      const raw = r.raw as { id_limpieza: number; id_apt: number };
+      const [{ data: apt }, { data: full }] = await Promise.all([
+        supabase
+          .from("apartamentos")
+          .select("id_apt, nombre, camas_fijas, tiene_sofa_cama")
+          .eq("id_apt", raw.id_apt)
+          .maybeSingle(),
+        supabase.from("limpiezas").select("*").eq("id_limpieza", raw.id_limpieza).maybeSingle(),
+      ]);
+      if (!apt) { toast.error("Apartament no trobat"); return; }
+      setLimpiezaPopover({
+        loadKey: Date.now(),
+        apt: {
+          id_apt: apt.id_apt,
+          nombre: apt.nombre ?? `Apt #${apt.id_apt}`,
+          camas_fijas: (apt as { camas_fijas?: number | null }).camas_fijas ?? null,
+          tiene_sofa_cama: (apt as { tiene_sofa_cama?: boolean | null }).tiene_sofa_cama ?? null,
+        },
+        fecha: r.fecha,
+        existing: (full ?? { id_limpieza: raw.id_limpieza }) as unknown as Limpieza,
+      });
+      return;
+    }
+    setDetailRow(r);
+  }
 
   function prevMonth() {
     const d = new Date(year, month0 - 1, 1);
@@ -470,7 +505,7 @@ function DetallPage() {
                   filteredRows.map((r) => (
                     <Popover key={r.key}>
                       <PopoverTrigger asChild>
-                        <tr className="border-b hover:bg-muted/40 cursor-pointer" onClick={() => setDetailRow(r)}>
+                         <tr className="border-b hover:bg-muted/40 cursor-pointer" onClick={() => openRow(r)}>
                           <td className="p-3">{fmtDate(r.fecha)}</td>
                           <td className="p-3">{r.kind === "ajust" ? "—" : fmtHM(r.inici)}</td>
                           <td className="p-3">{r.kind === "ajust" ? "—" : fmtHM(r.fi)}</td>
@@ -508,6 +543,21 @@ function DetallPage() {
         </div>
 
         <DetailPopoverDialog row={detailRow} onClose={() => setDetailRow(null)} />
+
+        {limpiezaPopover && (
+          <LimpiezaPopover
+            key={`${limpiezaPopover.apt.id_apt}|${limpiezaPopover.fecha}|${limpiezaPopover.existing?.id_limpieza ?? 0}|${limpiezaPopover.loadKey}`}
+            open={!!limpiezaPopover}
+            loadKey={limpiezaPopover.loadKey}
+            onOpenChange={(o) => !o && setLimpiezaPopover(null)}
+            apt={limpiezaPopover.apt}
+            fecha={limpiezaPopover.fecha}
+            existing={limpiezaPopover.existing}
+            onSaved={() => {
+              qc.invalidateQueries({ queryKey: ["reg-horari-det-limpiezas", idPersona] });
+            }}
+          />
+        )}
 
         <AjustModal
           open={ajustOpen}
