@@ -232,25 +232,23 @@ function WorkerColumn({
         />
       </div>
       <div className="mt-3 text-center">
-        <div className="text-sm font-medium truncate max-w-[110px]">{firstName}</div>
-        <div className="text-xs text-muted-foreground">
+        <div className="text-[14px] font-semibold truncate max-w-[110px]">{firstName}</div>
+        <div className="text-[13px] text-muted-foreground">
           {fmtHours(actual)} / {hasObjective ? fmtHours(objective as number) : "autònom"}
         </div>
         {hasObjective && (
           <div
-            className={`text-xs font-medium ${saldo >= 0 ? "text-emerald-600" : "text-red-600"}`}
+            className={`text-[15px] font-bold tabular-nums ${saldo >= 0 ? "text-emerald-600" : "text-red-600"}`}
           >
             {saldo >= 0 ? "+" : ""}
             {fmtHours(saldo)}
           </div>
         )}
-        <Link
-          to="/registre-horari/$id"
-          params={{ id: String(worker.id_persona) }}
-          className="text-xs text-primary hover:underline mt-1 inline-block"
-        >
-          Detall →
-        </Link>
+        <Button asChild variant="outline" size="sm" className="mt-2">
+          <Link to="/registre-horari/$id" params={{ id: String(worker.id_persona) }}>
+            Detall
+          </Link>
+        </Button>
       </div>
     </div>
   );

@@ -417,6 +417,7 @@ function PersonaDialog({
 
   const [novaAltaOpen, setNovaAltaOpen] = useState(false);
   const [baixaOpen, setBaixaOpen] = useState(false);
+  const [editPeriod, setEditPeriod] = useState<PeriodoActividad | null>(null);
 
   const toggleRole = (id: number) =>
     setRoleIds((s) => {
@@ -597,15 +598,26 @@ function PersonaDialog({
                   <div className="rounded-md border border-emerald-300 bg-emerald-50 p-3 space-y-3">
                     <div className="flex items-start justify-between gap-2">
                       <p className="text-xs font-medium text-emerald-800">Període obert</p>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        className="border-rose-300 text-rose-700 hover:bg-rose-50"
-                        onClick={() => setBaixaOpen(true)}
-                      >
-                        Donar de baixa
-                      </Button>
+                      <div className="flex gap-2">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setEditPeriod(currentPeriod)}
+                          aria-label="Editar període actiu"
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="border-rose-300 text-rose-700 hover:bg-rose-50"
+                          onClick={() => setBaixaOpen(true)}
+                        >
+                          Donar de baixa
+                        </Button>
+                      </div>
                     </div>
                     <div className="grid grid-cols-2 gap-3">
                       <Field label="Fecha inicio">
@@ -644,7 +656,7 @@ function PersonaDialog({
                 ) : (
                   <div className="rounded-md border divide-y">
                     {periodos.map((p) => (
-                      <div key={p.id_periodo} className="grid grid-cols-[1fr_1fr_auto] gap-3 px-3 py-2 text-xs">
+                      <div key={p.id_periodo} className="grid grid-cols-[1fr_1fr_auto_auto] items-center gap-3 px-3 py-2 text-xs">
                         <div>
                           <span className="font-medium">{p.fecha_inicio}</span>
                           <span className="text-muted-foreground"> → {p.fecha_fin ?? "obert"}</span>
@@ -653,6 +665,16 @@ function PersonaDialog({
                         <div className="text-right tabular-nums">
                           {p.horas_objetivo_mes != null ? `${p.horas_objetivo_mes} h/mes` : "—"}
                         </div>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          className="h-7 w-7 p-0"
+                          onClick={() => setEditPeriod(p)}
+                          aria-label="Editar període"
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                        </Button>
                       </div>
                     ))}
                   </div>
@@ -720,6 +742,13 @@ function PersonaDialog({
             currentPeriod={currentPeriod}
             onClose={() => setBaixaOpen(false)}
             onSaved={() => { setBaixaOpen(false); periodosQ.refetch(); onSaved(); }}
+          />
+        )}
+        {isEdit && editPeriod && (
+          <PeriodEditDialog
+            period={editPeriod}
+            onClose={() => setEditPeriod(null)}
+            onSaved={() => { setEditPeriod(null); periodosQ.refetch(); }}
           />
         )}
       </DialogContent>
@@ -846,6 +875,68 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
       <Label className="text-xs">{label}</Label>
       {children}
     </div>
+  );
+}
+
+function PeriodEditDialog({
+  period, onClose, onSaved,
+}: {
+  period: PeriodoActividad;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [fechaInicio, setFechaInicio] = useState(period.fecha_inicio ?? "");
+  const [fechaFin, setFechaFin] = useState(period.fecha_fin ?? "");
+  const [motivo, setMotivo] = useState(period.motivo ?? "");
+  const [horas, setHoras] = useState(
+    period.horas_objetivo_mes != null ? String(period.horas_objetivo_mes) : "",
+  );
+  const [saving, setSaving] = useState(false);
+
+  async function save() {
+    if (!fechaInicio) { toast.error("La data d'inici és obligatòria"); return; }
+    setSaving(true);
+    const { error } = await (supabase as any)
+      .from("personal_periodos_actividad")
+      .update({
+        fecha_inicio: fechaInicio,
+        fecha_fin: fechaFin.trim() ? fechaFin : null,
+        motivo: motivo.trim() || null,
+        horas_objetivo_mes: horas.trim() !== "" ? Number(horas) : null,
+      })
+      .eq("id_periodo", period.id_periodo);
+    setSaving(false);
+    if (error) { toast.error("Error: " + error.message); return; }
+    toast.success("Període actualitzat");
+    onSaved();
+  }
+
+  return (
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle>Editar període</DialogTitle>
+        </DialogHeader>
+        <div className="grid gap-3 text-sm">
+          <Field label="Fecha inicio *">
+            <Input type="date" value={fechaInicio} onChange={(e) => setFechaInicio(e.target.value)} />
+          </Field>
+          <Field label="Fecha fin">
+            <Input type="date" value={fechaFin} onChange={(e) => setFechaFin(e.target.value)} />
+          </Field>
+          <Field label="Motivo">
+            <Input value={motivo} onChange={(e) => setMotivo(e.target.value)} />
+          </Field>
+          <Field label="Hores objectiu/mes">
+            <Input type="number" min={0} step="0.5" value={horas} onChange={(e) => setHoras(e.target.value)} />
+          </Field>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} disabled={saving}>Cancel·lar</Button>
+          <Button onClick={save} disabled={saving}>{saving ? "Guardant…" : "Guardar"}</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
