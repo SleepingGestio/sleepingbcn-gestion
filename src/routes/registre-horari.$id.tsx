@@ -425,17 +425,19 @@ function DetallPage() {
             <ArrowLeft className="h-4 w-4" /> Tornar
           </Link>
           <div className="flex-1" />
-          <div className="flex items-center gap-2">
-            <Button variant="outline" size="icon" onClick={prevMonth} aria-label="Mes anterior">
-              <ChevronLeft className="h-4 w-4" />
-            </Button>
-            <div className="text-sm font-medium capitalize min-w-[140px] text-center">
-              {MONTH_CA[month0]} {year}
+          {activeTab !== "vacances" && (
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="icon" onClick={prevMonth} aria-label="Mes anterior">
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+              <div className="text-sm font-medium capitalize min-w-[140px] text-center">
+                {MONTH_CA[month0]} {year}
+              </div>
+              <Button variant="outline" size="icon" onClick={nextMonth} aria-label="Mes següent">
+                <ChevronRight className="h-4 w-4" />
+              </Button>
             </div>
-            <Button variant="outline" size="icon" onClick={nextMonth} aria-label="Mes següent">
-              <ChevronRight className="h-4 w-4" />
-            </Button>
-          </div>
+          )}
         </div>
 
         <div className="flex items-center gap-3 mb-6">
@@ -443,6 +445,14 @@ function DetallPage() {
           {contractLabel && <Badge variant="secondary">{contractLabel}</Badge>}
         </div>
 
+        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "mes" | "tancaments" | "vacances")} className="mb-4">
+          <TabsList>
+            <TabsTrigger value="mes">Mes en curs</TabsTrigger>
+            <TabsTrigger value="tancaments">Tancaments</TabsTrigger>
+            <TabsTrigger value="vacances">Vacances</TabsTrigger>
+          </TabsList>
+
+        <TabsContent value="mes" className="mt-4">
         <HoresProgress
           worked={totals.worked}
           adjustments={totals.adjustments}
@@ -573,6 +583,26 @@ function DetallPage() {
             setAjustOpen(false);
           }}
         />
+        </TabsContent>
+
+        <TabsContent value="tancaments" className="mt-4">
+          <TancamentsTab
+            idPersona={idPersona}
+            year={year}
+            month0={month0}
+            totals={totals}
+            currentPersonaId={currentPersona?.id_persona ?? null}
+          />
+        </TabsContent>
+
+        <TabsContent value="vacances" className="mt-4">
+          <VacancesTab
+            idPersona={idPersona}
+            tipoContrato={personaQ.data?.tipo_contrato ?? null}
+            currentPersonaId={currentPersona?.id_persona ?? null}
+          />
+        </TabsContent>
+        </Tabs>
       </div>
     </AppShell>
   );
