@@ -634,6 +634,11 @@ function PersonaDialog({
                       <Input type="number" min={0} step="0.5" value={firstHoras} onChange={(e) => setFirstHoras(e.target.value)} />
                     </Field>
                   )}
+                  {tipoContrato !== "autonomo" && (
+                    <Field label="Dies vacances / any">
+                      <Input type="number" min={0} step="0.5" value={firstDiesVac} onChange={(e) => setFirstDiesVac(e.target.value)} />
+                    </Field>
+                  )}
                   <Field label="Motivo">
                     <Input value={firstMotivo} onChange={(e) => setFirstMotivo(e.target.value)} placeholder="Alta inicial" />
                   </Field>
@@ -689,6 +694,15 @@ function PersonaDialog({
                           step="0.5"
                           value={periodHoras}
                           onChange={(e) => setPeriodHoras(e.target.value)}
+                        />
+                      </Field>
+                      <Field label="Dies vacances / any">
+                        <Input
+                          type="number"
+                          min={0}
+                          step="0.5"
+                          value={periodDiesVac}
+                          onChange={(e) => setPeriodDiesVac(e.target.value)}
                         />
                       </Field>
                     </div>
