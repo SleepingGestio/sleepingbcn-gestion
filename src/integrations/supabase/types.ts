@@ -47,6 +47,42 @@ export type Database = {
         }
         Relationships: []
       }
+      personal_periodos_actividad: {
+        Row: {
+          creado_por: number | null
+          created_at: string
+          dies_vacances_any: number
+          fecha_fin: string | null
+          fecha_inicio: string
+          horas_objetivo_mes: number | null
+          id_periodo: number
+          id_persona: number
+          motivo: string | null
+        }
+        Insert: {
+          creado_por?: number | null
+          created_at?: string
+          dies_vacances_any?: number
+          fecha_fin?: string | null
+          fecha_inicio: string
+          horas_objetivo_mes?: number | null
+          id_periodo?: never
+          id_persona: number
+          motivo?: string | null
+        }
+        Update: {
+          creado_por?: number | null
+          created_at?: string
+          dies_vacances_any?: number
+          fecha_fin?: string | null
+          fecha_inicio?: string
+          horas_objetivo_mes?: number | null
+          id_periodo?: never
+          id_persona?: number
+          motivo?: string | null
+        }
+        Relationships: []
+      }
       personal_resum_mes: {
         Row: {
           any_mes: number
