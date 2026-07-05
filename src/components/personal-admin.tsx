@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQueries, useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -427,58 +427,61 @@ function PersonaDialog({
   const periodos = periodosQ.data ?? [];
   const currentPeriod = periodos.find((p) => !p.fecha_fin) ?? null;
 
-  // Vacances any + consumides per período (edit only)
-  const vacancesQ = useQuery({
-    queryKey: ["personal-vacances-any-admin", persona?.id_persona],
-    enabled: isEdit,
-    queryFn: async () => {
-      const { data, error } = await (supabase as any)
-        .from("personal_vacances_any")
-        .select("id_vac_any, data_inici_any, data_fi_any, hores_calculades, hores_assignades")
-        .eq("id_persona", persona!.id_persona);
-      if (error) throw error;
-      return (data ?? []) as Array<{
-        id_vac_any: number;
-        data_inici_any: string;
-        data_fi_any: string;
-        hores_calculades: number | null;
-        hores_assignades: number | null;
-      }>;
-    },
-  });
-  const ajustosVacQ = useQuery({
-    queryKey: ["personal-ajustos-vac-admin", persona?.id_persona],
-    enabled: isEdit,
-    queryFn: async () => {
-      const { data, error } = await (supabase as any)
-        .from("personal_ajustos_hores")
-        .select("fecha, horas")
-        .eq("id_persona", persona!.id_persona)
-        .eq("tipo", "vacaciones");
-      if (error) throw error;
-      return (data ?? []) as Array<{ fecha: string; horas: number }>;
-    },
-  });
-  const vacByInici = useMemo(() => {
-    const map = new Map<string, { assigned: number; consumed: number }>();
-    const vacances = vacancesQ.data ?? [];
-    const ajustos = ajustosVacQ.data ?? [];
-    for (const p of periodos) {
-      const start = p.fecha_inicio;
-      const end = addOneYear(start);
-      const v = vacances.find((x) => x.data_inici_any >= start && x.data_inici_any < end);
-      if (!v) continue;
-      const assigned = Number(v.hores_calculades ?? v.hores_assignades ?? 0);
-      let consumed = 0;
-      for (const a of ajustos) {
-        if (a.fecha >= v.data_inici_any && a.fecha <= v.data_fi_any) {
+  // Vacances any per período (edit only) — one query per period row
+  const vacQueries = useQueries({
+    queries: periodos.map((p) => ({
+      queryKey: [
+        "personal-vacances-any-per-periodo",
+        persona?.id_persona,
+        p.fecha_inicio,
+      ],
+      enabled: isEdit && !!persona?.id_persona && !!p.fecha_inicio,
+      queryFn: async () => {
+        const start = p.fecha_inicio;
+        const end = addOneYear(start);
+        const { data, error } = await (supabase as any)
+          .from("personal_vacances_any")
+          .select("id_vac_any, data_inici_any, data_fi_any, hores_calculades, hores_assignades")
+          .eq("id_persona", persona!.id_persona)
+          .gte("data_inici_any", start)
+          .lt("data_inici_any", end)
+          .order("data_inici_any", { ascending: true })
+          .limit(1);
+        if (error) throw error;
+        const row = (data ?? [])[0] as
+          | {
+              id_vac_any: number;
+              data_inici_any: string;
+              data_fi_any: string;
+              hores_calculades: number | null;
+              hores_assignades: number | null;
+            }
+          | undefined;
+        if (!row) return null;
+        const { data: ajustos, error: aerr } = await (supabase as any)
+          .from("personal_ajustos_hores")
+          .select("horas")
+          .eq("id_persona", persona!.id_persona)
+          .eq("tipo", "vacaciones")
+          .gte("fecha", row.data_inici_any)
+          .lte("fecha", row.data_fi_any);
+        if (aerr) throw aerr;
+        let consumed = 0;
+        for (const a of (ajustos ?? []) as Array<{ horas: number }>) {
           consumed += Math.abs(Number(a.horas ?? 0));
         }
-      }
-      map.set(start, { assigned, consumed });
-    }
+        return { row, consumed };
+      },
+    })),
+  });
+  const vacByInici = useMemo(() => {
+    const map = new Map<string, { row: { hores_calculades: number | null; hores_assignades: number | null }; consumed: number }>();
+    periodos.forEach((p, i) => {
+      const r = vacQueries[i]?.data as { row: any; consumed: number } | null | undefined;
+      if (r && r.row) map.set(p.fecha_inicio, r);
+    });
     return map;
-  }, [periodos, vacancesQ.data, ajustosVacQ.data]);
+  }, [periodos, vacQueries.map((q) => q.dataUpdatedAt).join(",")]);
 
   // Període actiu (editable)
   const [periodInicio, setPeriodInicio] = useState<string>("");
@@ -806,7 +809,7 @@ function PersonaDialog({
                             style={{ fontSize: 11 }}
                           >
                             {vac
-                              ? `Vac: ${formatHHMM(Number(vac.assigned))} / ${formatHHMM(Number(vac.consumed))}`
+                              ? `Vac: ${formatHHMM(Number(vac.row.hores_calculades ?? vac.row.hores_assignades ?? 0))} / ${formatHHMM(Number(vac.consumed))}`
                               : ""}
                           </div>
                           <Button
