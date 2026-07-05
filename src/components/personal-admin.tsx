@@ -806,7 +806,7 @@ function PersonaDialog({
                             style={{ fontSize: 11 }}
                           >
                             {vac
-                              ? `Vac: ${formatHHMM(vac.assigned)} / ${formatHHMM(vac.consumed)}`
+                              ? `Vac: ${formatHHMM(Number(vac.assigned))} / ${formatHHMM(Number(vac.consumed))}`
                               : ""}
                           </div>
                           <Button
