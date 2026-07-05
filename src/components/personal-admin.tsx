@@ -23,6 +23,7 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { usePermissions } from "@/hooks/use-permissions";
 import { useCurrentPersonal } from "@/hooks/use-current-personal";
+import { formatHHMM } from "@/lib/utils";
 import { roleColor } from "@/lib/role-colors";
 
 type Persona = {
@@ -420,6 +421,53 @@ function PersonaDialog({
   });
   const periodos = periodosQ.data ?? [];
   const currentPeriod = periodos.find((p) => !p.fecha_fin) ?? null;
+
+  // Vacances any + consumides per período (edit only)
+  const vacancesQ = useQuery({
+    queryKey: ["personal-vacances-any-admin", persona?.id_persona],
+    enabled: isEdit,
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("personal_vacances_any")
+        .select("id_vac_any, data_inici_any, data_fi_any, hores_calculades, hores_assignades")
+        .eq("id_persona", persona!.id_persona);
+      if (error) throw error;
+      return (data ?? []) as Array<{
+        id_vac_any: number;
+        data_inici_any: string;
+        data_fi_any: string;
+        hores_calculades: number | null;
+        hores_assignades: number | null;
+      }>;
+    },
+  });
+  const ajustosVacQ = useQuery({
+    queryKey: ["personal-ajustos-vac-admin", persona?.id_persona],
+    enabled: isEdit,
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("personal_ajustos_hores")
+        .select("fecha, horas")
+        .eq("id_persona", persona!.id_persona)
+        .eq("tipo", "vacaciones");
+      if (error) throw error;
+      return (data ?? []) as Array<{ fecha: string; horas: number }>;
+    },
+  });
+  const vacByInici = useMemo(() => {
+    const map = new Map<string, { assigned: number; consumed: number }>();
+    for (const v of vacancesQ.data ?? []) {
+      const assigned = Number(v.hores_calculades ?? v.hores_assignades ?? 0);
+      let consumed = 0;
+      for (const a of ajustosVacQ.data ?? []) {
+        if (a.fecha >= v.data_inici_any && a.fecha <= v.data_fi_any) {
+          consumed += Math.abs(Number(a.horas ?? 0));
+        }
+      }
+      map.set(v.data_inici_any, { assigned, consumed });
+    }
+    return map;
+  }, [vacancesQ.data, ajustosVacQ.data]);
 
   // Període actiu (editable)
   const [periodInicio, setPeriodInicio] = useState<string>("");
