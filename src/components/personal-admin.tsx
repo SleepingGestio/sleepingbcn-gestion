@@ -70,7 +70,37 @@ type PeriodoActividad = {
   fecha_fin: string | null;
   motivo: string | null;
   horas_objetivo_mes: number | null;
+  dies_vacances_any: number | null;
 };
+
+function computeVacHours(dies: number, horasMes: number): number {
+  return Math.round(dies * (horasMes / 30) * 10) / 10;
+}
+function oneYearMinusOneDay(iso: string): string {
+  const d = new Date(iso);
+  d.setFullYear(d.getFullYear() + 1);
+  d.setDate(d.getDate() - 1);
+  return d.toISOString().slice(0, 10);
+}
+async function insertVacancesAny(args: {
+  id_persona: number;
+  fecha_inicio: string;
+  dies: number;
+  horasMes: number;
+  creado_por: number | null;
+}) {
+  const horesCalc = computeVacHours(args.dies, args.horasMes);
+  const { error } = await (supabase as any).from("personal_vacances_any").insert({
+    id_persona: args.id_persona,
+    data_inici_any: args.fecha_inicio,
+    data_fi_any: oneYearMinusOneDay(args.fecha_inicio),
+    dies_assignats: args.dies,
+    hores_calculades: horesCalc,
+    hores_assignades: horesCalc,
+    creado_por: args.creado_por,
+  });
+  if (error) throw error;
+}
 
 async function sendInvite(email: string) {
   const { error } = await supabase.auth.signInWithOtp({
