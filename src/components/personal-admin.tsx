@@ -773,28 +773,44 @@ function PersonaDialog({
                   <p className="text-xs text-muted-foreground">Cap període registrat</p>
                 ) : (
                   <div className="rounded-md border divide-y">
-                    {periodos.map((p) => (
-                      <div key={p.id_periodo} className="grid grid-cols-[1fr_1fr_auto_auto] items-center gap-3 px-3 py-2 text-xs">
-                        <div>
-                          <span className="font-medium">{p.fecha_inicio}</span>
-                          <span className="text-muted-foreground"> → {p.fecha_fin ?? "obert"}</span>
-                        </div>
-                        <div className="text-muted-foreground truncate">{p.motivo ?? "—"}</div>
-                        <div className="text-right tabular-nums">
-                          {p.horas_objetivo_mes != null ? `${p.horas_objetivo_mes} h/mes` : "—"}
-                        </div>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="ghost"
-                          className="h-7 w-7 p-0"
-                          onClick={() => setEditPeriod(p)}
-                          aria-label="Editar període"
+                    {periodos.map((p) => {
+                      const vac = vacByInici.get(p.fecha_inicio);
+                      return (
+                        <div
+                          key={p.id_periodo}
+                          className="grid grid-cols-[1fr_1fr_auto_auto_auto] items-center gap-3 px-3 py-2 text-xs"
                         >
-                          <Pencil className="h-3.5 w-3.5" />
-                        </Button>
-                      </div>
-                    ))}
+                          <div>
+                            <span className="font-medium">{p.fecha_inicio}</span>
+                            <span className="text-muted-foreground"> → {p.fecha_fin ?? "obert"}</span>
+                          </div>
+                          <div className="text-muted-foreground truncate">{p.motivo ?? "—"}</div>
+                          <div className="text-right tabular-nums">
+                            {p.horas_objetivo_mes != null
+                              ? `${formatHHMM(Number(p.horas_objetivo_mes))} h/mes`
+                              : "—"}
+                          </div>
+                          <div
+                            className="text-muted-foreground tabular-nums text-right"
+                            style={{ fontSize: 11 }}
+                          >
+                            {vac
+                              ? `Vac: ${formatHHMM(vac.assigned)} / ${formatHHMM(vac.consumed)}`
+                              : ""}
+                          </div>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            className="h-7 w-7 p-0"
+                            onClick={() => setEditPeriod(p)}
+                            aria-label="Editar període"
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
               </section>
