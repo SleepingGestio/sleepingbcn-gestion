@@ -487,6 +487,8 @@ function PersonaDialog({
             controlHorario && tipoContrato !== "autonomo" && periodHoras.trim() !== ""
               ? Number(periodHoras)
               : null,
+          dies_vacances_any:
+            periodDiesVac.trim() !== "" ? Number(periodDiesVac) : 23,
         };
         const { error: pErr } = await (supabase as any)
           .from("personal_periodos_actividad")
@@ -516,12 +518,30 @@ function PersonaDialog({
           controlHorario && tipoContrato !== "autonomo" && firstHoras.trim() !== ""
             ? Number(firstHoras)
             : null,
+        dies_vacances_any:
+          firstDiesVac.trim() !== "" ? Number(firstDiesVac) : 23,
         creado_por: currentUser?.id_persona ?? null,
       };
       const { error: pErr } = await (supabase as any)
         .from("personal_periodos_actividad")
         .insert(firstPeriodPayload);
       if (pErr) { toast.error("Error primera alta: " + pErr.message); return null; }
+      // Auto-create vacances any row
+      if (tipoContrato !== "autonomo") {
+        const diesN = firstDiesVac.trim() !== "" ? Number(firstDiesVac) : 23;
+        const horasMes = firstHoras.trim() !== "" ? Number(firstHoras) : 0;
+        try {
+          await insertVacancesAny({
+            id_persona,
+            fecha_inicio: firstFechaInicio,
+            dies: diesN,
+            horasMes,
+            creado_por: currentUser?.id_persona ?? null,
+          });
+        } catch (e) {
+          toast.error("Error vacances: " + (e as Error).message);
+        }
+      }
     }
     const current = new Set(currentRoleIds);
     const target = roleIds;
