@@ -860,3 +860,735 @@ function AjustModal({
     </Dialog>
   );
 }
+
+// ============================================================
+// TANCAMENTS TAB
+// ============================================================
+
+type ResumRow = {
+  id_resum: number;
+  id_persona: number;
+  any_mes: number;
+  mes: number;
+  horas_objetivo_base: number;
+  horas_reduccion: number;
+  horas_objetivo_efectiu: number;
+  horas_treballades: number;
+  horas_ajust_saldo: number;
+  saldo_mes: number;
+  saldo_acumulat_anterior: number;
+  saldo_acumulat_fi: number;
+  decisio_tancament: "liquidar" | "acumular" | null;
+  cerrado: boolean;
+  cerrado_en: string | null;
+  cerrado_por: number | null;
+  notas: string | null;
+};
+
+type TotalsShape = {
+  worked: number;
+  adjustments: number;
+  reductions: number;
+  reductionTipo: string | null;
+  objective: number | null;
+  effectiveObjective: number | null;
+  isAutonom: boolean;
+  saldo: number;
+};
+
+function saldoChipStyle(saldo: number, effectiveObjective: number | null): { bg: string; fg: string } {
+  if (saldo >= 0) return { bg: "#E1F5EE", fg: "#085041" };
+  const eff = effectiveObjective ?? 0;
+  const deficitPct = eff > 0 ? Math.abs(saldo) / eff : 1;
+  if (deficitPct >= 0.15) return { bg: "#FDEAEA", fg: "#A32D2D" };
+  return { bg: "#FEF3E2", fg: "#B35C00" };
+}
+
+function TancamentsTab({
+  idPersona, year, month0, totals, currentPersonaId,
+}: {
+  idPersona: number; year: number; month0: number; totals: TotalsShape; currentPersonaId: number | null;
+}) {
+  const qc = useQueryClient();
+  const mes = month0 + 1;
+
+  const currentMonthQ = useQuery({
+    queryKey: ["resum-mes-current", idPersona, year, mes],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("personal_resum_mes" as never)
+        .select("*")
+        .eq("id_persona", idPersona)
+        .eq("any_mes", year)
+        .eq("mes", mes)
+        .maybeSingle();
+      if (error) { console.warn(error); return null; }
+      return (data ?? null) as ResumRow | null;
+    },
+  });
+
+  const historyQ = useQuery({
+    queryKey: ["resum-mes-history", idPersona],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("personal_resum_mes" as never)
+        .select("*")
+        .eq("id_persona", idPersona)
+        .order("any_mes", { ascending: false })
+        .order("mes", { ascending: false });
+      if (error) { console.warn(error); return []; }
+      return (data ?? []) as ResumRow[];
+    },
+  });
+
+  // Previous month's accumulated balance
+  const prevIdx = (() => {
+    const d = new Date(year, month0 - 1, 1);
+    return { y: d.getFullYear(), m: d.getMonth() + 1 };
+  })();
+
+  const prevAcumulat = useMemo(() => {
+    const rows = historyQ.data ?? [];
+    // Find latest closed month strictly before (year, mes)
+    const sorted = [...rows]
+      .filter((r) => r.cerrado && (r.any_mes < year || (r.any_mes === year && r.mes < mes)))
+      .sort((a, b) => (b.any_mes - a.any_mes) || (b.mes - a.mes));
+    return sorted[0]?.saldo_acumulat_fi ?? 0;
+  }, [historyQ.data, year, mes]);
+
+  const [detailRow, setDetailRow] = useState<ResumRow | null>(null);
+
+  const closeMonth = useMutation({
+    mutationFn: async (decisio: "liquidar" | "acumular") => {
+      const saldoAcumulat = decisio === "liquidar" ? 0 : totals.saldo + Number(prevAcumulat);
+      const payload = {
+        id_persona: idPersona,
+        any_mes: year,
+        mes,
+        horas_objetivo_base: totals.objective ?? 0,
+        horas_reduccion: totals.reductions,
+        horas_objetivo_efectiu: totals.effectiveObjective ?? 0,
+        horas_treballades: totals.worked,
+        horas_ajust_saldo: totals.adjustments,
+        saldo_mes: totals.saldo,
+        saldo_acumulat_anterior: Number(prevAcumulat),
+        saldo_acumulat_fi: saldoAcumulat,
+        decisio_tancament: decisio,
+        cerrado: true,
+        cerrado_en: new Date().toISOString(),
+        cerrado_por: currentPersonaId,
+      };
+      const existing = currentMonthQ.data;
+      if (existing) {
+        const { error } = await supabase
+          .from("personal_resum_mes" as never)
+          .update(payload as never)
+          .eq("id_resum", existing.id_resum);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase
+          .from("personal_resum_mes" as never)
+          .insert(payload as never);
+        if (error) throw error;
+      }
+    },
+    onSuccess: () => {
+      toast.success("Mes tancat");
+      qc.invalidateQueries({ queryKey: ["resum-mes-current", idPersona] });
+      qc.invalidateQueries({ queryKey: ["resum-mes-history", idPersona] });
+    },
+    onError: (e: unknown) => toast.error((e as Error).message),
+  });
+
+  const cerrador = currentMonthQ.data?.cerrado_por;
+  const cerradorNameQ = useQuery({
+    queryKey: ["persona-name", cerrador],
+    enabled: !!cerrador,
+    queryFn: async () => {
+      const { data } = await supabase.from("personal").select("nombre, apellidos").eq("id_persona", cerrador!).maybeSingle();
+      return data ? `${(data as { nombre?: string }).nombre ?? ""} ${(data as { apellidos?: string }).apellidos ?? ""}`.trim() : "";
+    },
+  });
+
+  const closed = currentMonthQ.data?.cerrado === true;
+  const monthLabel = `${MONTH_CA[month0]} ${year}`;
+
+  return (
+    <div className="space-y-6">
+      {/* Current month block */}
+      <div className="rounded-xl border bg-card p-5">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            {closed ? <Lock className="h-5 w-5 text-emerald-600" /> : <LockOpen className="h-5 w-5 text-amber-600" />}
+            <span className="font-semibold capitalize">{monthLabel}</span>
+            {closed ? (
+              <span className="rounded-md bg-emerald-100 text-emerald-800 px-2 py-0.5 text-xs font-medium">Tancat</span>
+            ) : (
+              <span className="rounded-md bg-amber-100 text-amber-800 px-2 py-0.5 text-xs font-medium">Pendent</span>
+            )}
+          </div>
+          <div className="text-xs text-muted-foreground">
+            {closed
+              ? `Tancat el ${fmtDate(currentMonthQ.data?.cerrado_en ?? null)}${cerradorNameQ.data ? ` per ${cerradorNameQ.data}` : ""}`
+              : "Proposta del sistema"}
+          </div>
+        </div>
+
+        {totals.isAutonom ? (
+          <div className="space-y-4">
+            <div className="flex justify-between text-sm">
+              <span className="text-muted-foreground">Hores registrades</span>
+              <span className="font-semibold tabular-nums">{fmtHours(totals.worked)}</span>
+            </div>
+            {!closed && (
+              <div className="flex justify-end">
+                <Button onClick={() => closeMonth.mutate("acumular")} disabled={closeMonth.isPending} className="bg-emerald-600 hover:bg-emerald-700">
+                  Confirmar tancament
+                </Button>
+              </div>
+            )}
+          </div>
+        ) : (
+          <>
+            <ClosureProgressBar
+              worked={closed ? currentMonthQ.data!.horas_treballades : totals.worked}
+              reductions={closed ? currentMonthQ.data!.horas_reduccion : totals.reductions}
+              baseObjective={closed ? currentMonthQ.data!.horas_objetivo_base : (totals.objective ?? 0)}
+              effectiveObjective={closed ? currentMonthQ.data!.horas_objetivo_efectiu : (totals.effectiveObjective ?? 0)}
+            />
+
+            <BreakdownRows
+              baseObjective={closed ? currentMonthQ.data!.horas_objetivo_base : (totals.objective ?? 0)}
+              reductions={closed ? currentMonthQ.data!.horas_reduccion : totals.reductions}
+              reductionTipo={totals.reductionTipo}
+              effectiveObjective={closed ? currentMonthQ.data!.horas_objetivo_efectiu : (totals.effectiveObjective ?? 0)}
+              worked={closed ? currentMonthQ.data!.horas_treballades : totals.worked}
+              adjustments={closed ? currentMonthQ.data!.horas_ajust_saldo : totals.adjustments}
+              saldoMes={closed ? currentMonthQ.data!.saldo_mes : totals.saldo}
+            />
+
+            <div className="my-4 border-t" />
+
+            <div className="space-y-2">
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">Saldo acumulat anterior</span>
+                <span className="tabular-nums font-medium">{fmtSigned(closed ? currentMonthQ.data!.saldo_acumulat_anterior : Number(prevAcumulat))}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-sm text-muted-foreground">
+                  {closed ? "Saldo acumulat final" : "Saldo acumulat si es confirma"}
+                </span>
+                {(() => {
+                  const acc = closed ? currentMonthQ.data!.saldo_acumulat_fi : (totals.saldo + Number(prevAcumulat));
+                  const st = saldoChipStyle(acc, totals.effectiveObjective);
+                  return (
+                    <div className="rounded-full px-3 py-1 tabular-nums" style={{ background: st.bg, color: st.fg, fontSize: 16, fontWeight: 700 }}>
+                      {fmtSigned(acc)}
+                    </div>
+                  );
+                })()}
+              </div>
+            </div>
+
+            {!closed && (
+              <div className="mt-5 flex items-center justify-between gap-2">
+                <Button variant="ghost" size="sm" className="gap-1">
+                  <Plus className="h-4 w-4" /> Afegir ajust
+                </Button>
+                <div className="flex gap-2">
+                  <Button
+                    onClick={() => closeMonth.mutate("liquidar")}
+                    disabled={closeMonth.isPending}
+                    className="bg-amber-500 hover:bg-amber-600 text-white"
+                  >
+                    Liquidar i saldar
+                  </Button>
+                  <Button
+                    onClick={() => closeMonth.mutate("acumular")}
+                    disabled={closeMonth.isPending}
+                    className="bg-emerald-600 hover:bg-emerald-700"
+                  >
+                    Confirmar (acumular)
+                  </Button>
+                </div>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+
+      {/* History */}
+      <div>
+        <h3 className="text-sm font-semibold mb-2">Historial de saldos acumulats</h3>
+        <div className="rounded-xl border bg-card overflow-hidden">
+          <table className="w-full text-sm">
+            <thead className="border-b bg-muted/40">
+              <tr>
+                <th className="text-left p-3">Mes</th>
+                <th className="text-right p-3">Obj. efectiu</th>
+                <th className="text-right p-3">Treballades</th>
+                <th className="text-right p-3">Saldo mes</th>
+                <th className="text-right p-3">Acumulat</th>
+                <th className="w-10" />
+              </tr>
+            </thead>
+            <tbody>
+              {(historyQ.data ?? []).length === 0 ? (
+                <tr><td colSpan={6} className="text-center text-muted-foreground py-8">Sense historial.</td></tr>
+              ) : (
+                (historyQ.data ?? []).map((r) => (
+                  <tr key={r.id_resum} className="border-b">
+                    <td className="p-3 capitalize">{MONTH_CA[r.mes - 1]} {r.any_mes}</td>
+                    <td className="p-3 text-right tabular-nums">
+                      {fmtHours(Number(r.horas_objetivo_efectiu))}
+                      {r.decisio_tancament === "liquidar" && <span className="ml-1 text-amber-600 text-xs">★ liquidat</span>}
+                    </td>
+                    <td className="p-3 text-right tabular-nums">{fmtHours(Number(r.horas_treballades))}</td>
+                    <td className={`p-3 text-right tabular-nums ${saldoColor(Number(r.saldo_mes))}`}>{fmtSigned(Number(r.saldo_mes))}</td>
+                    <td className={`p-3 text-right tabular-nums ${saldoColor(Number(r.saldo_acumulat_fi))}`}>{fmtSigned(Number(r.saldo_acumulat_fi))}</td>
+                    <td className="p-3">
+                      <button className="text-muted-foreground hover:text-foreground" onClick={() => setDetailRow(r)} aria-label="Veure detall">
+                        <Eye className="h-4 w-4" />
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Detail modal */}
+      <Dialog open={!!detailRow} onOpenChange={(o) => { if (!o) setDetailRow(null); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="capitalize">
+              {detailRow ? `${MONTH_CA[detailRow.mes - 1]} ${detailRow.any_mes}` : ""}
+            </DialogTitle>
+          </DialogHeader>
+          {detailRow && (
+            <div className="space-y-1 text-sm">
+              <Field label="Objectiu base" value={fmtHours(Number(detailRow.horas_objetivo_base))} />
+              <Field label="Reducció" value={`−${fmtHours(Number(detailRow.horas_reduccion))}`} />
+              <Field label="Objectiu efectiu" value={fmtHours(Number(detailRow.horas_objetivo_efectiu))} />
+              <Field label="Hores treballades" value={fmtHours(Number(detailRow.horas_treballades))} />
+              <Field label="Ajust de saldo" value={fmtSigned(Number(detailRow.horas_ajust_saldo))} />
+              <Field label="Saldo mes" value={fmtSigned(Number(detailRow.saldo_mes))} />
+              <Field label="Acumulat anterior" value={fmtSigned(Number(detailRow.saldo_acumulat_anterior))} />
+              <Field label="Acumulat final" value={fmtSigned(Number(detailRow.saldo_acumulat_fi))} />
+              <Field label="Decisió" value={detailRow.decisio_tancament ?? "—"} />
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+function fmtSigned(h: number): string {
+  if (h === 0) return "0h";
+  return `${h > 0 ? "+" : "−"}${fmtHours(Math.abs(h))}`;
+}
+
+function saldoColor(h: number): string {
+  if (h > 0) return "text-emerald-600";
+  if (h < 0) return "text-red-600";
+  return "text-muted-foreground";
+}
+
+function ClosureProgressBar({
+  worked, reductions, baseObjective, effectiveObjective,
+}: { worked: number; reductions: number; baseObjective: number; effectiveObjective: number }) {
+  const BASE_PCT = 80;
+  const has = baseObjective > 0;
+  const effPct = has ? (effectiveObjective / baseObjective) * BASE_PCT : 0;
+  const workedPct = has ? Math.min(100, (worked / baseObjective) * BASE_PCT) : 0;
+
+  let color = "#1D9E75";
+  if (has && worked < effectiveObjective) {
+    const deficit = (effectiveObjective - worked) / (effectiveObjective || 1);
+    color = deficit >= 0.15 ? "#E24B4A" : "#EF9F27";
+  }
+
+  return (
+    <div className="relative w-full mb-4">
+      <div className="relative w-full" style={{ height: 10 }}>
+        <div className="absolute inset-y-0 left-0" style={{ width: `${effPct}%`, background: "#D3D1C7" }} />
+        {has && reductions > 0 && (
+          <div className="absolute inset-y-0" style={{ left: `${effPct}%`, width: `${Math.max(0, BASE_PCT - effPct)}%`, background: "#FAEEDA", borderLeft: "2px solid #EF9F27" }} />
+        )}
+      </div>
+      <div className="relative w-full" style={{ height: 18 }}>
+        <div className="absolute inset-y-0 left-0 flex items-center justify-end pr-2 text-xs font-semibold text-white" style={{ width: `${workedPct}%`, background: color }}>
+          {workedPct > 8 ? fmtHours(worked) : ""}
+        </div>
+      </div>
+      {has && (
+        <div className="absolute pointer-events-none" style={{ left: `${effPct}%`, top: 0, bottom: 0, width: 2, background: "#26215C", transform: "translateX(-1px)" }} />
+      )}
+    </div>
+  );
+}
+
+function BreakdownRows({
+  baseObjective, reductions, reductionTipo, effectiveObjective, worked, adjustments, saldoMes,
+}: {
+  baseObjective: number; reductions: number; reductionTipo: string | null;
+  effectiveObjective: number; worked: number; adjustments: number; saldoMes: number;
+}) {
+  const redLabel = reductionTipo === "vacaciones" ? "vacances" : reductionTipo === "baja" ? "baixa" : reductionTipo ?? "";
+  return (
+    <div className="space-y-1 text-sm">
+      <div className="flex justify-between">
+        <span className="text-muted-foreground">Objectiu base</span>
+        <span className="tabular-nums">{fmtHours(baseObjective)}</span>
+      </div>
+      {reductions > 0 && (
+        <div className="flex justify-between text-amber-700">
+          <span>− {redLabel} (ajust objectiu)</span>
+          <span className="tabular-nums">−{fmtHours(reductions)}</span>
+        </div>
+      )}
+      <div className="border-t my-1" />
+      <div className="flex justify-between font-medium">
+        <span>Objectiu efectiu</span>
+        <span className="tabular-nums">{fmtHours(effectiveObjective)}</span>
+      </div>
+      <div className="border-t my-1" />
+      <div className="flex justify-between">
+        <span className="text-muted-foreground">Hores treballades</span>
+        <span className="tabular-nums">{fmtHours(worked)}</span>
+      </div>
+      {adjustments !== 0 && (
+        <div className="flex justify-between">
+          <span className="text-muted-foreground">Ajust de saldo</span>
+          <span className="tabular-nums">{fmtSigned(adjustments)}</span>
+        </div>
+      )}
+      <div className="border-t my-1" />
+      <div className="flex justify-between items-center">
+        <span className="font-medium">Saldo del mes</span>
+        {(() => {
+          const st = saldoChipStyle(saldoMes, effectiveObjective);
+          return (
+            <div className="rounded-full px-3 py-1 tabular-nums" style={{ background: st.bg, color: st.fg, fontSize: 15, fontWeight: 700 }}>
+              {fmtSigned(saldoMes)}
+            </div>
+          );
+        })()}
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+// VACANCES TAB
+// ============================================================
+
+type VacAnyRow = {
+  id_vac_any: number;
+  id_persona: number;
+  data_inici_any: string;
+  data_fi_any: string;
+  dies_assignats: number;
+  hores_calculades: number;
+  hores_assignades: number;
+  notas: string | null;
+  creado_por: number | null;
+  creado_en: string;
+};
+
+type PeriodRow = {
+  id_periodo: number;
+  fecha_inicio: string;
+  fecha_fin: string | null;
+  horas_objetivo_mes: number | null;
+};
+
+function addYears(dateISO: string, n: number): string {
+  const d = new Date(dateISO);
+  d.setFullYear(d.getFullYear() + n);
+  return d.toISOString().slice(0, 10);
+}
+function addDays(dateISO: string, n: number): string {
+  const d = new Date(dateISO);
+  d.setDate(d.getDate() + n);
+  return d.toISOString().slice(0, 10);
+}
+
+function VacancesTab({
+  idPersona, tipoContrato, currentPersonaId,
+}: { idPersona: number; tipoContrato: string | null; currentPersonaId: number | null }) {
+  const qc = useQueryClient();
+  const isAutonom = tipoContrato === "autonomo";
+  const [newOpen, setNewOpen] = useState(false);
+
+  const vacsQ = useQuery({
+    queryKey: ["vac-any", idPersona],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("personal_vacances_any" as never)
+        .select("*")
+        .eq("id_persona", idPersona)
+        .order("data_inici_any", { ascending: false });
+      if (error) { console.warn(error); return []; }
+      return (data ?? []) as VacAnyRow[];
+    },
+    enabled: !isAutonom,
+  });
+
+  const periodsQ = useQuery({
+    queryKey: ["all-periods", idPersona],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("personal_periodos_actividad")
+        .select("id_periodo, fecha_inicio, fecha_fin, horas_objetivo_mes")
+        .eq("id_persona", idPersona)
+        .order("fecha_inicio", { ascending: true });
+      if (error) { console.warn(error); return []; }
+      return (data ?? []) as PeriodRow[];
+    },
+    enabled: !isAutonom,
+  });
+
+  if (isAutonom) {
+    return (
+      <div className="rounded-xl border bg-muted/30 p-6 text-center text-sm text-muted-foreground">
+        Els autònoms no tenen dies de vacances assignats.
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex justify-end">
+        <Button onClick={() => setNewOpen(true)} className="gap-1">
+          <Plus className="h-4 w-4" /> Nou any
+        </Button>
+      </div>
+
+      {(vacsQ.data ?? []).length === 0 ? (
+        <div className="rounded-xl border bg-card p-8 text-center text-sm text-muted-foreground">
+          Encara no hi ha cap any de vacances configurat.
+        </div>
+      ) : (
+        (vacsQ.data ?? []).map((v) => (
+          <VacYearCard key={v.id_vac_any} row={v} idPersona={idPersona} />
+        ))
+      )}
+
+      <NouAnyModal
+        open={newOpen}
+        onClose={() => setNewOpen(false)}
+        idPersona={idPersona}
+        tipoContrato={tipoContrato}
+        periods={periodsQ.data ?? []}
+        existing={vacsQ.data ?? []}
+        currentPersonaId={currentPersonaId}
+        onSaved={() => {
+          qc.invalidateQueries({ queryKey: ["vac-any", idPersona] });
+          setNewOpen(false);
+        }}
+      />
+    </div>
+  );
+}
+
+function VacYearCard({ row, idPersona }: { row: VacAnyRow; idPersona: number }) {
+  const today = new Date().toISOString().slice(0, 10);
+  const isActive = row.data_inici_any <= today && today <= row.data_fi_any;
+  const isPast = row.data_fi_any < today;
+
+  const consumedQ = useQuery({
+    queryKey: ["vac-consumed", idPersona, row.data_inici_any, row.data_fi_any],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("personal_ajustos_hores")
+        .select("id_ajuste, fecha, horas, notas")
+        .eq("id_persona", idPersona)
+        .eq("tipo", "vacaciones")
+        .gte("fecha", row.data_inici_any)
+        .lte("fecha", row.data_fi_any);
+      if (error) { console.warn(error); return []; }
+      return (data ?? []) as Array<{ id_ajuste: number; fecha: string; horas: number; notas: string | null }>;
+    },
+  });
+
+  const consumed = (consumedQ.data ?? []).reduce((s, r) => s + Math.abs(Number(r.horas ?? 0)), 0);
+  const assigned = Number(row.hores_assignades ?? 0);
+  const remaining = assigned - consumed;
+  const pct = assigned > 0 ? Math.min(120, (consumed / assigned) * 100) : 0;
+
+  let barColor = "#1D9E75";
+  if (consumed > assigned) barColor = "#A32D2D";
+  else if (assigned > 0 && consumed >= assigned) barColor = "#9CA3AF";
+  else if (assigned > 0 && consumed >= 0.8 * assigned) barColor = "#EF9F27";
+
+  const chipStyle = remaining >= 0
+    ? { bg: "#E1F5EE", fg: "#085041" }
+    : { bg: "#FDEAEA", fg: "#A32D2D" };
+
+  const yearStart = new Date(row.data_inici_any).getFullYear();
+  const yearEnd = new Date(row.data_fi_any).getFullYear();
+
+  const status = isActive ? "Actiu" : isPast ? "Tancat" : "Futur";
+  const statusClass = isActive
+    ? "bg-emerald-100 text-emerald-800"
+    : isPast ? "bg-gray-100 text-gray-700" : "bg-blue-100 text-blue-800";
+  const advancedClass = consumed > assigned ? "bg-red-100 text-red-800" : "";
+
+  return (
+    <div className="rounded-xl border bg-card p-5">
+      <div className="flex items-center justify-between mb-3">
+        <div>
+          <div className="flex items-center gap-2">
+            <span className="font-semibold">Any contractual {yearStart}–{yearEnd}</span>
+            <span className={`rounded-md px-2 py-0.5 text-xs font-medium ${consumed > assigned ? advancedClass : statusClass}`}>
+              {consumed > assigned ? "Avançades" : status}
+            </span>
+          </div>
+          <div className="text-xs text-muted-foreground mt-0.5">
+            {fmtDate(row.data_inici_any)} → {fmtDate(row.data_fi_any)}
+          </div>
+        </div>
+        {isPast ? (
+          <Lock className="h-4 w-4 text-muted-foreground" />
+        ) : (
+          <button className="text-muted-foreground hover:text-foreground" aria-label="Editar">
+            <Pencil className="h-4 w-4" />
+          </button>
+        )}
+      </div>
+
+      <div className="flex items-center gap-4">
+        <div className="flex-1">
+          <div className="relative w-full" style={{ height: 18 }}>
+            <div className="absolute inset-y-0 left-0 flex items-center justify-end pr-2 text-xs font-semibold text-white"
+              style={{ width: `${Math.min(100, pct)}%`, background: barColor }}>
+              {pct > 10 ? `${fmtHours(consumed)} consumides` : ""}
+            </div>
+          </div>
+          <div className="text-xs text-muted-foreground mt-1">
+            {fmtHours(assigned)} assignades (≈ {row.dies_assignats} dies naturals)
+          </div>
+        </div>
+        <div className="shrink-0 flex flex-col items-center">
+          <div className="rounded-full px-3 py-1 tabular-nums"
+            style={{ background: chipStyle.bg, color: chipStyle.fg, fontSize: 16, fontWeight: 700 }}>
+            {remaining >= 0 ? fmtHours(remaining) : `−${fmtHours(Math.abs(remaining))}`}
+          </div>
+          <div className="text-[11px] text-muted-foreground mt-1">
+            {remaining >= 0 ? "per gaudir" : "avançades"}
+          </div>
+        </div>
+      </div>
+
+      {(consumedQ.data ?? []).length > 0 && (
+        <div className="mt-4 border-t pt-3">
+          <div className="text-xs font-medium text-muted-foreground mb-2">Consumit</div>
+          <div className="space-y-1 text-sm">
+            {(consumedQ.data ?? []).map((c) => (
+              <div key={c.id_ajuste} className="flex justify-between">
+                <span>{fmtDate(c.fecha)}{c.notas ? ` · ${c.notas}` : ""}</span>
+                <span className="tabular-nums">{fmtHours(Math.abs(Number(c.horas ?? 0)))}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function NouAnyModal({
+  open, onClose, idPersona, tipoContrato, periods, existing, currentPersonaId, onSaved,
+}: {
+  open: boolean; onClose: () => void; idPersona: number; tipoContrato: string | null;
+  periods: PeriodRow[]; existing: VacAnyRow[]; currentPersonaId: number | null;
+  onSaved: () => void;
+}) {
+  // Compute next contractual year based on earliest period start + number of existing years
+  const earliest = periods[0]?.fecha_inicio ?? null;
+  const nextYearIdx = existing.length; // 0-based offset from earliest
+  const inici = earliest ? addYears(earliest, nextYearIdx) : new Date().toISOString().slice(0, 10);
+  const fi = addDays(addYears(inici, 1), -1);
+
+  const [dies, setDies] = useState<string>("30");
+  const [notas, setNotas] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const horesPerMes = useMemo(() => {
+    if (tipoContrato === "fijo_discontinuo") {
+      // Sum horas_objetivo_mes of periods overlapping [inici, fi]
+      let sum = 0;
+      for (const p of periods) {
+        const pi = p.fecha_inicio;
+        const pf = p.fecha_fin ?? "9999-12-31";
+        if (pf >= inici && pi <= fi) sum += Number(p.horas_objetivo_mes ?? 0);
+      }
+      return sum;
+    }
+    // Use active period (fecha_fin null) horas_objetivo_mes; fallback last period
+    const active = periods.find((p) => !p.fecha_fin) ?? periods[periods.length - 1];
+    return Number(active?.horas_objetivo_mes ?? 0);
+  }, [tipoContrato, periods, inici, fi]);
+
+  const diesN = Number(dies) || 0;
+  const horesCalc = diesN * (horesPerMes / 30);
+
+  async function save() {
+    if (diesN <= 0) { toast.error("Dies han de ser > 0"); return; }
+    setSaving(true);
+    const { error } = await supabase.from("personal_vacances_any" as never).insert({
+      id_persona: idPersona,
+      data_inici_any: inici,
+      data_fi_any: fi,
+      dies_assignats: diesN,
+      hores_calculades: horesCalc,
+      hores_assignades: horesCalc,
+      notas: notas.trim() || null,
+      creado_por: currentPersonaId,
+    } as never);
+    setSaving(false);
+    if (error) { toast.error(error.message); return; }
+    toast.success("Any creat");
+    onSaved();
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
+      <DialogContent className="max-w-md">
+        <DialogHeader><DialogTitle>Nou any de vacances</DialogTitle></DialogHeader>
+        <div className="space-y-3">
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-sm font-medium">Inici</label>
+              <Input value={fmtDate(inici)} readOnly />
+            </div>
+            <div>
+              <label className="text-sm font-medium">Fi</label>
+              <Input value={fmtDate(fi)} readOnly />
+            </div>
+          </div>
+          <div>
+            <label className="text-sm font-medium">Dies assignats</label>
+            <Input type="number" value={dies} onChange={(e) => setDies(e.target.value)} />
+          </div>
+          <div className="text-xs text-muted-foreground">
+            Hores calculades: <span className="font-medium">{fmtHours(horesCalc)}</span>
+            {" "}({fmtHours(horesPerMes)} / mes)
+          </div>
+          <div>
+            <label className="text-sm font-medium">Notes</label>
+            <Textarea value={notas} onChange={(e) => setNotas(e.target.value)} rows={2} />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>Cancel·lar</Button>
+          <Button onClick={save} disabled={saving}>Guardar</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
