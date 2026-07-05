@@ -121,11 +121,13 @@ function DetallPage() {
   const { id } = Route.useParams();
   const idPersona = Number(id);
   const qc = useQueryClient();
+  const { persona: currentPersona } = useCurrentPersonal();
 
   const today = new Date();
   const [year, setYear] = useState(today.getFullYear());
   const [month0, setMonth0] = useState(today.getMonth());
   const { start, end } = monthRange(year, month0);
+  const [activeTab, setActiveTab] = useState<"mes" | "tancaments" | "vacances">("mes");
 
   const [sortKey, setSortKey] = useState<SortKey>("fecha");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
