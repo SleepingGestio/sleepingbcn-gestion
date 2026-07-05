@@ -842,22 +842,39 @@ function NovaAltaDialog({
   const [fecha, setFecha] = useState(today);
   const [motivo, setMotivo] = useState("Alta");
   const [horas, setHoras] = useState("");
+  const [diesVac, setDiesVac] = useState("23");
   const [saving, setSaving] = useState(false);
 
   async function save() {
     if (!fecha) { toast.error("La data és obligatòria"); return; }
     setSaving(true);
+    const diesN = diesVac.trim() !== "" ? Number(diesVac) : 23;
+    const horasN = horas.trim() !== "" ? Number(horas) : null;
     const { error } = await (supabase as any)
       .from("personal_periodos_actividad")
       .insert({
         id_persona: idPersona,
         fecha_inicio: fecha,
         motivo: motivo.trim() || "Alta",
-        horas_objetivo_mes: horas.trim() !== "" ? Number(horas) : null,
+        horas_objetivo_mes: horasN,
+        dies_vacances_any: diesN,
         creado_por: creadoPor,
       });
+    if (error) { setSaving(false); toast.error("Error: " + error.message); return; }
+    try {
+      await insertVacancesAny({
+        id_persona: idPersona,
+        fecha_inicio: fecha,
+        dies: diesN,
+        horasMes: horasN ?? 0,
+        creado_por: creadoPor,
+      });
+    } catch (e) {
+      setSaving(false);
+      toast.error("Error vacances: " + (e as Error).message);
+      return;
+    }
     setSaving(false);
-    if (error) { toast.error("Error: " + error.message); return; }
     toast.success("Nova alta creada");
     onSaved();
   }
@@ -873,6 +890,7 @@ function NovaAltaDialog({
           <Field label="Fecha inicio *"><Input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} /></Field>
           <Field label="Motivo"><Input value={motivo} onChange={(e) => setMotivo(e.target.value)} /></Field>
           <Field label="Hores objectiu/mes"><Input type="number" min={0} step="0.5" value={horas} onChange={(e) => setHoras(e.target.value)} /></Field>
+          <Field label="Dies vacances / any"><Input type="number" min={0} step="0.5" value={diesVac} onChange={(e) => setDiesVac(e.target.value)} /></Field>
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={onClose} disabled={saving}>Cancel·lar</Button>
