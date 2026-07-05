@@ -411,7 +411,7 @@ function PersonaDialog({
     queryFn: async () => {
       const { data, error } = await (supabase as any)
         .from("personal_periodos_actividad")
-        .select("id_periodo, id_persona, fecha_inicio, fecha_fin, motivo, horas_objetivo_mes")
+        .select("id_periodo, id_persona, fecha_inicio, fecha_fin, motivo, horas_objetivo_mes, dies_vacances_any")
         .eq("id_persona", persona!.id_persona)
         .order("fecha_inicio", { ascending: false });
       if (error) throw error;
@@ -425,6 +425,7 @@ function PersonaDialog({
   const [periodInicio, setPeriodInicio] = useState<string>("");
   const [periodMotivo, setPeriodMotivo] = useState<string>("");
   const [periodHoras, setPeriodHoras] = useState<string>("");
+  const [periodDiesVac, setPeriodDiesVac] = useState<string>("23");
   useEffect(() => {
     if (currentPeriod) {
       setPeriodInicio(currentPeriod.fecha_inicio ?? "");
@@ -432,10 +433,14 @@ function PersonaDialog({
       setPeriodHoras(
         currentPeriod.horas_objetivo_mes != null ? String(currentPeriod.horas_objetivo_mes) : "",
       );
+      setPeriodDiesVac(
+        currentPeriod.dies_vacances_any != null ? String(currentPeriod.dies_vacances_any) : "23",
+      );
     } else {
       setPeriodInicio("");
       setPeriodMotivo("");
       setPeriodHoras("");
+      setPeriodDiesVac("23");
     }
   }, [currentPeriod?.id_periodo]);
 
@@ -443,6 +448,7 @@ function PersonaDialog({
   const todayStr = new Date().toISOString().slice(0, 10);
   const [firstFechaInicio, setFirstFechaInicio] = useState<string>(todayStr);
   const [firstHoras, setFirstHoras] = useState<string>("");
+  const [firstDiesVac, setFirstDiesVac] = useState<string>("23");
   const [firstMotivo, setFirstMotivo] = useState<string>("Alta inicial");
 
   const [novaAltaOpen, setNovaAltaOpen] = useState(false);
