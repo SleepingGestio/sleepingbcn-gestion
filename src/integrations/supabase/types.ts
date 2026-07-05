@@ -47,6 +47,114 @@ export type Database = {
         }
         Relationships: []
       }
+      personal_resum_mes: {
+        Row: {
+          any_mes: number
+          cerrado: boolean
+          cerrado_en: string | null
+          cerrado_por: number | null
+          created_at: string
+          decisio_tancament: string | null
+          horas_ajust_saldo: number
+          horas_objetivo_base: number
+          horas_objetivo_efectiu: number
+          horas_reduccion: number
+          horas_treballades: number
+          id_persona: number
+          id_resum: number
+          mes: number
+          notas: string | null
+          saldo_acumulat_anterior: number
+          saldo_acumulat_fi: number
+          saldo_mes: number
+          updated_at: string
+        }
+        Insert: {
+          any_mes: number
+          cerrado?: boolean
+          cerrado_en?: string | null
+          cerrado_por?: number | null
+          created_at?: string
+          decisio_tancament?: string | null
+          horas_ajust_saldo?: number
+          horas_objetivo_base?: number
+          horas_objetivo_efectiu?: number
+          horas_reduccion?: number
+          horas_treballades?: number
+          id_persona: number
+          id_resum?: never
+          mes: number
+          notas?: string | null
+          saldo_acumulat_anterior?: number
+          saldo_acumulat_fi?: number
+          saldo_mes?: number
+          updated_at?: string
+        }
+        Update: {
+          any_mes?: number
+          cerrado?: boolean
+          cerrado_en?: string | null
+          cerrado_por?: number | null
+          created_at?: string
+          decisio_tancament?: string | null
+          horas_ajust_saldo?: number
+          horas_objetivo_base?: number
+          horas_objetivo_efectiu?: number
+          horas_reduccion?: number
+          horas_treballades?: number
+          id_persona?: number
+          id_resum?: never
+          mes?: number
+          notas?: string | null
+          saldo_acumulat_anterior?: number
+          saldo_acumulat_fi?: number
+          saldo_mes?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      personal_vacances_any: {
+        Row: {
+          creado_en: string
+          creado_por: number | null
+          data_fi_any: string
+          data_inici_any: string
+          dies_assignats: number
+          hores_assignades: number
+          hores_calculades: number
+          id_persona: number
+          id_vac_any: number
+          notas: string | null
+          updated_at: string
+        }
+        Insert: {
+          creado_en?: string
+          creado_por?: number | null
+          data_fi_any: string
+          data_inici_any: string
+          dies_assignats?: number
+          hores_assignades?: number
+          hores_calculades?: number
+          id_persona: number
+          id_vac_any?: never
+          notas?: string | null
+          updated_at?: string
+        }
+        Update: {
+          creado_en?: string
+          creado_por?: number | null
+          data_fi_any?: string
+          data_inici_any?: string
+          dies_assignats?: number
+          hores_assignades?: number
+          hores_calculades?: number
+          id_persona?: number
+          id_vac_any?: never
+          notas?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
