@@ -979,6 +979,9 @@ function PeriodEditDialog({
   const [horas, setHoras] = useState(
     period.horas_objetivo_mes != null ? String(period.horas_objetivo_mes) : "",
   );
+  const [diesVac, setDiesVac] = useState(
+    period.dies_vacances_any != null ? String(period.dies_vacances_any) : "23",
+  );
   const [saving, setSaving] = useState(false);
 
   async function save() {
@@ -991,6 +994,7 @@ function PeriodEditDialog({
         fecha_fin: fechaFin.trim() ? fechaFin : null,
         motivo: motivo.trim() || null,
         horas_objetivo_mes: horas.trim() !== "" ? Number(horas) : null,
+        dies_vacances_any: diesVac.trim() !== "" ? Number(diesVac) : 23,
       })
       .eq("id_periodo", period.id_periodo);
     setSaving(false);
@@ -1017,6 +1021,9 @@ function PeriodEditDialog({
           </Field>
           <Field label="Hores objectiu/mes">
             <Input type="number" min={0} step="0.5" value={horas} onChange={(e) => setHoras(e.target.value)} />
+          </Field>
+          <Field label="Dies vacances / any">
+            <Input type="number" min={0} step="0.5" value={diesVac} onChange={(e) => setDiesVac(e.target.value)} />
           </Field>
         </div>
         <DialogFooter>
