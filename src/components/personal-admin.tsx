@@ -77,6 +77,11 @@ type PeriodoActividad = {
 function computeVacHours(dies: number, horasMes: number): number {
   return Math.round(dies * (horasMes / 30) * 10) / 10;
 }
+function addOneYear(iso: string): string {
+  const d = new Date(iso);
+  d.setFullYear(d.getFullYear() + 1);
+  return d.toISOString().slice(0, 10);
+}
 function oneYearMinusOneDay(iso: string): string {
   const d = new Date(iso);
   d.setFullYear(d.getFullYear() + 1);
@@ -456,18 +461,24 @@ function PersonaDialog({
   });
   const vacByInici = useMemo(() => {
     const map = new Map<string, { assigned: number; consumed: number }>();
-    for (const v of vacancesQ.data ?? []) {
+    const vacances = vacancesQ.data ?? [];
+    const ajustos = ajustosVacQ.data ?? [];
+    for (const p of periodos) {
+      const start = p.fecha_inicio;
+      const end = addOneYear(start);
+      const v = vacances.find((x) => x.data_inici_any >= start && x.data_inici_any < end);
+      if (!v) continue;
       const assigned = Number(v.hores_calculades ?? v.hores_assignades ?? 0);
       let consumed = 0;
-      for (const a of ajustosVacQ.data ?? []) {
+      for (const a of ajustos) {
         if (a.fecha >= v.data_inici_any && a.fecha <= v.data_fi_any) {
           consumed += Math.abs(Number(a.horas ?? 0));
         }
       }
-      map.set(v.data_inici_any, { assigned, consumed });
+      map.set(start, { assigned, consumed });
     }
     return map;
-  }, [vacancesQ.data, ajustosVacQ.data]);
+  }, [periodos, vacancesQ.data, ajustosVacQ.data]);
 
   // Període actiu (editable)
   const [periodInicio, setPeriodInicio] = useState<string>("");
