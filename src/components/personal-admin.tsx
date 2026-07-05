@@ -77,6 +77,11 @@ type PeriodoActividad = {
 function computeVacHours(dies: number, horasMes: number): number {
   return Math.round(dies * (horasMes / 30) * 10) / 10;
 }
+function addOneYear(iso: string): string {
+  const d = new Date(iso);
+  d.setFullYear(d.getFullYear() + 1);
+  return d.toISOString().slice(0, 10);
+}
 function oneYearMinusOneDay(iso: string): string {
   const d = new Date(iso);
   d.setFullYear(d.getFullYear() + 1);
