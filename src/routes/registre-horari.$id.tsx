@@ -26,6 +26,7 @@ import { SortHeader } from "@/components/sort-header";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { ArrowLeft, ChevronLeft, ChevronRight, Plus, Trash2, Search, Lock, LockOpen, Eye, Pencil } from "lucide-react";
 import { fmtDate } from "@/lib/format";
+import { formatHHMM as fmtHours } from "@/lib/utils";
 import { toast } from "sonner";
 import { LimpiezaPopover, type Limpieza } from "@/components/limpieza-popover";
 import { useCurrentPersonal } from "@/hooks/use-current-personal";
@@ -54,16 +55,6 @@ function diffHours(a: string | null, b: string | null): number {
   const db = new Date(b).getTime();
   if (!isFinite(da) || !isFinite(db)) return 0;
   return Math.max(0, (db - da) / 3_600_000);
-}
-
-function fmtHours(h: number): string {
-  const sign = h < 0 ? "-" : "";
-  const abs = Math.abs(h);
-  const totalMin = Math.round(abs * 60);
-  const hh = Math.floor(totalMin / 60);
-  const mm = totalMin % 60;
-  if (mm === 0) return `${sign}${hh}h`;
-  return `${sign}${hh}h ${pad(mm)}m`;
 }
 
 function fmtAjustSigned(h: number): { text: string; className: string } {
