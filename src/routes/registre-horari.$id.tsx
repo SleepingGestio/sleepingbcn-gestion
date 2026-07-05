@@ -23,10 +23,12 @@ import {
 } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { SortHeader } from "@/components/sort-header";
-import { ArrowLeft, ChevronLeft, ChevronRight, Plus, Trash2, Search } from "lucide-react";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { ArrowLeft, ChevronLeft, ChevronRight, Plus, Trash2, Search, Lock, LockOpen, Eye, Pencil } from "lucide-react";
 import { fmtDate } from "@/lib/format";
 import { toast } from "sonner";
 import { LimpiezaPopover, type Limpieza } from "@/components/limpieza-popover";
+import { useCurrentPersonal } from "@/hooks/use-current-personal";
 
 export const Route = createFileRoute("/registre-horari/$id")({
   component: DetallPage,
