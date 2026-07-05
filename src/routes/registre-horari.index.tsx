@@ -43,15 +43,7 @@ function diffHours(a: string | null, b: string | null): number {
   return Math.max(0, (db - da) / 3_600_000);
 }
 
-function fmtHours(h: number): string {
-  const sign = h < 0 ? "-" : "";
-  const abs = Math.abs(h);
-  const totalMin = Math.round(abs * 60);
-  const hh = Math.floor(totalMin / 60);
-  const mm = totalMin % 60;
-  if (mm === 0) return `${sign}${hh}h`;
-  return `${sign}${hh}h ${pad(mm)}m`;
-}
+import { formatHHMM as fmtHours } from "@/lib/utils";
 
 function RegistreHorariPage() {
   const today = new Date();

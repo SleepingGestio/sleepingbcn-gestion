@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
@@ -23,6 +23,7 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { usePermissions } from "@/hooks/use-permissions";
 import { useCurrentPersonal } from "@/hooks/use-current-personal";
+import { formatHHMM } from "@/lib/utils";
 import { roleColor } from "@/lib/role-colors";
 
 type Persona = {
@@ -421,6 +422,53 @@ function PersonaDialog({
   const periodos = periodosQ.data ?? [];
   const currentPeriod = periodos.find((p) => !p.fecha_fin) ?? null;
 
+  // Vacances any + consumides per período (edit only)
+  const vacancesQ = useQuery({
+    queryKey: ["personal-vacances-any-admin", persona?.id_persona],
+    enabled: isEdit,
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("personal_vacances_any")
+        .select("id_vac_any, data_inici_any, data_fi_any, hores_calculades, hores_assignades")
+        .eq("id_persona", persona!.id_persona);
+      if (error) throw error;
+      return (data ?? []) as Array<{
+        id_vac_any: number;
+        data_inici_any: string;
+        data_fi_any: string;
+        hores_calculades: number | null;
+        hores_assignades: number | null;
+      }>;
+    },
+  });
+  const ajustosVacQ = useQuery({
+    queryKey: ["personal-ajustos-vac-admin", persona?.id_persona],
+    enabled: isEdit,
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("personal_ajustos_hores")
+        .select("fecha, horas")
+        .eq("id_persona", persona!.id_persona)
+        .eq("tipo", "vacaciones");
+      if (error) throw error;
+      return (data ?? []) as Array<{ fecha: string; horas: number }>;
+    },
+  });
+  const vacByInici = useMemo(() => {
+    const map = new Map<string, { assigned: number; consumed: number }>();
+    for (const v of vacancesQ.data ?? []) {
+      const assigned = Number(v.hores_calculades ?? v.hores_assignades ?? 0);
+      let consumed = 0;
+      for (const a of ajustosVacQ.data ?? []) {
+        if (a.fecha >= v.data_inici_any && a.fecha <= v.data_fi_any) {
+          consumed += Math.abs(Number(a.horas ?? 0));
+        }
+      }
+      map.set(v.data_inici_any, { assigned, consumed });
+    }
+    return map;
+  }, [vacancesQ.data, ajustosVacQ.data]);
+
   // Període actiu (editable)
   const [periodInicio, setPeriodInicio] = useState<string>("");
   const [periodMotivo, setPeriodMotivo] = useState<string>("");
@@ -725,28 +773,44 @@ function PersonaDialog({
                   <p className="text-xs text-muted-foreground">Cap període registrat</p>
                 ) : (
                   <div className="rounded-md border divide-y">
-                    {periodos.map((p) => (
-                      <div key={p.id_periodo} className="grid grid-cols-[1fr_1fr_auto_auto] items-center gap-3 px-3 py-2 text-xs">
-                        <div>
-                          <span className="font-medium">{p.fecha_inicio}</span>
-                          <span className="text-muted-foreground"> → {p.fecha_fin ?? "obert"}</span>
-                        </div>
-                        <div className="text-muted-foreground truncate">{p.motivo ?? "—"}</div>
-                        <div className="text-right tabular-nums">
-                          {p.horas_objetivo_mes != null ? `${p.horas_objetivo_mes} h/mes` : "—"}
-                        </div>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="ghost"
-                          className="h-7 w-7 p-0"
-                          onClick={() => setEditPeriod(p)}
-                          aria-label="Editar període"
+                    {periodos.map((p) => {
+                      const vac = vacByInici.get(p.fecha_inicio);
+                      return (
+                        <div
+                          key={p.id_periodo}
+                          className="grid grid-cols-[1fr_1fr_auto_auto_auto] items-center gap-3 px-3 py-2 text-xs"
                         >
-                          <Pencil className="h-3.5 w-3.5" />
-                        </Button>
-                      </div>
-                    ))}
+                          <div>
+                            <span className="font-medium">{p.fecha_inicio}</span>
+                            <span className="text-muted-foreground"> → {p.fecha_fin ?? "obert"}</span>
+                          </div>
+                          <div className="text-muted-foreground truncate">{p.motivo ?? "—"}</div>
+                          <div className="text-right tabular-nums">
+                            {p.horas_objetivo_mes != null
+                              ? `${formatHHMM(Number(p.horas_objetivo_mes))} h/mes`
+                              : "—"}
+                          </div>
+                          <div
+                            className="text-muted-foreground tabular-nums text-right"
+                            style={{ fontSize: 11 }}
+                          >
+                            {vac
+                              ? `Vac: ${formatHHMM(vac.assigned)} / ${formatHHMM(vac.consumed)}`
+                              : ""}
+                          </div>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            className="h-7 w-7 p-0"
+                            onClick={() => setEditPeriod(p)}
+                            aria-label="Editar període"
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
               </section>
