@@ -750,6 +750,22 @@ function HoresProgress({
               }}
             />
           )}
+          {hasObjective && (
+            <div
+              className="absolute"
+              style={{
+                left: `${effPct}%`,
+                top: 0,
+                transform: "translateX(-50%)",
+                fontSize: 10,
+                color: "#26215C",
+                fontWeight: 600,
+                whiteSpace: "nowrap",
+              }}
+            >
+              {fmtHours(effectiveObjective!)}
+            </div>
+          )}
         </div>
       </div>
       <div className="flex flex-col items-center shrink-0">
