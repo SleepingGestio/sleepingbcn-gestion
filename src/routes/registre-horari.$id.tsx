@@ -682,7 +682,9 @@ function HoresProgress({
 
   // Saldo pill color
   let saldoBg = "#E1F5EE", saldoFg = "#085041", saldoText: string;
-  if (isAutonom || !hasObjective) {
+  if (isAutonom) {
+    saldoBg = "#EBF4FD"; saldoFg = "#0C447C"; saldoText = fmtHours(worked);
+  } else if (!hasObjective) {
     saldoBg = "#F1F1EE"; saldoFg = "#6B7280"; saldoText = "—";
   } else {
     if (saldo >= 0) {
