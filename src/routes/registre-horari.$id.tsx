@@ -1242,8 +1242,17 @@ function ClosureProgressBar({
     color = deficit >= 0.15 ? "#E24B4A" : "#EF9F27";
   }
 
+  const reductionLabel = reductionTipo === "vacaciones" ? "vacances" : reductionTipo === "baja" ? "baixa" : reductionTipo ?? "";
+  const infoText = !has
+    ? "Sense objectiu"
+    : reductions > 0
+      ? `Obj. ${fmtHours(baseObjective)} · −${fmtHours(reductions)} ${reductionLabel} → ${fmtHours(effectiveObjective)} efectiu`
+      : `Obj. ${fmtHours(baseObjective)}`;
+
   return (
-    <div className="relative w-full mb-4" style={{ overflow: "visible" }}>
+    <div className="flex-1 min-w-0">
+      <div className="text-xs text-muted-foreground mb-1">{infoText}</div>
+      <div className="relative w-full mb-4" style={{ overflow: "visible" }}>
       <div className="relative w-full" style={{ height: 10 }}>
         <div className="absolute inset-y-0 left-0" style={{ width: `${effPct}%`, background: "#D3D1C7" }} />
         {has && reductions > 0 && (
