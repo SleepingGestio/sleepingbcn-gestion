@@ -682,7 +682,9 @@ function HoresProgress({
 
   // Saldo pill color
   let saldoBg = "#E1F5EE", saldoFg = "#085041", saldoText: string;
-  if (isAutonom || !hasObjective) {
+  if (isAutonom) {
+    saldoBg = "#EBF4FD"; saldoFg = "#0C447C"; saldoText = fmtHours(worked);
+  } else if (!hasObjective) {
     saldoBg = "#F1F1EE"; saldoFg = "#6B7280"; saldoText = "—";
   } else {
     if (saldo >= 0) {
@@ -1041,12 +1043,29 @@ function TancamentsTab({
           </div>
         ) : (
           <>
-            <ClosureProgressBar
-              worked={closed ? currentMonthQ.data!.horas_treballades : totals.worked}
-              reductions={closed ? currentMonthQ.data!.horas_reduccion : totals.reductions}
-              baseObjective={closed ? currentMonthQ.data!.horas_objetivo_base : (totals.objective ?? 0)}
-              effectiveObjective={closed ? currentMonthQ.data!.horas_objetivo_efectiu : (totals.effectiveObjective ?? 0)}
-            />
+            <div className="mb-4 flex items-end gap-4">
+              <div className="flex-1 min-w-0">
+                <ClosureProgressBar
+                  worked={closed ? currentMonthQ.data!.horas_treballades : totals.worked}
+                  reductions={closed ? currentMonthQ.data!.horas_reduccion : totals.reductions}
+                  baseObjective={closed ? currentMonthQ.data!.horas_objetivo_base : (totals.objective ?? 0)}
+                  effectiveObjective={closed ? currentMonthQ.data!.horas_objetivo_efectiu : (totals.effectiveObjective ?? 0)}
+                />
+              </div>
+              {(() => {
+                const saldoVal = closed ? Number(currentMonthQ.data!.saldo_mes) : totals.saldo;
+                const eff = closed ? Number(currentMonthQ.data!.horas_objetivo_efectiu) : (totals.effectiveObjective ?? 0);
+                const st = saldoChipStyle(saldoVal, eff);
+                return (
+                  <div className="flex flex-col items-center shrink-0" style={{ minWidth: 72 }}>
+                    <div className="rounded-full px-3 py-1 tabular-nums" style={{ background: st.bg, color: st.fg, fontSize: 16, fontWeight: 700 }}>
+                      {fmtSigned(saldoVal)}
+                    </div>
+                    <div className="text-[11px] text-muted-foreground mt-1">saldo mes</div>
+                  </div>
+                );
+              })()}
+            </div>
 
             <BreakdownRows
               baseObjective={closed ? currentMonthQ.data!.horas_objetivo_base : (totals.objective ?? 0)}
@@ -1407,7 +1426,7 @@ function VacYearCard({ row, idPersona }: { row: VacAnyRow; idPersona: number }) 
   });
 
   const consumed = (consumedQ.data ?? []).reduce((s, r) => s + Math.abs(Number(r.horas ?? 0)), 0);
-  const assigned = Number(row.hores_assignades ?? 0);
+  const assigned = Number(row.hores_calculades ?? row.hores_assignades ?? 0);
   const remaining = assigned - consumed;
   const pct = assigned > 0 ? Math.min(120, (consumed / assigned) * 100) : 0;
 
@@ -1452,19 +1471,28 @@ function VacYearCard({ row, idPersona }: { row: VacAnyRow; idPersona: number }) 
         )}
       </div>
 
-      <div className="flex items-center gap-4">
-        <div className="flex-1">
-          <div className="relative w-full" style={{ height: 18 }}>
-            <div className="absolute inset-y-0 left-0 flex items-center justify-end pr-2 text-xs font-semibold text-white"
-              style={{ width: `${Math.min(100, pct)}%`, background: barColor }}>
-              {pct > 10 ? `${fmtHours(consumed)} consumides` : ""}
-            </div>
+      <div className="flex items-end gap-4">
+        <div className="flex-1 min-w-0">
+          <div className="text-xs text-muted-foreground mb-1">
+            Vac. {fmtHours(Number(row.hores_calculades))} assignades (≈ {row.dies_assignats} dies naturals)
           </div>
-          <div className="text-xs text-muted-foreground mt-1">
-            {fmtHours(assigned)} assignades (≈ {row.dies_assignats} dies naturals)
+          <div className="relative w-full">
+            {/* Thin bar - assigned */}
+            <div className="relative w-full" style={{ height: 10 }}>
+              <div className="absolute inset-y-0 left-0" style={{ width: `80%`, background: "#D3D1C7" }} />
+            </div>
+            {/* Thick bar - consumed */}
+            <div className="relative w-full" style={{ height: 18 }}>
+              <div className="absolute inset-y-0 left-0 flex items-center justify-end pr-2 text-xs font-semibold text-white"
+                style={{ width: `${assigned > 0 ? (consumed / assigned) * 80 : 0}%`, background: barColor }}>
+                {pct > 10 ? `${fmtHours(consumed)} consumides` : ""}
+              </div>
+            </div>
+            {/* Vertical marker at 80% */}
+            <div className="absolute pointer-events-none" style={{ left: `80%`, top: 0, bottom: 0, width: 2, background: "#26215C", transform: "translateX(-1px)" }} />
           </div>
         </div>
-        <div className="shrink-0 flex flex-col items-center">
+        <div className="shrink-0 flex flex-col items-center" style={{ minWidth: 72 }}>
           <div className="rounded-full px-3 py-1 tabular-nums"
             style={{ background: chipStyle.bg, color: chipStyle.fg, fontSize: 16, fontWeight: 700 }}>
             {remaining >= 0 ? fmtHours(remaining) : `−${fmtHours(Math.abs(remaining))}`}
