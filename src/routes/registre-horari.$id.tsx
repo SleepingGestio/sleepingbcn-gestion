@@ -1426,7 +1426,7 @@ function VacYearCard({ row, idPersona }: { row: VacAnyRow; idPersona: number }) 
   });
 
   const consumed = (consumedQ.data ?? []).reduce((s, r) => s + Math.abs(Number(r.horas ?? 0)), 0);
-  const assigned = Number(row.hores_assignades ?? 0);
+  const assigned = Number(row.hores_calculades ?? row.hores_assignades ?? 0);
   const remaining = assigned - consumed;
   const pct = assigned > 0 ? Math.min(120, (consumed / assigned) * 100) : 0;
 
