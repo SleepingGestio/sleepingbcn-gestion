@@ -757,13 +757,14 @@ function HoresProgress({
                 left: `${effPct}%`,
                 top: -22,
                 transform: "translateX(-50%)",
-                fontSize: 11,
+                fontSize: 13,
                 color: "#26215C",
-                fontWeight: 600,
+                fontWeight: 700,
                 whiteSpace: "nowrap",
                 background: "#fff",
-                padding: "1px 4px",
-                borderRadius: 3,
+                padding: "2px 6px",
+                borderRadius: 4,
+                border: "1px solid #26215C",
               }}
             >
               {fmtHours(effectiveObjective!)}
@@ -1263,13 +1264,14 @@ function ClosureProgressBar({
             left: `${effPct}%`,
             top: -22,
             transform: "translateX(-50%)",
-            fontSize: 11,
+            fontSize: 13,
             color: "#26215C",
-            fontWeight: 600,
+            fontWeight: 700,
             whiteSpace: "nowrap",
             background: "#fff",
-            padding: "1px 4px",
-            borderRadius: 3,
+            padding: "2px 6px",
+            borderRadius: 4,
+            border: "1px solid #26215C",
           }}
         >
           {fmtHours(effectiveObjective)}
@@ -1534,13 +1536,14 @@ function VacYearCard({ row, idPersona }: { row: VacAnyRow; idPersona: number }) 
                 left: `80%`,
                 top: -22,
                 transform: "translateX(-50%)",
-                fontSize: 11,
+                fontSize: 13,
                 color: "#26215C",
-                fontWeight: 600,
+                fontWeight: 700,
                 whiteSpace: "nowrap",
                 background: "#fff",
-                padding: "1px 4px",
-                borderRadius: 3,
+                padding: "2px 6px",
+                borderRadius: 4,
+                border: "1px solid #26215C",
               }}
             >
               {fmtHours(Number(row.hores_calculades))}
