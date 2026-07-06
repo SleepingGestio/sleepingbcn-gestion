@@ -110,6 +110,22 @@ function RegistreHorariPage() {
     },
   });
 
+  const ajustosQ = useQuery({
+    queryKey: ["reg-horari-ajustos", start, end, workerIds.join(",")],
+    enabled: workerIds.length > 0,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("personal_ajustos_hores")
+        .select("id_persona, fecha, horas, tipus_computa")
+        .in("id_persona", workerIds)
+        .eq("tipus_computa", "treballades")
+        .gte("fecha", start)
+        .lte("fecha", end);
+      if (error) throw error;
+      return (data ?? []) as { id_persona: number; horas: number | null }[];
+    },
+  });
+
   const hoursByWorker = useMemo(() => {
     const map = new Map<number, number>();
     for (const l of limpiezasQ.data ?? []) {
@@ -119,8 +135,11 @@ function RegistreHorariPage() {
     for (const r of genericQ.data ?? []) {
       map.set(r.id_persona, (map.get(r.id_persona) ?? 0) + diffHours(r.inici, r.fi));
     }
+    for (const a of ajustosQ.data ?? []) {
+      map.set(a.id_persona, (map.get(a.id_persona) ?? 0) + Number(a.horas ?? 0));
+    }
     return map;
-  }, [limpiezasQ.data, genericQ.data]);
+  }, [limpiezasQ.data, genericQ.data, ajustosQ.data]);
 
   const maxScale = useMemo(() => {
     let m = 0;
@@ -132,7 +151,7 @@ function RegistreHorariPage() {
     return m || 1;
   }, [workers, hoursByWorker]);
 
-  const loading = workersQ.isLoading || limpiezasQ.isLoading || genericQ.isLoading;
+  const loading = workersQ.isLoading || limpiezasQ.isLoading || genericQ.isLoading || ajustosQ.isLoading;
 
   return (
     <AppShell title="Registre horari">
