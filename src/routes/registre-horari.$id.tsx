@@ -1471,19 +1471,28 @@ function VacYearCard({ row, idPersona }: { row: VacAnyRow; idPersona: number }) 
         )}
       </div>
 
-      <div className="flex items-center gap-4">
-        <div className="flex-1">
-          <div className="relative w-full" style={{ height: 18 }}>
-            <div className="absolute inset-y-0 left-0 flex items-center justify-end pr-2 text-xs font-semibold text-white"
-              style={{ width: `${Math.min(100, pct)}%`, background: barColor }}>
-              {pct > 10 ? `${fmtHours(consumed)} consumides` : ""}
-            </div>
+      <div className="flex items-end gap-4">
+        <div className="flex-1 min-w-0">
+          <div className="text-xs text-muted-foreground mb-1">
+            Vac. {fmtHours(Number(row.hores_calculades))} assignades (≈ {row.dies_assignats} dies naturals)
           </div>
-          <div className="text-xs text-muted-foreground mt-1">
-            {fmtHours(assigned)} assignades (≈ {row.dies_assignats} dies naturals)
+          <div className="relative w-full">
+            {/* Thin bar - assigned */}
+            <div className="relative w-full" style={{ height: 10 }}>
+              <div className="absolute inset-y-0 left-0" style={{ width: `80%`, background: "#D3D1C7" }} />
+            </div>
+            {/* Thick bar - consumed */}
+            <div className="relative w-full" style={{ height: 18 }}>
+              <div className="absolute inset-y-0 left-0 flex items-center justify-end pr-2 text-xs font-semibold text-white"
+                style={{ width: `${assigned > 0 ? (consumed / assigned) * 80 : 0}%`, background: barColor }}>
+                {pct > 10 ? `${fmtHours(consumed)} consumides` : ""}
+              </div>
+            </div>
+            {/* Vertical marker at 80% */}
+            <div className="absolute pointer-events-none" style={{ left: `80%`, top: 0, bottom: 0, width: 2, background: "#26215C", transform: "translateX(-1px)" }} />
           </div>
         </div>
-        <div className="shrink-0 flex flex-col items-center">
+        <div className="shrink-0 flex flex-col items-center" style={{ minWidth: 72 }}>
           <div className="rounded-full px-3 py-1 tabular-nums"
             style={{ background: chipStyle.bg, color: chipStyle.fg, fontSize: 16, fontWeight: 700 }}>
             {remaining >= 0 ? fmtHours(remaining) : `−${fmtHours(Math.abs(remaining))}`}
