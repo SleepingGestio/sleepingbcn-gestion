@@ -1253,6 +1253,22 @@ function ClosureProgressBar({
       {has && (
         <div className="absolute pointer-events-none" style={{ left: `${effPct}%`, top: 0, bottom: 0, width: 2, background: "#26215C", transform: "translateX(-1px)" }} />
       )}
+      {has && (
+        <div
+          className="absolute"
+          style={{
+            left: `${effPct}%`,
+            top: 0,
+            transform: "translateX(-50%)",
+            fontSize: 10,
+            color: "#26215C",
+            fontWeight: 600,
+            whiteSpace: "nowrap",
+          }}
+        >
+          {fmtHours(effectiveObjective)}
+        </div>
+      )}
     </div>
   );
 }
