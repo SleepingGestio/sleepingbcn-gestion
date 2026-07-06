@@ -734,7 +734,7 @@ function PersonaDialog({
                           className="border-rose-300 text-rose-700 hover:bg-rose-50"
                           onClick={() => setBaixaOpen(true)}
                         >
-                          Donar de baixa
+                          Finalitzar contracte
                         </Button>
                       </div>
                     </div>
