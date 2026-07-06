@@ -24,6 +24,11 @@ type Persona = {
   control_horario: boolean | null;
 };
 
+type ActivePeriod = {
+  id_persona: number;
+  horas_objetivo_mes: number | null;
+};
+
 function pad(n: number) {
   return String(n).padStart(2, "0");
 }
@@ -78,6 +83,20 @@ function RegistreHorariPage() {
 
   const workers = workersQ.data ?? [];
   const workerIds = useMemo(() => workers.map((w) => w.id_persona), [workers]);
+
+  const activePeriodsQ = useQuery({
+    queryKey: ["reg-horari-active-periods", workerIds.join(",")],
+    enabled: workerIds.length > 0,
+    queryFn: async (): Promise<ActivePeriod[]> => {
+      const { data, error } = await supabase
+        .from("personal_periodos_actividad")
+        .select("id_persona, horas_objetivo_mes")
+        .in("id_persona", workerIds)
+        .is("fecha_fin", null);
+      if (error) throw error;
+      return (data ?? []) as ActivePeriod[];
+    },
+  });
 
   const limpiezasQ = useQuery({
     queryKey: ["reg-horari-limpiezas", start, end, workerIds.join(",")],
@@ -141,17 +160,31 @@ function RegistreHorariPage() {
     return map;
   }, [limpiezasQ.data, genericQ.data, ajustosQ.data]);
 
+  const activeObjectiveByWorker = useMemo(() => {
+    const map = new Map<number, number | null>();
+    for (const p of activePeriodsQ.data ?? []) {
+      map.set(p.id_persona, p.horas_objetivo_mes == null ? null : Number(p.horas_objetivo_mes));
+    }
+    return map;
+  }, [activePeriodsQ.data]);
+
+  const objectiveForWorker = (worker: Persona) => (
+    activeObjectiveByWorker.has(worker.id_persona)
+      ? activeObjectiveByWorker.get(worker.id_persona)!
+      : worker.horas_objetivo_mes
+  );
+
   const maxScale = useMemo(() => {
     let m = 0;
     for (const w of workers) {
       const actual = hoursByWorker.get(w.id_persona) ?? 0;
-      const obj = w.horas_objetivo_mes ?? 0;
+      const obj = objectiveForWorker(w) ?? 0;
       m = Math.max(m, actual, obj);
     }
     return m || 1;
-  }, [workers, hoursByWorker]);
+  }, [workers, hoursByWorker, activeObjectiveByWorker]);
 
-  const loading = workersQ.isLoading || limpiezasQ.isLoading || genericQ.isLoading || ajustosQ.isLoading;
+  const loading = workersQ.isLoading || limpiezasQ.isLoading || genericQ.isLoading || ajustosQ.isLoading || activePeriodsQ.isLoading;
 
   return (
     <AppShell title="Registre horari">
@@ -186,6 +219,7 @@ function RegistreHorariPage() {
                 key={w.id_persona}
                 worker={w}
                 actual={hoursByWorker.get(w.id_persona) ?? 0}
+                objective={objectiveForWorker(w)}
                 maxScale={maxScale}
               />
             ))}
@@ -202,14 +236,15 @@ const BAR_MAX_PX = 240;
 function WorkerColumn({
   worker,
   actual,
+  objective,
   maxScale,
 }: {
   worker: Persona;
   actual: number;
+  objective: number | null;
   maxScale: number;
 }) {
   const isAutonom = worker.tipo_contrato === "autonomo";
-  const objective = worker.horas_objetivo_mes;
   const hasObjective = !isAutonom && objective != null && objective > 0;
 
   let color = "#378ADD"; // blue for autonomo / no objective
