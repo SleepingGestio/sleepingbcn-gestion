@@ -755,7 +755,7 @@ function HoresProgress({
               className="absolute"
               style={{
                 left: `${effPct}%`,
-                top: -22,
+                top: -28,
                 transform: "translateX(-50%)",
                 fontSize: 13,
                 color: "#26215C",
@@ -1070,6 +1070,7 @@ function TancamentsTab({
                   reductions={closed ? currentMonthQ.data!.horas_reduccion : totals.reductions}
                   baseObjective={closed ? currentMonthQ.data!.horas_objetivo_base : (totals.objective ?? 0)}
                   effectiveObjective={closed ? currentMonthQ.data!.horas_objetivo_efectiu : (totals.effectiveObjective ?? 0)}
+                  reductionTipo={totals.reductionTipo}
                 />
               </div>
               {(() => {
@@ -1228,8 +1229,8 @@ function saldoColor(h: number): string {
 }
 
 function ClosureProgressBar({
-  worked, reductions, baseObjective, effectiveObjective,
-}: { worked: number; reductions: number; baseObjective: number; effectiveObjective: number }) {
+  worked, reductions, baseObjective, effectiveObjective, reductionTipo,
+}: { worked: number; reductions: number; baseObjective: number; effectiveObjective: number; reductionTipo: string | null }) {
   const BASE_PCT = 80;
   const has = baseObjective > 0;
   const effPct = has ? (effectiveObjective / baseObjective) * BASE_PCT : 0;
@@ -1241,8 +1242,17 @@ function ClosureProgressBar({
     color = deficit >= 0.15 ? "#E24B4A" : "#EF9F27";
   }
 
+  const reductionLabel = reductionTipo === "vacaciones" ? "vacances" : reductionTipo === "baja" ? "baixa" : reductionTipo ?? "";
+  const infoText = !has
+    ? "Sense objectiu"
+    : reductions > 0
+      ? `Obj. ${fmtHours(baseObjective)} · −${fmtHours(reductions)} ${reductionLabel} → ${fmtHours(effectiveObjective)} efectiu`
+      : `Obj. ${fmtHours(baseObjective)}`;
+
   return (
-    <div className="relative w-full mb-4" style={{ overflow: "visible" }}>
+    <>
+      <div className="text-xs text-muted-foreground mb-1">{infoText}</div>
+      <div className="relative w-full mb-4" style={{ overflow: "visible" }}>
       <div className="relative w-full" style={{ height: 10 }}>
         <div className="absolute inset-y-0 left-0" style={{ width: `${effPct}%`, background: "#D3D1C7" }} />
         {has && reductions > 0 && (
@@ -1262,7 +1272,7 @@ function ClosureProgressBar({
           className="absolute"
           style={{
             left: `${effPct}%`,
-            top: -22,
+            top: -28,
             transform: "translateX(-50%)",
             fontSize: 13,
             color: "#26215C",
@@ -1277,7 +1287,8 @@ function ClosureProgressBar({
           {fmtHours(effectiveObjective)}
         </div>
       )}
-    </div>
+      </div>
+    </>
   );
 }
 
@@ -1534,7 +1545,7 @@ function VacYearCard({ row, idPersona }: { row: VacAnyRow; idPersona: number }) 
               className="absolute"
               style={{
                 left: `80%`,
-                top: -22,
+                top: -28,
                 transform: "translateX(-50%)",
                 fontSize: 13,
                 color: "#26215C",
