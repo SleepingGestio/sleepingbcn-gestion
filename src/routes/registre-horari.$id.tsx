@@ -1287,7 +1287,7 @@ function ClosureProgressBar({
           {fmtHours(effectiveObjective)}
         </div>
       )}
-    </div>
+    </>
   );
 }
 
