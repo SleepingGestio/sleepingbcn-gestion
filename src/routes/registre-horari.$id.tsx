@@ -1250,7 +1250,7 @@ function ClosureProgressBar({
       : `Obj. ${fmtHours(baseObjective)}`;
 
   return (
-    <div className="flex-1 min-w-0">
+    <>
       <div className="text-xs text-muted-foreground mb-1">{infoText}</div>
       <div className="relative w-full mb-4" style={{ overflow: "visible" }}>
       <div className="relative w-full" style={{ height: 10 }}>
