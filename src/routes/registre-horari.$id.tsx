@@ -369,7 +369,7 @@ function DetallPage() {
         otherAdjustments += h;
       }
     }
-    const objective = activePeriodQ.data?.horas_objetivo_mes ?? null;
+    const objective = activePeriodQ.data?.horas_objetivo_mes ?? personaQ.data?.horas_objetivo_mes ?? null;
     const isAutonom = personaQ.data?.tipo_contrato === "autonomo";
     const baseObjective = objective != null ? Number(objective) : null;
     const effectiveObjective = baseObjective != null ? Math.max(0, baseObjective - reductions) : null;
