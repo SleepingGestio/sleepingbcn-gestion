@@ -1229,8 +1229,8 @@ function saldoColor(h: number): string {
 }
 
 function ClosureProgressBar({
-  worked, reductions, baseObjective, effectiveObjective,
-}: { worked: number; reductions: number; baseObjective: number; effectiveObjective: number }) {
+  worked, reductions, baseObjective, effectiveObjective, reductionTipo,
+}: { worked: number; reductions: number; baseObjective: number; effectiveObjective: number; reductionTipo: string | null }) {
   const BASE_PCT = 80;
   const has = baseObjective > 0;
   const effPct = has ? (effectiveObjective / baseObjective) * BASE_PCT : 0;
