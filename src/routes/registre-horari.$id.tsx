@@ -1522,6 +1522,20 @@ function VacYearCard({ row, idPersona }: { row: VacAnyRow; idPersona: number }) 
             </div>
             {/* Vertical marker at 80% */}
             <div className="absolute pointer-events-none" style={{ left: `80%`, top: 0, bottom: 0, width: 2, background: "#26215C", transform: "translateX(-1px)" }} />
+            <div
+              className="absolute"
+              style={{
+                left: `80%`,
+                top: 0,
+                transform: "translateX(-50%)",
+                fontSize: 10,
+                color: "#26215C",
+                fontWeight: 600,
+                whiteSpace: "nowrap",
+              }}
+            >
+              {fmtHours(Number(row.hores_calculades))}
+            </div>
           </div>
         </div>
         <div className="shrink-0 flex flex-col items-center" style={{ minWidth: 72 }}>
