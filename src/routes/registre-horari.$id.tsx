@@ -755,7 +755,7 @@ function HoresProgress({
               className="absolute"
               style={{
                 left: `${effPct}%`,
-                top: -22,
+                top: -28,
                 transform: "translateX(-50%)",
                 fontSize: 13,
                 color: "#26215C",
@@ -1070,6 +1070,7 @@ function TancamentsTab({
                   reductions={closed ? currentMonthQ.data!.horas_reduccion : totals.reductions}
                   baseObjective={closed ? currentMonthQ.data!.horas_objetivo_base : (totals.objective ?? 0)}
                   effectiveObjective={closed ? currentMonthQ.data!.horas_objetivo_efectiu : (totals.effectiveObjective ?? 0)}
+                  reductionTipo={totals.reductionTipo}
                 />
               </div>
               {(() => {
@@ -1534,7 +1535,7 @@ function VacYearCard({ row, idPersona }: { row: VacAnyRow; idPersona: number }) 
               className="absolute"
               style={{
                 left: `80%`,
-                top: -22,
+                top: -28,
                 transform: "translateX(-50%)",
                 fontSize: 13,
                 color: "#26215C",
