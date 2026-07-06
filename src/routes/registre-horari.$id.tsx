@@ -1272,7 +1272,7 @@ function ClosureProgressBar({
           className="absolute"
           style={{
             left: `${effPct}%`,
-            top: -22,
+            top: -28,
             transform: "translateX(-50%)",
             fontSize: 13,
             color: "#26215C",
