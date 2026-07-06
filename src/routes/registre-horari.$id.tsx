@@ -1043,12 +1043,29 @@ function TancamentsTab({
           </div>
         ) : (
           <>
-            <ClosureProgressBar
-              worked={closed ? currentMonthQ.data!.horas_treballades : totals.worked}
-              reductions={closed ? currentMonthQ.data!.horas_reduccion : totals.reductions}
-              baseObjective={closed ? currentMonthQ.data!.horas_objetivo_base : (totals.objective ?? 0)}
-              effectiveObjective={closed ? currentMonthQ.data!.horas_objetivo_efectiu : (totals.effectiveObjective ?? 0)}
-            />
+            <div className="mb-4 flex items-end gap-4">
+              <div className="flex-1 min-w-0">
+                <ClosureProgressBar
+                  worked={closed ? currentMonthQ.data!.horas_treballades : totals.worked}
+                  reductions={closed ? currentMonthQ.data!.horas_reduccion : totals.reductions}
+                  baseObjective={closed ? currentMonthQ.data!.horas_objetivo_base : (totals.objective ?? 0)}
+                  effectiveObjective={closed ? currentMonthQ.data!.horas_objetivo_efectiu : (totals.effectiveObjective ?? 0)}
+                />
+              </div>
+              {(() => {
+                const saldoVal = closed ? Number(currentMonthQ.data!.saldo_mes) : totals.saldo;
+                const eff = closed ? Number(currentMonthQ.data!.horas_objetivo_efectiu) : (totals.effectiveObjective ?? 0);
+                const st = saldoChipStyle(saldoVal, eff);
+                return (
+                  <div className="flex flex-col items-center shrink-0" style={{ minWidth: 72 }}>
+                    <div className="rounded-full px-3 py-1 tabular-nums" style={{ background: st.bg, color: st.fg, fontSize: 16, fontWeight: 700 }}>
+                      {fmtSigned(saldoVal)}
+                    </div>
+                    <div className="text-[11px] text-muted-foreground mt-1">saldo mes</div>
+                  </div>
+                );
+              })()}
+            </div>
 
             <BreakdownRows
               baseObjective={closed ? currentMonthQ.data!.horas_objetivo_base : (totals.objective ?? 0)}
