@@ -427,61 +427,57 @@ function PersonaDialog({
   const periodos = periodosQ.data ?? [];
   const currentPeriod = periodos.find((p) => !p.fecha_fin) ?? null;
 
-  // Vacances any per período (edit only) — one query per period row
-  const vacQueries = useQueries({
-    queries: periodos.map((p) => ({
-      queryKey: [
-        "personal-vacances-any-per-periodo",
-        persona?.id_persona,
-        p.fecha_inicio,
-      ],
-      enabled: isEdit && !!persona?.id_persona && !!p.fecha_inicio,
-      queryFn: async () => {
-        const start = p.fecha_inicio;
-        const end = addOneYear(start);
-        const { data, error } = await (supabase as any)
-          .from("personal_vacances_any")
-          .select("id_vac_any, data_inici_any, data_fi_any, hores_calculades, hores_assignades")
-          .eq("id_persona", persona!.id_persona)
-          .gte("data_inici_any", start)
-          .lt("data_inici_any", end)
-          .order("data_inici_any", { ascending: true })
-          .limit(1);
-        if (error) throw error;
-        const row = (data ?? [])[0] as
-          | {
-              id_vac_any: number;
-              data_inici_any: string;
-              data_fi_any: string;
-              hores_calculades: number | null;
-              hores_assignades: number | null;
-            }
-          | undefined;
-        if (!row) return null;
-        const { data: ajustos, error: aerr } = await (supabase as any)
-          .from("personal_ajustos_hores")
-          .select("horas")
-          .eq("id_persona", persona!.id_persona)
-          .eq("tipo", "vacaciones")
-          .gte("fecha", row.data_inici_any)
-          .lte("fecha", row.data_fi_any);
-        if (aerr) throw aerr;
-        let consumed = 0;
-        for (const a of (ajustos ?? []) as Array<{ horas: number }>) {
-          consumed += Math.abs(Number(a.horas ?? 0));
-        }
-        return { row, consumed };
-      },
-    })),
+  // Vacances any + ajustos vacaciones for this worker — fetched once, matched synchronously
+  const vacAnyQ = useQuery({
+    queryKey: ["personal-vacances-any-all", persona?.id_persona],
+    enabled: isEdit && !!persona?.id_persona,
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("personal_vacances_any")
+        .select("id_vac_any, data_inici_any, data_fi_any, hores_calculades, hores_assignades")
+        .eq("id_persona", persona!.id_persona);
+      if (error) throw error;
+      return (data ?? []) as Array<{
+        id_vac_any: number;
+        data_inici_any: string;
+        data_fi_any: string;
+        hores_calculades: number | null;
+        hores_assignades: number | null;
+      }>;
+    },
+  });
+  const vacAjustosQ = useQuery({
+    queryKey: ["personal-ajustos-vacaciones-all", persona?.id_persona],
+    enabled: isEdit && !!persona?.id_persona,
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("personal_ajustos_hores")
+        .select("fecha, horas")
+        .eq("id_persona", persona!.id_persona)
+        .eq("tipo", "vacaciones");
+      if (error) throw error;
+      return (data ?? []) as Array<{ fecha: string; horas: number }>;
+    },
   });
   const vacByInici = useMemo(() => {
     const map = new Map<string, { row: { hores_calculades: number | null; hores_assignades: number | null }; consumed: number }>();
-    periodos.forEach((p, i) => {
-      const r = vacQueries[i]?.data as { row: any; consumed: number } | null | undefined;
-      if (r && r.row) map.set(p.fecha_inicio, r);
-    });
+    const vacRows = vacAnyQ.data ?? [];
+    const ajustos = vacAjustosQ.data ?? [];
+    for (const p of periodos) {
+      const start = p.fecha_inicio;
+      const end = addOneYear(start);
+      const row = vacRows.find((v) => v.data_inici_any >= start && v.data_inici_any < end);
+      if (!row) continue;
+      let consumed = 0;
+      for (const a of ajustos) {
+        if (a.fecha >= row.data_inici_any && a.fecha <= row.data_fi_any) {
+          consumed += Math.abs(Number(a.horas ?? 0));
+        }
+      }
+      map.set(p.fecha_inicio, { row, consumed });
+    }
     return map;
-  }, [periodos, vacQueries.map((q) => q.dataUpdatedAt).join(",")]);
+  }, [periodos, vacAnyQ.data, vacAjustosQ.data]);
 
   // Període actiu (editable)
   const [periodInicio, setPeriodInicio] = useState<string>("");
