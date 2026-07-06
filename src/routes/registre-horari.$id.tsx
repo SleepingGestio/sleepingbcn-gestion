@@ -708,7 +708,7 @@ function HoresProgress({
     <div className="mb-6 flex items-end gap-4">
       <div className="flex-1 min-w-0">
         <div className="text-xs text-muted-foreground mb-1">{infoText}</div>
-        <div className="relative w-full" style={{ overflow: "visible", paddingTop: 18 }}>
+        <div className="relative w-full" style={{ overflow: "visible" }}>
           {/* Bar 1 - objective breakdown */}
           <div className="relative w-full" style={{ height: 10 }}>
             <div className="absolute inset-y-0 left-0" style={{ width: `${effPct}%`, background: "#D3D1C7" }} />
@@ -755,12 +755,15 @@ function HoresProgress({
               className="absolute"
               style={{
                 left: `${effPct}%`,
-                top: 0,
+                top: -22,
                 transform: "translateX(-50%)",
-                fontSize: 10,
+                fontSize: 11,
                 color: "#26215C",
                 fontWeight: 600,
                 whiteSpace: "nowrap",
+                background: "#fff",
+                padding: "1px 4px",
+                borderRadius: 3,
               }}
             >
               {fmtHours(effectiveObjective!)}
@@ -1238,7 +1241,7 @@ function ClosureProgressBar({
   }
 
   return (
-    <div className="relative w-full mb-4" style={{ overflow: "visible", paddingTop: 18 }}>
+    <div className="relative w-full mb-4" style={{ overflow: "visible" }}>
       <div className="relative w-full" style={{ height: 10 }}>
         <div className="absolute inset-y-0 left-0" style={{ width: `${effPct}%`, background: "#D3D1C7" }} />
         {has && reductions > 0 && (
@@ -1258,12 +1261,15 @@ function ClosureProgressBar({
           className="absolute"
           style={{
             left: `${effPct}%`,
-            top: 0,
+            top: -22,
             transform: "translateX(-50%)",
-            fontSize: 10,
+            fontSize: 11,
             color: "#26215C",
             fontWeight: 600,
             whiteSpace: "nowrap",
+            background: "#fff",
+            padding: "1px 4px",
+            borderRadius: 3,
           }}
         >
           {fmtHours(effectiveObjective)}
@@ -1508,7 +1514,7 @@ function VacYearCard({ row, idPersona }: { row: VacAnyRow; idPersona: number }) 
           <div className="text-xs text-muted-foreground mb-1">
             Vac. {fmtHours(Number(row.hores_calculades))} assignades (≈ {row.dies_assignats} dies naturals)
           </div>
-          <div className="relative w-full" style={{ overflow: "visible", paddingTop: 18 }}>
+          <div className="relative w-full" style={{ overflow: "visible" }}>
             {/* Thin bar - assigned */}
             <div className="relative w-full" style={{ height: 10 }}>
               <div className="absolute inset-y-0 left-0" style={{ width: `80%`, background: "#D3D1C7" }} />
@@ -1526,12 +1532,15 @@ function VacYearCard({ row, idPersona }: { row: VacAnyRow; idPersona: number }) 
               className="absolute"
               style={{
                 left: `80%`,
-                top: 0,
+                top: -22,
                 transform: "translateX(-50%)",
-                fontSize: 10,
+                fontSize: 11,
                 color: "#26215C",
                 fontWeight: 600,
                 whiteSpace: "nowrap",
+                background: "#fff",
+                padding: "1px 4px",
+                borderRadius: 3,
               }}
             >
               {fmtHours(Number(row.hores_calculades))}
