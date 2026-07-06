@@ -708,7 +708,7 @@ function HoresProgress({
     <div className="mb-6 flex items-end gap-4">
       <div className="flex-1 min-w-0">
         <div className="text-xs text-muted-foreground mb-1">{infoText}</div>
-        <div className="relative w-full">
+        <div className="relative w-full" style={{ overflow: "visible", paddingTop: 18 }}>
           {/* Bar 1 - objective breakdown */}
           <div className="relative w-full" style={{ height: 10 }}>
             <div className="absolute inset-y-0 left-0" style={{ width: `${effPct}%`, background: "#D3D1C7" }} />
@@ -749,6 +749,22 @@ function HoresProgress({
                 transform: "translateX(-1px)",
               }}
             />
+          )}
+          {hasObjective && (
+            <div
+              className="absolute"
+              style={{
+                left: `${effPct}%`,
+                top: 0,
+                transform: "translateX(-50%)",
+                fontSize: 10,
+                color: "#26215C",
+                fontWeight: 600,
+                whiteSpace: "nowrap",
+              }}
+            >
+              {fmtHours(effectiveObjective!)}
+            </div>
           )}
         </div>
       </div>
@@ -1222,7 +1238,7 @@ function ClosureProgressBar({
   }
 
   return (
-    <div className="relative w-full mb-4">
+    <div className="relative w-full mb-4" style={{ overflow: "visible", paddingTop: 18 }}>
       <div className="relative w-full" style={{ height: 10 }}>
         <div className="absolute inset-y-0 left-0" style={{ width: `${effPct}%`, background: "#D3D1C7" }} />
         {has && reductions > 0 && (
@@ -1236,6 +1252,22 @@ function ClosureProgressBar({
       </div>
       {has && (
         <div className="absolute pointer-events-none" style={{ left: `${effPct}%`, top: 0, bottom: 0, width: 2, background: "#26215C", transform: "translateX(-1px)" }} />
+      )}
+      {has && (
+        <div
+          className="absolute"
+          style={{
+            left: `${effPct}%`,
+            top: 0,
+            transform: "translateX(-50%)",
+            fontSize: 10,
+            color: "#26215C",
+            fontWeight: 600,
+            whiteSpace: "nowrap",
+          }}
+        >
+          {fmtHours(effectiveObjective)}
+        </div>
       )}
     </div>
   );
@@ -1476,7 +1508,7 @@ function VacYearCard({ row, idPersona }: { row: VacAnyRow; idPersona: number }) 
           <div className="text-xs text-muted-foreground mb-1">
             Vac. {fmtHours(Number(row.hores_calculades))} assignades (≈ {row.dies_assignats} dies naturals)
           </div>
-          <div className="relative w-full">
+          <div className="relative w-full" style={{ overflow: "visible", paddingTop: 18 }}>
             {/* Thin bar - assigned */}
             <div className="relative w-full" style={{ height: 10 }}>
               <div className="absolute inset-y-0 left-0" style={{ width: `80%`, background: "#D3D1C7" }} />
@@ -1490,6 +1522,20 @@ function VacYearCard({ row, idPersona }: { row: VacAnyRow; idPersona: number }) 
             </div>
             {/* Vertical marker at 80% */}
             <div className="absolute pointer-events-none" style={{ left: `80%`, top: 0, bottom: 0, width: 2, background: "#26215C", transform: "translateX(-1px)" }} />
+            <div
+              className="absolute"
+              style={{
+                left: `80%`,
+                top: 0,
+                transform: "translateX(-50%)",
+                fontSize: 10,
+                color: "#26215C",
+                fontWeight: 600,
+                whiteSpace: "nowrap",
+              }}
+            >
+              {fmtHours(Number(row.hores_calculades))}
+            </div>
           </div>
         </div>
         <div className="shrink-0 flex flex-col items-center" style={{ minWidth: 72 }}>
