@@ -17,6 +17,7 @@ import { fullName } from "@/lib/types";
 import { Link2, RotateCcw, Trash2, X, Zap } from "lucide-react";
 import { bedLabel } from "@/routes/programacion-limpiezas";
 import { fmtTime } from "@/lib/format";
+import { TimeBadge } from "@/components/time-badge";
 
 export type Limpieza = {
   id_limpieza: number;
@@ -1102,14 +1103,7 @@ function HoraRow({
       <span className="w-44 text-muted-foreground">{label}</span>
       <span className="text-xs rounded bg-muted px-1.5 py-0.5">{dateLabel}</span>
       {time ? (
-        <span
-          className={cn(
-            "text-xs font-semibold rounded px-1.5 py-0.5",
-            informed ? "bg-emerald-500 text-white" : "bg-gray-300 text-gray-700",
-          )}
-        >
-          {fmtTime(time)}
-        </span>
+        <TimeBadge time={time} informed={informed} size="md" />
       ) : (
         <span className="text-xs text-muted-foreground italic">{emptyText ?? "—"}</span>
       )}
