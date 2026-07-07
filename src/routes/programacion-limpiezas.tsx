@@ -16,6 +16,7 @@ import { Link2, Sofa } from "lucide-react";
 import { fmtDate } from "@/lib/format";
 import { LimpiezaPopover, type Limpieza } from "@/components/limpieza-popover";
 import { getEstadoStyle } from "@/components/estado-limpieza-badge";
+import { TimeBadge } from "@/components/time-badge";
 import { fetchLimpiadores } from "@/lib/catalogos";
 import { generarLimpiezas } from "@/lib/generar-limpiezas";
 import { Input } from "@/components/ui/input";
@@ -828,7 +829,7 @@ function ReservaBar({
           )}
           style={{ left, width, top: 3, height: 20 }}
         >
-          <TimeBadge {...leftTime} />
+          <TimeBadge {...leftTime} size="xs" />
           {!r.es_reserva_compartida && (
             <span className="shrink-0 rounded-full bg-black/25 px-1.5 py-px text-[10px] leading-4 flex items-center gap-0.5">
               {guestCount}p
@@ -841,7 +842,7 @@ function ReservaBar({
             )}
             <span className="truncate">{guestLabel}</span>
           </span>
-          <TimeBadge {...rightTime} />
+          <TimeBadge {...rightTime} size="xs" />
         </div>
       </HoverCardTrigger>
       <HoverCardContent className="w-72 text-xs" align="center">
@@ -884,18 +885,7 @@ function ReservaBar({
   );
 }
 
-function TimeBadge({ value, informed }: { value: string; informed: boolean }) {
-  return (
-    <span
-      className={cn(
-        "shrink-0 rounded px-1 py-px text-[10px] leading-4 font-semibold",
-        informed ? "bg-emerald-500 text-white" : "bg-gray-300 text-gray-700",
-      )}
-    >
-      {value}
-    </span>
-  );
-}
+// TimeBadge now lives in @/components/time-badge for reuse.
 
 function cleaningState(l: Limpieza) {
   const anulada = l.estado === "anulada";
