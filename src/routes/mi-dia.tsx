@@ -26,7 +26,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { PasswordInput } from "@/components/ui/password-input";
 import { Label } from "@/components/ui/label";
-import { Zap, Sofa, LogOut, Clock, ArrowLeft, Check, X, Play, Menu, UserCircle2, KeyRound, Square, ClipboardList, Plus } from "lucide-react";
+import { Zap, Sofa, LogOut, Clock, ArrowLeft, Check, X, Play, Menu, UserCircle2, KeyRound, Square, ClipboardList, Plus, LayoutDashboard } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
@@ -202,6 +202,20 @@ function WorkerView({
   onExitPreview?: () => void;
 }) {
   const { signOut } = useAuth();
+  const navigate = useNavigate();
+  const { canView, onlyMiDia } = usePermissions();
+  const fullModeRoute = useMemo<string | null>(() => {
+    if (onlyMiDia) return null;
+    const order: { route: string; menu: string }[] = [
+      { route: "/reservas", menu: "reservas" },
+      { route: "/checkins", menu: "checkins" },
+      { route: "/limpiezas", menu: "limpiezas_asignadas" },
+      { route: "/programacion-limpiezas", menu: "programacion_limpiezas" },
+      { route: "/comunicar-tareas", menu: "comunicar_tareas" },
+      { route: "/registre-horari", menu: "registre_horari" },
+    ];
+    return order.find((m) => canView(m.menu))?.route ?? "/reservas";
+  }, [onlyMiDia, canView]);
   const todayISO = toISO(new Date());
   const tomorrowISO = toISO(new Date(Date.now() + 86400000));
   const monthStart = toISO(startOfMonth(new Date()));
@@ -555,6 +569,16 @@ function WorkerView({
           >
             <Clock className="h-4 w-4" /> {fmtHours(monthHours)} mes
           </button>
+          {fullModeRoute && (
+            <button
+              type="button"
+              onClick={() => navigate({ to: fullModeRoute })}
+              className="hidden sm:inline-flex items-center gap-1.5 rounded-full bg-white/15 hover:bg-white/25 active:bg-white/30 px-3 h-10 text-sm font-medium"
+              aria-label="Modo completo"
+            >
+              <LayoutDashboard className="h-4 w-4" /> Modo completo
+            </button>
+          )}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button
@@ -566,6 +590,11 @@ function WorkerView({
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-52">
+              {fullModeRoute && (
+                <DropdownMenuItem onSelect={() => navigate({ to: fullModeRoute })}>
+                  <LayoutDashboard className="h-4 w-4" /> Modo completo
+                </DropdownMenuItem>
+              )}
               <DropdownMenuItem onSelect={() => setPwOpen(true)}>
                 <KeyRound className="h-4 w-4" /> Canviar contrasenya
               </DropdownMenuItem>
