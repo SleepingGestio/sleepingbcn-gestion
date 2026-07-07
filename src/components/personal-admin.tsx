@@ -198,7 +198,7 @@ export function PersonalAdmin() {
     if (!deactivateFor) return;
     const { error } = await supabase
       .from("personal")
-      .update({ activo: false, mail: null })
+      .update({ activo: false, mail: null, onboarding_completat: false })
       .eq("id_persona", deactivateFor.id_persona);
     if (error) { toast.error("Error: " + error.message); return; }
     toast.success("Persona desactivada i accés revocat");
@@ -325,7 +325,7 @@ export function PersonalAdmin() {
                   </TableCell>
                   <TableCell>
                     <div className="flex items-center justify-end gap-1">
-                      {canEdit && hasMail && !p.onboarding_completat && (
+                      {canEdit && hasMail && (
                         <Button
                           size="icon"
                           variant="ghost"
@@ -522,15 +522,18 @@ function PersonaDialog({
 
   async function persist(): Promise<number | null> {
     if (!nombre.trim()) { toast.error("El nombre es obligatorio"); return null; }
-    const payload = {
+    const newMail = mail.trim() || null;
+    const mailChanged = persona ? newMail !== (persona.mail ?? null) : false;
+    const payload: Record<string, unknown> = {
       nombre: nombre.trim(),
       apellidos: apellidos.trim() || null,
       codigo: codigo.trim() || null,
       telefono: telefono.trim() || null,
-      mail: mail.trim() || null,
+      mail: newMail,
       tipo_contrato: tipoContrato,
       control_horario: controlHorario,
     };
+    if (mailChanged) payload.onboarding_completat = false;
     let id_persona: number;
     if (persona) {
       const { error } = await supabase.from("personal").update(payload).eq("id_persona", persona.id_persona);
