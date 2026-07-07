@@ -17,6 +17,7 @@ import { Route as LimpiezasRouteImport } from './routes/limpiezas'
 import { Route as ConfiguracionRouteImport } from './routes/configuracion'
 import { Route as ComunicarTareasRouteImport } from './routes/comunicar-tareas'
 import { Route as CheckinsRouteImport } from './routes/checkins'
+import { Route as IndexRouteImport } from './routes/index'
 import { Route as RegistreHorariIndexRouteImport } from './routes/registre-horari.index'
 import { Route as RegistreHorariIdRouteImport } from './routes/registre-horari.$id'
 
@@ -60,6 +61,11 @@ const CheckinsRoute = CheckinsRouteImport.update({
   path: '/checkins',
   getParentRoute: () => rootRouteImport,
 } as any)
+const IndexRoute = IndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const RegistreHorariIndexRoute = RegistreHorariIndexRouteImport.update({
   id: '/',
   path: '/',
@@ -72,6 +78,7 @@ const RegistreHorariIdRoute = RegistreHorariIdRouteImport.update({
 } as any)
 
 export interface FileRoutesByFullPath {
+  '/': typeof IndexRoute
   '/checkins': typeof CheckinsRoute
   '/comunicar-tareas': typeof ComunicarTareasRoute
   '/configuracion': typeof ConfiguracionRoute
@@ -84,6 +91,7 @@ export interface FileRoutesByFullPath {
   '/registre-horari/': typeof RegistreHorariIndexRoute
 }
 export interface FileRoutesByTo {
+  '/': typeof IndexRoute
   '/checkins': typeof CheckinsRoute
   '/comunicar-tareas': typeof ComunicarTareasRoute
   '/configuracion': typeof ConfiguracionRoute
@@ -96,6 +104,7 @@ export interface FileRoutesByTo {
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
+  '/': typeof IndexRoute
   '/checkins': typeof CheckinsRoute
   '/comunicar-tareas': typeof ComunicarTareasRoute
   '/configuracion': typeof ConfiguracionRoute
@@ -110,6 +119,7 @@ export interface FileRoutesById {
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
+    | '/'
     | '/checkins'
     | '/comunicar-tareas'
     | '/configuracion'
@@ -122,6 +132,7 @@ export interface FileRouteTypes {
     | '/registre-horari/'
   fileRoutesByTo: FileRoutesByTo
   to:
+    | '/'
     | '/checkins'
     | '/comunicar-tareas'
     | '/configuracion'
@@ -133,6 +144,7 @@ export interface FileRouteTypes {
     | '/registre-horari'
   id:
     | '__root__'
+    | '/'
     | '/checkins'
     | '/comunicar-tareas'
     | '/configuracion'
@@ -146,6 +158,7 @@ export interface FileRouteTypes {
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
+  IndexRoute: typeof IndexRoute
   CheckinsRoute: typeof CheckinsRoute
   ComunicarTareasRoute: typeof ComunicarTareasRoute
   ConfiguracionRoute: typeof ConfiguracionRoute
@@ -214,6 +227,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof CheckinsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/': {
+      id: '/'
+      path: '/'
+      fullPath: '/'
+      preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/registre-horari/': {
       id: '/registre-horari/'
       path: '/'
@@ -246,6 +266,7 @@ const RegistreHorariRouteWithChildren = RegistreHorariRoute._addFileChildren(
 )
 
 const rootRouteChildren: RootRouteChildren = {
+  IndexRoute: IndexRoute,
   CheckinsRoute: CheckinsRoute,
   ComunicarTareasRoute: ComunicarTareasRoute,
   ConfiguracionRoute: ConfiguracionRoute,

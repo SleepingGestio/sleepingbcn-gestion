@@ -43,6 +43,7 @@ function RoleRouter({ children }: { children: ReactNode }) {
       { route: "/limpiezas", menu: "limpiezas_asignadas" },
       { route: "/programacion-limpiezas", menu: "programacion_limpiezas" },
       { route: "/comunicar-tareas", menu: "comunicar_tareas" },
+      { route: "/registre-horari", menu: "registre_horari" },
       { route: "/mi-dia", menu: "mi_dia" },
     ];
     const isConfig = path === "/configuracion" || path.startsWith("/configuracion/");
