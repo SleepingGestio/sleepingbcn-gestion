@@ -16,6 +16,7 @@ import { Link2, Sofa } from "lucide-react";
 import { fmtDate } from "@/lib/format";
 import { LimpiezaPopover, type Limpieza } from "@/components/limpieza-popover";
 import { getEstadoStyle } from "@/components/estado-limpieza-badge";
+import { TimeBadge } from "@/components/time-badge";
 import { fetchLimpiadores } from "@/lib/catalogos";
 import { generarLimpiezas } from "@/lib/generar-limpiezas";
 import { Input } from "@/components/ui/input";
@@ -884,18 +885,7 @@ function ReservaBar({
   );
 }
 
-function TimeBadge({ value, informed }: { value: string; informed: boolean }) {
-  return (
-    <span
-      className={cn(
-        "shrink-0 rounded px-1 py-px text-[10px] leading-4 font-semibold",
-        informed ? "bg-emerald-500 text-white" : "bg-gray-300 text-gray-700",
-      )}
-    >
-      {value}
-    </span>
-  );
-}
+// TimeBadge now lives in @/components/time-badge for reuse.
 
 function cleaningState(l: Limpieza) {
   const anulada = l.estado === "anulada";
