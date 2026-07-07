@@ -132,10 +132,12 @@ function LimpiezasAsignadasPage() {
     return m;
   }, [filter.aptsQ.data, aptExtraQ.data]);
 
-  const workerCodigo = (id: number | null): string => {
+  const workerLabel = (id: number | null): string => {
     if (id == null) return "—";
     const p = limpiadoresQ.data?.find((x) => x.id_persona === id);
-    return p?.codigo ?? `#${id}`;
+    if (!p) return `#${id}`;
+    const full = [p.nombre, p.apellidos].filter(Boolean).join(" ").trim();
+    return p.codigo ? `${p.codigo} · ${full || `#${id}`}` : full || `#${id}`;
   };
 
   const rows = useMemo(() => {
@@ -151,7 +153,7 @@ function LimpiezasAsignadasPage() {
         case "apartamento":
           return aptById.get(l.id_apt)?.nombre ?? "";
         case "limpiador":
-          return workerCodigo(l.worker);
+          return workerLabel(l.worker);
         case "estado":
           return l.estado ?? "";
       }
@@ -278,7 +280,11 @@ function LimpiezasAsignadasPage() {
                         {isSalida ? "Limpieza STD" : "Limpieza EXTRA-CR"}
                       </span>
                     </TableCell>
-                    <TableCell className="font-mono text-xs">{workerCodigo(l.worker)}</TableCell>
+                    <TableCell className="text-xs">
+                      <span className="truncate block" title={workerLabel(l.worker)}>
+                        {workerLabel(l.worker)}
+                      </span>
+                    </TableCell>
                     <TableCell>{guests ?? "—"}</TableCell>
                     <TableCell className="text-center">
                       {needsSofa ? (
@@ -291,14 +297,13 @@ function LimpiezasAsignadasPage() {
                       <TimeBadge time={l.hora_out_time} informed={l.hora_out_informed} size="md" />
                     </TableCell>
                     <TableCell>
-                      <div className="flex items-center gap-1.5">
+                      {isNentran ? (
+                        <span className="rounded px-1.5 py-0.5 text-[10px] font-semibold bg-gray-200 text-gray-700">
+                          NOENTRAN
+                        </span>
+                      ) : (
                         <TimeBadge time={l.hora_in_time} informed={l.hora_in_informed} size="md" />
-                        {isNentran && (
-                          <span className="rounded px-1.5 py-0.5 text-[10px] font-semibold bg-gray-200 text-gray-700">
-                            NOENTRAN
-                          </span>
-                        )}
-                      </div>
+                      )}
                     </TableCell>
                     <TableCell className="font-mono text-xs">
                       {hours != null ? formatHHMM(hours) : <span className="text-muted-foreground">—</span>}
