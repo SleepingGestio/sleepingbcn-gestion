@@ -29,6 +29,7 @@ import { Label } from "@/components/ui/label";
 import { Zap, Sofa, LogOut, Clock, ArrowLeft, Check, X, Play, Menu, UserCircle2, KeyRound, Square, ClipboardList, Plus, LayoutDashboard } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { TimeBadge } from "@/components/time-badge";
 
 export const Route = createFileRoute("/mi-dia")({
   component: MiDiaPage,
@@ -813,13 +814,7 @@ function StateBadge({ estado }: { estado: string | null }) {
 }
 
 function TimeChip({ time, informed }: { time: string | null; informed: boolean | null }) {
-  const t = trimHM(time) ?? "—";
-  return (
-    <span className={cn(
-      "inline-flex items-center rounded-md px-2 py-0.5 text-xs font-semibold",
-      informed ? "bg-emerald-500 text-white" : "bg-gray-300 text-gray-700",
-    )}>{t}</span>
-  );
+  return <TimeBadge time={time} informed={informed} size="md" className="rounded-md" />;
 }
 
 function TaskCard({
