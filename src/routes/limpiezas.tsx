@@ -132,10 +132,12 @@ function LimpiezasAsignadasPage() {
     return m;
   }, [filter.aptsQ.data, aptExtraQ.data]);
 
-  const workerCodigo = (id: number | null): string => {
+  const workerLabel = (id: number | null): string => {
     if (id == null) return "—";
     const p = limpiadoresQ.data?.find((x) => x.id_persona === id);
-    return p?.codigo ?? `#${id}`;
+    if (!p) return `#${id}`;
+    const full = [p.nombre, p.apellidos].filter(Boolean).join(" ").trim();
+    return p.codigo ? `${p.codigo} · ${full || `#${id}`}` : full || `#${id}`;
   };
 
   const rows = useMemo(() => {
