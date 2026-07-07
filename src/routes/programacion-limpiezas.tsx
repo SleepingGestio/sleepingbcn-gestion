@@ -829,7 +829,7 @@ function ReservaBar({
           )}
           style={{ left, width, top: 3, height: 20 }}
         >
-          <TimeBadge {...leftTime} />
+          <TimeBadge {...leftTime} size="xs" />
           {!r.es_reserva_compartida && (
             <span className="shrink-0 rounded-full bg-black/25 px-1.5 py-px text-[10px] leading-4 flex items-center gap-0.5">
               {guestCount}p
@@ -842,7 +842,7 @@ function ReservaBar({
             )}
             <span className="truncate">{guestLabel}</span>
           </span>
-          <TimeBadge {...rightTime} />
+          <TimeBadge {...rightTime} size="xs" />
         </div>
       </HoverCardTrigger>
       <HoverCardContent className="w-72 text-xs" align="center">
