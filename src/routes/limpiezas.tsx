@@ -53,16 +53,18 @@ async function fetchAptsExtra(): Promise<AptExtra[]> {
   return (data ?? []) as AptExtra[];
 }
 
-async function fetchGuestsByNumero(numeros: string[]): Promise<Map<string, number | null>> {
-  const m = new Map<string, number | null>();
+type ResvLite = { guests: number | null; checkIn: string | null };
+
+async function fetchReservasLite(numeros: string[]): Promise<Map<string, ResvLite>> {
+  const m = new Map<string, ResvLite>();
   if (numeros.length === 0) return m;
   const { data, error } = await supabase
     .from("reservas_kb")
-    .select('"Número","Huéspedes"')
+    .select('"Número","Huéspedes","Check in"')
     .in("Número", numeros);
   if (error) throw error;
-  for (const r of (data ?? []) as { Número: string; "Huéspedes": number | null }[]) {
-    m.set(r["Número"], r["Huéspedes"] ?? null);
+  for (const r of (data ?? []) as { Número: string; "Huéspedes": number | null; "Check in": string | null }[]) {
+    m.set(r["Número"], { guests: r["Huéspedes"] ?? null, checkIn: r["Check in"] ?? null });
   }
   return m;
 }
@@ -102,13 +104,16 @@ function LimpiezasAsignadasPage() {
 
   const numeros = useMemo(() => {
     const s = new Set<string>();
-    for (const l of q.data ?? []) if (l.numero_reserva) s.add(l.numero_reserva);
+    for (const l of q.data ?? []) {
+      if (l.numero_reserva) s.add(l.numero_reserva);
+      if (l.proxima_reserva_numero) s.add(l.proxima_reserva_numero);
+    }
     return Array.from(s);
   }, [q.data]);
 
-  const guestsQ = useQuery({
-    queryKey: ["limpiezas_asignadas_guests", numeros.sort().join(",")],
-    queryFn: () => fetchGuestsByNumero(numeros),
+  const reservasQ = useQuery({
+    queryKey: ["limpiezas_asignadas_reservas", numeros.sort().join(",")],
+    queryFn: () => fetchReservasLite(numeros),
     enabled: numeros.length > 0,
   });
 
@@ -240,7 +245,9 @@ function LimpiezasAsignadasPage() {
                 const fullApt = info?.nombre ?? `#${l.id_apt}`;
                 const shortApt = shortAptName(fullApt);
                 const isSalida = l.tipo === "salida";
-                const guests = l.numero_reserva ? guestsQ.data?.get(l.numero_reserva) ?? null : null;
+                const guests = l.numero_reserva ? reservasQ.data?.get(l.numero_reserva)?.guests ?? null : null;
+                const nxt = l.proxima_reserva_numero ? reservasQ.data?.get(l.proxima_reserva_numero) ?? null : null;
+                const isNentran = !nxt || nxt.checkIn !== l.fecha_limpieza;
                 const needsSofa =
                   !!info?.tiene_sofa_cama &&
                   guests != null &&
@@ -284,7 +291,14 @@ function LimpiezasAsignadasPage() {
                       <TimeBadge time={l.hora_out_time} informed={l.hora_out_informed} size="md" />
                     </TableCell>
                     <TableCell>
-                      <TimeBadge time={l.hora_in_time} informed={l.hora_in_informed} size="md" />
+                      <div className="flex items-center gap-1.5">
+                        <TimeBadge time={l.hora_in_time} informed={l.hora_in_informed} size="md" />
+                        {isNentran && (
+                          <span className="rounded px-1.5 py-0.5 text-[10px] font-semibold bg-gray-200 text-gray-700">
+                            NOENTRAN
+                          </span>
+                        )}
+                      </div>
                     </TableCell>
                     <TableCell className="font-mono text-xs">
                       {hours != null ? formatHHMM(hours) : <span className="text-muted-foreground">—</span>}
