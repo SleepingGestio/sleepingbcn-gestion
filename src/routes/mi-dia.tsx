@@ -569,6 +569,16 @@ function WorkerView({
           >
             <Clock className="h-4 w-4" /> {fmtHours(monthHours)} mes
           </button>
+          {fullModeRoute && (
+            <button
+              type="button"
+              onClick={() => navigate({ to: fullModeRoute })}
+              className="hidden sm:inline-flex items-center gap-1.5 rounded-full bg-white/15 hover:bg-white/25 active:bg-white/30 px-3 h-10 text-sm font-medium"
+              aria-label="Modo completo"
+            >
+              <LayoutDashboard className="h-4 w-4" /> Modo completo
+            </button>
+          )}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button
@@ -580,6 +590,11 @@ function WorkerView({
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-52">
+              {fullModeRoute && (
+                <DropdownMenuItem onSelect={() => navigate({ to: fullModeRoute })}>
+                  <LayoutDashboard className="h-4 w-4" /> Modo completo
+                </DropdownMenuItem>
+              )}
               <DropdownMenuItem onSelect={() => setPwOpen(true)}>
                 <KeyRound className="h-4 w-4" /> Canviar contrasenya
               </DropdownMenuItem>
