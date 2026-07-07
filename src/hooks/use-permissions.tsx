@@ -64,6 +64,7 @@ export function usePermissions() {
 
   function canView(menu: MenuKey | string): boolean {
     if (isAdmin) return true;
+    if (menu === "mi_dia") return true;
     return !!map[menu]?.v;
   }
   function canEdit(menu: MenuKey | string): boolean {
@@ -73,7 +74,12 @@ export function usePermissions() {
 
   const viewableMenus: MenuKey[] = isAdmin
     ? ALL_MENUS.map((m) => m.key)
-    : (ALL_MENUS.map((m) => m.key).filter((k) => !!map[k]?.v));
+    : Array.from(
+        new Set<MenuKey>([
+          "mi_dia",
+          ...ALL_MENUS.map((m) => m.key).filter((k) => !!map[k]?.v),
+        ]),
+      );
   const hasAnyAccess = isAdmin || viewableMenus.length > 0;
   const onlyMiDia = !isAdmin && viewableMenus.length === 1 && viewableMenus[0] === "mi_dia";
 
