@@ -297,14 +297,13 @@ function LimpiezasAsignadasPage() {
                       <TimeBadge time={l.hora_out_time} informed={l.hora_out_informed} size="md" />
                     </TableCell>
                     <TableCell>
-                      <div className="flex items-center gap-1.5">
+                      {isNentran ? (
+                        <span className="rounded px-1.5 py-0.5 text-[10px] font-semibold bg-gray-200 text-gray-700">
+                          NOENTRAN
+                        </span>
+                      ) : (
                         <TimeBadge time={l.hora_in_time} informed={l.hora_in_informed} size="md" />
-                        {isNentran && (
-                          <span className="rounded px-1.5 py-0.5 text-[10px] font-semibold bg-gray-200 text-gray-700">
-                            NOENTRAN
-                          </span>
-                        )}
-                      </div>
+                      )}
                     </TableCell>
                     <TableCell className="font-mono text-xs">
                       {hours != null ? formatHHMM(hours) : <span className="text-muted-foreground">—</span>}
