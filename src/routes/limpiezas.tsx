@@ -153,7 +153,7 @@ function LimpiezasAsignadasPage() {
         case "apartamento":
           return aptById.get(l.id_apt)?.nombre ?? "";
         case "limpiador":
-          return workerCodigo(l.worker);
+          return workerLabel(l.worker);
         case "estado":
           return l.estado ?? "";
       }
@@ -280,7 +280,11 @@ function LimpiezasAsignadasPage() {
                         {isSalida ? "Limpieza STD" : "Limpieza EXTRA-CR"}
                       </span>
                     </TableCell>
-                    <TableCell className="font-mono text-xs">{workerCodigo(l.worker)}</TableCell>
+                    <TableCell className="text-xs">
+                      <span className="truncate block" title={workerLabel(l.worker)}>
+                        {workerLabel(l.worker)}
+                      </span>
+                    </TableCell>
                     <TableCell>{guests ?? "—"}</TableCell>
                     <TableCell className="text-center">
                       {needsSofa ? (
