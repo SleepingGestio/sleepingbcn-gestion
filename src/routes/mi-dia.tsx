@@ -202,6 +202,20 @@ function WorkerView({
   onExitPreview?: () => void;
 }) {
   const { signOut } = useAuth();
+  const navigate = useNavigate();
+  const { canView, onlyMiDia } = usePermissions();
+  const fullModeRoute = useMemo<string | null>(() => {
+    if (onlyMiDia) return null;
+    const order: { route: string; menu: string }[] = [
+      { route: "/reservas", menu: "reservas" },
+      { route: "/checkins", menu: "checkins" },
+      { route: "/limpiezas", menu: "limpiezas_asignadas" },
+      { route: "/programacion-limpiezas", menu: "programacion_limpiezas" },
+      { route: "/comunicar-tareas", menu: "comunicar_tareas" },
+      { route: "/registre-horari", menu: "registre_horari" },
+    ];
+    return order.find((m) => canView(m.menu))?.route ?? "/reservas";
+  }, [onlyMiDia, canView]);
   const todayISO = toISO(new Date());
   const tomorrowISO = toISO(new Date(Date.now() + 86400000));
   const monthStart = toISO(startOfMonth(new Date()));
