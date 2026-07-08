@@ -569,7 +569,7 @@ function WorkerView({
       .from("registre_temps_generic")
       .insert(payload);
     if (rErr) { toast.error("Error: " + rErr.message); return; }
-    toast.success("Tasca iniciada");
+    toast.success("Tarea iniciada");
     setStartSheetOpen(false);
     refetchJornada();
   }
@@ -583,7 +583,7 @@ function WorkerView({
       .update({ fi: nowIso, hores_totals: hores })
       .eq("id_registre", activeGen.id_registre);
     if (error) { toast.error("Error: " + error.message); return; }
-    toast.success("Tasca finalitzada");
+    toast.success("Tarea finalizada");
     setEndSheetOpen(true);
     refetchJornada();
   }
@@ -709,10 +709,10 @@ function WorkerView({
                 </DropdownMenuItem>
               )}
               <DropdownMenuItem onSelect={() => setPwOpen(true)}>
-                <KeyRound className="h-4 w-4" /> Canviar contrasenya
+                <KeyRound className="h-4 w-4" /> Cambiar contraseña
               </DropdownMenuItem>
               <DropdownMenuItem onSelect={() => signOut()}>
-                <LogOut className="h-4 w-4" /> Tancar sessió
+                <LogOut className="h-4 w-4" /> Cerrar sesión
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -733,7 +733,7 @@ function WorkerView({
         <div className="p-8 text-center">
           {!activeGen && (
             <>
-              <p className="text-sm text-muted-foreground mb-4">No tens tasques assignades avui.</p>
+              <p className="text-sm text-muted-foreground mb-4">No tienes tareas asignadas hoy.</p>
               <Button
                 size="lg"
                 className="h-14 px-6 bg-[#26215C] hover:bg-[#1e1a48] text-white text-base"
@@ -807,12 +807,11 @@ function WorkerView({
           {!activeGen && (
             <div className="px-3 mt-4">
               <Button
-                variant="outline"
-                className="w-full h-12"
+                className="w-full h-12 bg-[#26215C] hover:bg-[#1e1a48] text-white"
                 disabled={disabled}
                 onClick={() => setStartSheetOpen(true)}
               >
-                <ClipboardList className="h-4 w-4" /> Iniciar tasca genèrica
+                <ClipboardList className="h-4 w-4" /> Iniciar tarea genérica
               </Button>
             </div>
           )}
@@ -899,14 +898,14 @@ function WorkerView({
         </SheetContent>
       </Sheet>
 
-      {/* Resto del equipo hoy */}
+      {/* Equipo trabajando este día */}
       <div className="px-3 mt-6 mb-6">
-        <h2 className="text-sm font-semibold text-slate-800 mb-2">Resto del equipo hoy</h2>
+        <h2 className="text-sm font-semibold text-slate-800 mb-2">Equipo trabajando este día</h2>
         {otherQ.isLoading ? (
           <div className="text-xs text-muted-foreground py-4 text-center">Cargando…</div>
         ) : (otherQ.data ?? []).length === 0 ? (
           <div className="rounded-lg border border-dashed border-slate-300 px-4 py-6 text-center">
-            <p className="text-sm text-muted-foreground">No hay otras limpiezas asignadas para hoy</p>
+            <p className="text-sm font-medium text-slate-600">No hay más tareas asignadas este día</p>
           </div>
         ) : (
           <div className="rounded-lg border border-slate-200 bg-white overflow-hidden">
@@ -1448,15 +1447,15 @@ function ChangePasswordDialog({ open, onOpenChange }: { open: boolean; onOpenCha
     e.preventDefault();
     setError(null);
     if (!newPassword || !confirmPassword) {
-      setError("Ambdós camps són obligatoris");
+      setError("Ambos campos son obligatorios");
       return;
     }
     if (newPassword.length < 8) {
-      setError("La contrasenya ha de tenir almenys 8 caràcters");
+      setError("La contraseña debe tener al menos 8 caracteres");
       return;
     }
     if (newPassword !== confirmPassword) {
-      setError("Les contrasenyes no coincideixen");
+      setError("Las contraseñas no coinciden");
       return;
     }
     setBusy(true);
@@ -1464,10 +1463,10 @@ function ChangePasswordDialog({ open, onOpenChange }: { open: boolean; onOpenCha
     setBusy(false);
     if (updateError) {
       setError(updateError.message);
-      toast.error("Error en actualitzar la contrasenya");
+      toast.error("Error al actualizar la contraseña");
       return;
     }
-    toast.success("Contrasenya actualitzada correctament");
+    toast.success("Contraseña actualizada correctamente");
     reset();
     onOpenChange(false);
   }
@@ -1482,12 +1481,12 @@ function ChangePasswordDialog({ open, onOpenChange }: { open: boolean; onOpenCha
     >
       <DialogContent className="sm:max-w-sm">
         <DialogHeader>
-          <DialogTitle>Canviar contrasenya</DialogTitle>
-          <DialogDescription>Mínim 8 caràcters.</DialogDescription>
+          <DialogTitle>Cambiar contraseña</DialogTitle>
+          <DialogDescription>Mínimo 8 caracteres.</DialogDescription>
         </DialogHeader>
         <form onSubmit={onSubmit} className="space-y-3">
           <div className="space-y-2">
-            <Label htmlFor="mi-dia-new-pw">Nova contrasenya</Label>
+            <Label htmlFor="mi-dia-new-pw">Nueva contraseña</Label>
             <PasswordInput
               id="mi-dia-new-pw"
               autoComplete="new-password"
@@ -1497,7 +1496,7 @@ function ChangePasswordDialog({ open, onOpenChange }: { open: boolean; onOpenCha
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="mi-dia-confirm-pw">Confirmar contrasenya</Label>
+            <Label htmlFor="mi-dia-confirm-pw">Confirmar contraseña</Label>
             <PasswordInput
               id="mi-dia-confirm-pw"
               autoComplete="new-password"
@@ -1509,10 +1508,10 @@ function ChangePasswordDialog({ open, onOpenChange }: { open: boolean; onOpenCha
           {error && <p className="text-sm text-destructive">{error}</p>}
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={busy}>
-              Cancel·lar
+              Cancelar
             </Button>
             <Button type="submit" disabled={busy}>
-              {busy ? "Guardant…" : "Guardar"}
+              {busy ? "Guardando…" : "Guardar"}
             </Button>
           </DialogFooter>
         </form>
@@ -1546,12 +1545,12 @@ function ActiveGenericBanner({
           <Play className="h-5 w-5" />
         </div>
         <div className="flex-1 min-w-0">
-          <div className="text-xs uppercase tracking-wide text-emerald-800 font-semibold">Tasca en curs</div>
+          <div className="text-xs uppercase tracking-wide text-emerald-800 font-semibold">Tarea en curso</div>
           <div className="text-base font-semibold text-emerald-950 truncate">
-            {gen.tipos_tarea_generica?.nombre ?? "Tasca genèrica"}
+            {gen.tipos_tarea_generica?.nombre ?? "Tarea genérica"}
           </div>
           <div className="text-xs text-emerald-900 mt-0.5">
-            Inici {startHM} · {fmtHours(elapsed)} transcorregut
+            Inicio {startHM} · {fmtHours(elapsed)} transcurrido
           </div>
         </div>
       </div>
@@ -1561,7 +1560,7 @@ function ActiveGenericBanner({
           disabled={disabled}
           onClick={onFinish}
         >
-          <Square className="h-4 w-4" /> Finalitzar tasca
+          <Square className="h-4 w-4" /> Finalizar tarea
         </Button>
       </div>
     </div>
@@ -1613,23 +1612,23 @@ function StartJornadaPanel({
     <div className="pt-2 pb-6 space-y-4">
       <div>
         <div className="text-lg font-semibold">Iniciar jornada</div>
-        <div className="text-xs text-muted-foreground">Tria el tipus de tasca que comences</div>
+        <div className="text-xs text-muted-foreground">Elige el tipo de tarea que empiezas</div>
       </div>
       <div className="space-y-2">
         <Input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Cercar tipus de tasca..."
+          placeholder="Buscar tipo de tarea..."
           className="text-sm"
         />
         <div className="border border-slate-200 rounded-lg overflow-y-auto max-h-[280px] divide-y divide-slate-100">
           {tipos.length === 0 && (
             <div className="px-3 py-3 text-sm text-muted-foreground">
-              No hi ha tipus actius. Contacta amb el gestor.
+              No hay tipos activos. Contacta con el gestor.
             </div>
           )}
           {tipos.length > 0 && filteredTipos.length === 0 && (
-            <div className="px-3 py-3 text-sm text-muted-foreground">Sense resultats</div>
+            <div className="px-3 py-3 text-sm text-muted-foreground">Sin resultados</div>
           )}
           {filteredTipos.map((t) => {
             const active = selected === t.id_tipus;
@@ -1671,8 +1670,8 @@ function StartJornadaPanel({
                 <Plus className="h-4 w-4" />
                 <span>
                   {creating
-                    ? "Creant…"
-                    : `Crear "${query.trim().toUpperCase()}" com a nova tasca`}
+                    ? "Creando…"
+                    : `Crear "${query.trim().toUpperCase()}" como nueva tarea`}
                 </span>
               </button>
             )}
@@ -1685,7 +1684,7 @@ function StartJornadaPanel({
           onClick={() => setPropOpen((v) => !v)}
           className="w-full flex items-center justify-between px-3 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
         >
-          <span>Associar a una propietat (opcional)</span>
+          <span>Asociar a una propiedad (opcional)</span>
           <span className="text-xs text-muted-foreground">
             {propOpen ? "−" : "+"}
           </span>
@@ -1693,7 +1692,7 @@ function StartJornadaPanel({
         {propOpen && (
           <div className="px-3 pb-3 pt-1 space-y-3 border-t border-slate-100">
             <div className="space-y-1">
-              <Label className="text-xs">Grup</Label>
+              <Label className="text-xs">Grupo</Label>
               <select
                 value={idGrupo ?? ""}
                 onChange={(e) => {
@@ -1706,20 +1705,20 @@ function StartJornadaPanel({
                 }}
                 className="w-full h-9 rounded-md border border-input bg-transparent px-3 text-sm"
               >
-                <option value="">— Cap —</option>
+                <option value="">— Ninguno —</option>
                 {grupos.map((g) => (
                   <option key={g.id_grupo} value={g.id_grupo}>{g.nombre}</option>
                 ))}
               </select>
             </div>
             <div className="space-y-1">
-              <Label className="text-xs">Apartament</Label>
+              <Label className="text-xs">Apartamento</Label>
               <select
                 value={idApt ?? ""}
                 onChange={(e) => setIdApt(e.target.value ? Number(e.target.value) : null)}
                 className="w-full h-9 rounded-md border border-input bg-transparent px-3 text-sm"
               >
-                <option value="">— Cap —</option>
+                <option value="">— Ninguno —</option>
                 {filteredApts.map((a) => (
                   <option key={a.id_apt} value={a.id_apt}>{a.nombre}</option>
                 ))}
@@ -1730,17 +1729,17 @@ function StartJornadaPanel({
       </div>
 
       <div>
-        <Label htmlFor="gen-notes" className="text-xs">Notes (opcional)</Label>
+        <Label htmlFor="gen-notes" className="text-xs">Notas (opcional)</Label>
         <Textarea
           id="gen-notes"
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
-          placeholder="Detalls opcionals…"
+          placeholder="Detalles opcionales…"
           className="text-sm min-h-[70px]"
         />
       </div>
       <div className="flex gap-2 pt-2">
-        <Button variant="outline" className="flex-1 h-12" onClick={onCancel}>Cancel·lar</Button>
+        <Button variant="outline" className="flex-1 h-12" onClick={onCancel}>Cancelar</Button>
         <Button
           className="flex-1 h-12 bg-[#26215C] hover:bg-[#1e1a48] text-white"
           disabled={disabled || selected == null}
@@ -1765,17 +1764,17 @@ function EndTaskPanel({
   return (
     <div className="pt-2 pb-6 space-y-4">
       <div>
-        <div className="text-lg font-semibold">Tasca finalitzada ✓</div>
-        <div className="text-xs text-muted-foreground">Què vols fer ara?</div>
+        <div className="text-lg font-semibold">Tarea finalizada ✓</div>
+        <div className="text-xs text-muted-foreground">¿Qué quieres hacer ahora?</div>
       </div>
       <div className="grid grid-cols-1 gap-2">
         {hasPending ? (
           <Button variant="outline" className="h-12" onClick={onViewTasks}>
-            <Menu className="h-4 w-4" /> Veure tasques pendents
+            <Menu className="h-4 w-4" /> Ver tareas pendientes
           </Button>
         ) : (
           <Button variant="outline" className="h-12" disabled={disabled} onClick={onNewGeneric}>
-            <ClipboardList className="h-4 w-4" /> Iniciar nova tasca genèrica
+            <ClipboardList className="h-4 w-4" /> Iniciar nueva tarea genérica
           </Button>
         )}
         <Button

@@ -24,7 +24,7 @@ export const PasswordInput = React.forwardRef<
         tabIndex={-1}
         onClick={() => setVisible((v) => !v)}
         disabled={disabled}
-        aria-label={visible ? "Amagar contrasenya" : "Mostrar contrasenya"}
+        aria-label={visible ? "Ocultar contraseña" : "Mostrar contraseña"}
         className="absolute right-2 top-1/2 -translate-y-1/2 inline-flex h-7 w-7 items-center justify-center rounded text-muted-foreground hover:text-foreground focus:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:opacity-50 disabled:cursor-not-allowed"
       >
         {visible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}

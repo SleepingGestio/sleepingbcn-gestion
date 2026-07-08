@@ -27,12 +27,12 @@ export function ForcePasswordSetup({ onDone, idPersona }: { onDone: () => void; 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
-    if (!pw || !confirm) { setError("Ambdós camps són obligatoris"); return; }
-    if (pw.length < 8) { setError("La contrasenya ha de tenir almenys 8 caràcters"); return; }
-    if (pw !== confirm) { setError("Les contrasenyes no coincideixen"); return; }
+    if (!pw || !confirm) { setError("Ambos campos son obligatorios"); return; }
+    if (pw.length < 8) { setError("La contraseña debe tener al menos 8 caracteres"); return; }
+    if (pw !== confirm) { setError("Las contraseñas no coinciden"); return; }
     const { data: sess } = await supabase.auth.getSession();
     if (!sess.session?.access_token) {
-      setError("La sessió encara no està disponible. Espera un moment i torna a provar.");
+      setError("La sesión aún no está disponible. Espera un momento y vuelve a intentarlo.");
       return;
     }
     setBusy(true);
@@ -40,7 +40,7 @@ export function ForcePasswordSetup({ onDone, idPersona }: { onDone: () => void; 
     if (err) {
       setBusy(false);
       setError(err.message);
-      toast.error("Error en establir la contrasenya");
+      toast.error("Error al establecer la contraseña");
       return;
     }
     const { error: upErr } = await supabase
@@ -50,10 +50,10 @@ export function ForcePasswordSetup({ onDone, idPersona }: { onDone: () => void; 
     setBusy(false);
     if (upErr) {
       setError(upErr.message);
-      toast.error("Contrasenya desada però error en marcar onboarding");
+      toast.error("Contraseña guardada pero hubo un error al marcar el onboarding");
       return;
     }
-    toast.success("Contrasenya establerta correctament");
+    toast.success("Contraseña establecida correctamente");
     onDone();
   }
 
@@ -67,25 +67,25 @@ export function ForcePasswordSetup({ onDone, idPersona }: { onDone: () => void; 
         onInteractOutside={(e) => e.preventDefault()}
       >
         <DialogHeader>
-          <DialogTitle>Estableix la teva contrasenya</DialogTitle>
+          <DialogTitle>Establece tu contraseña</DialogTitle>
           <DialogDescription>
-            Per poder accedir des de qualsevol dispositiu, necessites una contrasenya personal.
+            Para poder acceder desde cualquier dispositivo, necesitas una contraseña personal.
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={onSubmit} className="space-y-3">
           <div className="space-y-2">
-            <Label htmlFor="fps-pw">Nova contrasenya</Label>
+            <Label htmlFor="fps-pw">Nueva contraseña</Label>
             <PasswordInput id="fps-pw" autoComplete="new-password" value={pw}
               onChange={(e) => setPw(e.target.value)} disabled={busy} />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="fps-confirm">Confirmar contrasenya</Label>
+            <Label htmlFor="fps-confirm">Confirmar contraseña</Label>
             <PasswordInput id="fps-confirm" autoComplete="new-password" value={confirm}
               onChange={(e) => setConfirm(e.target.value)} disabled={busy} />
           </div>
           {error && <p className="text-sm text-destructive">{error}</p>}
           <Button type="submit" className="w-full" disabled={busy}>
-            {busy ? "Desant…" : "Establir contrasenya"}
+            {busy ? "Guardando…" : "Establecer contraseña"}
           </Button>
         </form>
       </DialogContent>
