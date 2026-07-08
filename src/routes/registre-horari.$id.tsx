@@ -795,12 +795,31 @@ function Field({ label, value, valueClassName = "" }: { label: string; value: st
   );
 }
 
+const RANGE_TIPOS = new Set(["vacaciones", "baja", "festivo"]);
+
+function eachDateISO(startISO: string, endISO: string): string[] {
+  const out: string[] = [];
+  const cur = new Date(startISO + "T00:00:00");
+  const end = new Date(endISO + "T00:00:00");
+  while (cur.getTime() <= end.getTime()) {
+    out.push(`${cur.getFullYear()}-${pad(cur.getMonth() + 1)}-${pad(cur.getDate())}`);
+    cur.setDate(cur.getDate() + 1);
+  }
+  return out;
+}
+
+function fmtDateLong(iso: string): string {
+  const [y, m, d] = iso.split("-");
+  return `${d}/${m}/${y}`;
+}
+
 function AjustModal({
   open, onClose, idPersona, defaultDate, onSaved,
 }: {
   open: boolean; onClose: () => void; idPersona: number; defaultDate: string; onSaved: () => void;
 }) {
   const [fecha, setFecha] = useState(defaultDate);
+  const [fechaFin, setFechaFin] = useState(defaultDate);
   const [tipusComputa, setTipusComputa] = useState<"treballades" | "objectiu" | "ajust">("objectiu");
   const [tipo, setTipo] = useState("vacaciones");
   const [horas, setHoras] = useState<string>("");
@@ -808,8 +827,48 @@ function AjustModal({
   const [notas, setNotas] = useState("");
   const [saving, setSaving] = useState(false);
 
+  const isRangeTipo = RANGE_TIPOS.has(tipo);
+
   async function save() {
     const h = Number(horas);
+
+    if (isRangeTipo) {
+      if (!fecha || !fechaFin || !isFinite(h) || h === 0) {
+        toast.error("Data i hores són obligatòries");
+        return;
+      }
+      if (fechaFin < fecha) {
+        toast.error("La fecha de fin debe ser igual o posterior a la fecha de inicio");
+        return;
+      }
+      const dates = eachDateISO(fecha, fechaFin);
+      if (dates.length > 1) {
+        const ok = window.confirm(
+          `Se crearán ${dates.length} ajustes, uno por cada día del ${fmtDateLong(fecha)} al ${fmtDateLong(fechaFin)}.`,
+        );
+        if (!ok) return;
+      }
+      setSaving(true);
+      const rows = dates.map((d) => ({
+        id_persona: idPersona,
+        fecha: d,
+        tipo,
+        horas: h,
+        notas: notas.trim() || null,
+        tipus_computa: tipusComputa,
+      }));
+      const { error } = await supabase.from("personal_ajustos_hores").insert(rows as never);
+      setSaving(false);
+      if (error) {
+        toast.error(`No se pudo crear ningún ajuste (0 de ${dates.length}): ${error.message}`);
+        return;
+      }
+      toast.success(dates.length === 1 ? "Ajust creat" : `${dates.length} ajustes creados`);
+      setHoras(""); setNotas("");
+      onSaved();
+      return;
+    }
+
     if (!fecha || !isFinite(h) || h === 0) {
       toast.error("Data i hores són obligatòries");
       return;
@@ -831,10 +890,23 @@ function AjustModal({
       <DialogContent className="max-w-md">
         <DialogHeader><DialogTitle>Nou ajust manual</DialogTitle></DialogHeader>
         <div className="space-y-3">
+          {isRangeTipo ? (
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-sm font-medium">Fecha inicio</label>
+                <Input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} />
+              </div>
+              <div>
+                <label className="text-sm font-medium">Fecha fin</label>
+                <Input type="date" value={fechaFin} onChange={(e) => setFechaFin(e.target.value)} />
+              </div>
+            </div>
+          ) : (
           <div>
             <label className="text-sm font-medium">Data</label>
             <Input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} />
           </div>
+          )}
           <div>
             <label className="text-sm font-medium">Com computa</label>
             <Select value={tipusComputa} onValueChange={(v) => setTipusComputa(v as "treballades" | "objectiu" | "ajust")}>
