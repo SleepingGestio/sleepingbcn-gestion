@@ -14,6 +14,8 @@ import { cn } from "@/lib/utils";
 import { fmtDate } from "@/lib/format";
 import { fetchLimpiadores } from "@/lib/catalogos";
 import { fullName } from "@/lib/types";
+import { getUnavailableWorkerIds } from "@/lib/worker-availability";
+import { WorkerSelectItem, unavailabilityWarningText } from "@/components/worker-select-item";
 import { Link2, RotateCcw, Trash2, X, Zap } from "lucide-react";
 import { bedLabel } from "@/routes/programacion-limpiezas";
 import { fmtTime } from "@/lib/format";
@@ -383,6 +385,18 @@ export function LimpiezaPopover({ open, loadKey, onOpenChange, apt, fecha, exist
   }, [open, popoverDataQ.data]);
 
   const limpiadoresQ = useQuery({ queryKey: ["limpiadores"], queryFn: fetchLimpiadores });
+
+  const candidateIds = useMemo(() => {
+    const ids = new Set((limpiadoresQ.data ?? []).map((p) => p.id_persona));
+    if (form.worker != null) ids.add(form.worker);
+    return Array.from(ids);
+  }, [limpiadoresQ.data, form.worker]);
+
+  const unavailableQ = useQuery({
+    queryKey: ["worker-unavailability", form.fecha_limpieza, candidateIds],
+    enabled: open && candidateIds.length > 0,
+    queryFn: () => getUnavailableWorkerIds(form.fecha_limpieza, candidateIds),
+  });
 
   // Shared-reservation detection
   const sharedQ = useQuery({
@@ -960,13 +974,20 @@ export function LimpiezaPopover({ open, loadKey, onOpenChange, apt, fecha, exist
                 <SelectContent>
                   <SelectItem value="__none__">Sin asignar</SelectItem>
                   {limpiadoresQ.data?.map((p) => (
-                    <SelectItem key={p.id_persona} value={String(p.id_persona)}>
-                      {fullName(p)}
-                      {p.codigo ? ` (${p.codigo})` : ""}
-                    </SelectItem>
+                    <WorkerSelectItem
+                      key={p.id_persona}
+                      id_persona={p.id_persona}
+                      label={`${fullName(p)}${p.codigo ? ` (${p.codigo})` : ""}`}
+                      reason={unavailableQ.data?.get(p.id_persona)}
+                    />
                   ))}
                 </SelectContent>
               </Select>
+              {form.worker != null && unavailableQ.data?.get(form.worker) && (
+                <div className="mt-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                  ⚠ Este trabajador {unavailabilityWarningText(unavailableQ.data.get(form.worker)!)} este día.
+                </div>
+              )}
             </section>
 
             {/* Observaciones */}
