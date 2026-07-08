@@ -131,6 +131,55 @@ function windowHours(outTime: string | null, inTime: string | null, fecha: strin
   return m === 0 ? `${h}h` : `${h}h${String(m).padStart(2, "0")}`;
 }
 
+function shortAptName(name: string): string {
+  return name
+    .replace(/^\s*(Apartamento|Apart\.?)\s+/i, "")
+    .replace(/\s+(Apartamento|Apart\.?)\s*$/i, "")
+    .trim() || name;
+}
+
+const COMPACT_ESTADO: Record<string, { label: string; bg: string; fg: string }> = {
+  activa: { label: "ASIG", bg: ESTADO_LIMPIEZA_STYLE.activa.bg, fg: ESTADO_LIMPIEZA_STYLE.activa.fg },
+  comunicada: { label: "COMU", bg: ESTADO_LIMPIEZA_STYLE.comunicada.bg, fg: ESTADO_LIMPIEZA_STYLE.comunicada.fg },
+  aceptada: { label: "ACEP", bg: ESTADO_LIMPIEZA_STYLE.aceptada.bg, fg: ESTADO_LIMPIEZA_STYLE.aceptada.fg },
+  en_curso: { label: "CURSO", bg: ESTADO_LIMPIEZA_STYLE.en_curso.bg, fg: ESTADO_LIMPIEZA_STYLE.en_curso.fg },
+  finalizada: { label: "FINAL", bg: ESTADO_LIMPIEZA_STYLE.finalizada.bg, fg: ESTADO_LIMPIEZA_STYLE.finalizada.fg },
+  rechazada: { label: "RECH", bg: ESTADO_LIMPIEZA_STYLE.rechazada.bg, fg: ESTADO_LIMPIEZA_STYLE.rechazada.fg },
+  anulada: { label: "ANUL", bg: ESTADO_LIMPIEZA_STYLE.anulada.bg, fg: ESTADO_LIMPIEZA_STYLE.anulada.fg },
+};
+
+function CompactEstadoBadge({ estado }: { estado: string | null }) {
+  const cfg = COMPACT_ESTADO[estado ?? ""] ?? COMPACT_ESTADO.activa;
+  return (
+    <span
+      className="inline-block rounded px-1 py-px text-[9px] font-semibold uppercase tracking-wide"
+      style={{ backgroundColor: cfg.bg, color: cfg.fg }}
+    >
+      {cfg.label}
+    </span>
+  );
+}
+
+function CompactTipoBadge({ tipo }: { tipo: string | null }) {
+  const isSalida = tipo === "salida";
+  return (
+    <span
+      className={cn(
+        "inline-block rounded px-1.5 py-px text-[9px] font-semibold uppercase",
+        isSalida ? "bg-slate-200 text-slate-800" : "bg-fuchsia-200 text-fuchsia-900",
+      )}
+    >
+      {isSalida ? "STD" : "X-CR"}
+    </span>
+  );
+}
+
+function workerCode(id: number | null, workers: { id_persona: number; codigo: string | null }[]): string {
+  if (id == null) return "—";
+  const w = workers.find((x) => x.id_persona === id);
+  return w?.codigo ?? `#${id}`;
+}
+
 const VISIBLE_STATES = ["comunicada", "aceptada", "en_curso", "finalizada"] as const;
 
 function MiDiaPage() {
