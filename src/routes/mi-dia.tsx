@@ -379,14 +379,14 @@ function WorkerView({
     return total;
   }, [monthTasksQ.data]);
 
-  // ---- Resto del equipo hoy ----
+  // ---- Equipo trabajando este día ----
   const otherQ = useQuery({
-    queryKey: ["mi-dia-other-today", personalId, todayISO],
+    queryKey: ["mi-dia-other-today", personalId, activeDay],
     queryFn: async (): Promise<Limpieza[]> => {
       const { data, error } = await supabase
         .from("limpiezas")
         .select("*")
-        .eq("fecha_limpieza", todayISO)
+        .eq("fecha_limpieza", activeDay)
         .not("worker", "is", null)
         .neq("worker", personalId)
         .order("orden_trabajo", { ascending: true, nullsFirst: false });
