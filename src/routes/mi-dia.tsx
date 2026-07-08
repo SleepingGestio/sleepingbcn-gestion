@@ -379,6 +379,67 @@ function WorkerView({
     return total;
   }, [monthTasksQ.data]);
 
+  // ---- Resto del equipo hoy ----
+  const otherQ = useQuery({
+    queryKey: ["mi-dia-other-today", personalId, todayISO],
+    queryFn: async (): Promise<Limpieza[]> => {
+      const { data, error } = await supabase
+        .from("limpiezas")
+        .select("*")
+        .eq("fecha_limpieza", todayISO)
+        .not("worker", "is", null)
+        .neq("worker", personalId)
+        .order("orden_trabajo", { ascending: true, nullsFirst: false });
+      if (error) throw error;
+      return (data ?? []) as Limpieza[];
+    },
+  });
+
+  const otherWorkerIds = useMemo(() => {
+    const ids = new Set<number>();
+    for (const t of otherQ.data ?? []) {
+      if (t.worker != null) ids.add(t.worker);
+    }
+    return Array.from(ids);
+  }, [otherQ.data]);
+
+  const otherWorkersQ = useQuery({
+    queryKey: ["mi-dia-other-workers", otherWorkerIds.sort().join(",")],
+    enabled: otherWorkerIds.length > 0,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("personal")
+        .select("id_persona, codigo")
+        .in("id_persona", otherWorkerIds);
+      if (error) throw error;
+      return (data ?? []) as { id_persona: number; codigo: string | null }[];
+    },
+  });
+
+  const otherNumeros = useMemo(() => {
+    const s = new Set<string>();
+    for (const t of otherQ.data ?? []) {
+      if (t.numero_reserva) s.add(t.numero_reserva);
+      if (t.proxima_reserva_numero) s.add(t.proxima_reserva_numero);
+    }
+    return Array.from(s);
+  }, [otherQ.data]);
+
+  const otherResvQ = useQuery({
+    queryKey: ["mi-dia-other-resv", otherNumeros.sort().join(",")],
+    enabled: otherNumeros.length > 0,
+    queryFn: async (): Promise<Map<string, ResvLite>> => {
+      const { data, error } = await supabase
+        .from("reservas_kb")
+        .select(`"Número","Check in","Check-out","Huéspedes"`)
+        .in("Número", otherNumeros);
+      if (error) throw error;
+      const m = new Map<string, ResvLite>();
+      for (const r of (data ?? []) as ResvLite[]) m.set(r["Número"], r);
+      return m;
+    },
+  });
+
   // ---- Jornada (fichaje) + generic task ----
   type Fichaje = { id_fichaje: number; hora_entrada: string | null; hora_salida: string | null };
   type ActiveGen = {
