@@ -408,9 +408,7 @@ function WorkerView({
     enabled: otherWorkerIds.length > 0,
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("personal")
-        .select("id_persona, codigo")
-        .in("id_persona", otherWorkerIds);
+        .rpc("personal_codigos_by_ids", { p_ids: otherWorkerIds });
       if (error) throw error;
       return (data ?? []) as { id_persona: number; codigo: string | null }[];
     },

@@ -43,10 +43,7 @@ export function ForcePasswordSetup({ onDone, idPersona }: { onDone: () => void; 
       toast.error("Error al establecer la contraseña");
       return;
     }
-    const { error: upErr } = await supabase
-      .from("personal")
-      .update({ onboarding_completat: true })
-      .eq("id_persona", idPersona);
+    const { error: upErr } = await supabase.rpc("complete_own_onboarding");
     setBusy(false);
     if (upErr) {
       setError(upErr.message);
