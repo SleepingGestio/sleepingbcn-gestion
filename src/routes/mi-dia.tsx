@@ -898,6 +898,71 @@ function WorkerView({
           />
         </SheetContent>
       </Sheet>
+
+      {/* Resto del equipo hoy */}
+      <div className="px-3 mt-6 mb-6">
+        <h2 className="text-sm font-semibold text-slate-800 mb-2">Resto del equipo hoy</h2>
+        {otherQ.isLoading ? (
+          <div className="text-xs text-muted-foreground py-4 text-center">Cargando…</div>
+        ) : (otherQ.data ?? []).length === 0 ? (
+          <div className="rounded-lg border border-dashed border-slate-300 px-4 py-6 text-center">
+            <p className="text-sm text-muted-foreground">No hay otras limpiezas asignadas para hoy</p>
+          </div>
+        ) : (
+          <div className="rounded-lg border border-slate-200 bg-white overflow-hidden">
+            <Table>
+              <TableHeader>
+                <TableRow className="bg-slate-50">
+                  <TableHead className="text-[10px] py-2 px-2 h-auto">Apto.</TableHead>
+                  <TableHead className="text-[10px] py-2 px-2 h-auto">Tipo</TableHead>
+                  <TableHead className="text-[10px] py-2 px-2 h-auto">N.</TableHead>
+                  <TableHead className="text-[10px] py-2 px-2 h-auto">Sale</TableHead>
+                  <TableHead className="text-[10px] py-2 px-2 h-auto">Entra</TableHead>
+                  <TableHead className="text-[10px] py-2 px-2 h-auto">Estado</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {(otherQ.data ?? []).map((t) => {
+                  const apt = aptsAllQ.data?.find((a) => a.id_apt === t.id_apt);
+                  const aptName = apt?.nombre ?? `Apt #${t.id_apt}`;
+                  const next = t.proxima_reserva_numero ? otherResvQ.data?.get(t.proxima_reserva_numero) ?? null : null;
+                  const isNentran = !next || next["Check in"] !== t.fecha_limpieza;
+                  return (
+                    <TableRow key={t.id_limpieza} className="text-xs">
+                      <TableCell className="py-2 px-2">
+                        <span className="truncate block max-w-[80px]" title={aptName}>
+                          {shortAptName(aptName)}
+                        </span>
+                      </TableCell>
+                      <TableCell className="py-2 px-2">
+                        <CompactTipoBadge tipo={t.tipo} />
+                      </TableCell>
+                      <TableCell className="py-2 px-2 text-[10px] font-medium">
+                        {workerCode(t.worker, otherWorkersQ.data ?? [])}
+                      </TableCell>
+                      <TableCell className="py-2 px-2">
+                        <TimeBadge time={t.hora_out_time} informed={t.hora_out_informed} size="xs" />
+                      </TableCell>
+                      <TableCell className="py-2 px-2">
+                        {isNentran ? (
+                          <span className="rounded px-1 py-px text-[9px] font-semibold bg-gray-200 text-gray-700">
+                            NE
+                          </span>
+                        ) : (
+                          <TimeBadge time={t.hora_in_time} informed={t.hora_in_informed} size="xs" />
+                        )}
+                      </TableCell>
+                      <TableCell className="py-2 px-2">
+                        <CompactEstadoBadge estado={t.estado} />
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
