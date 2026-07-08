@@ -30,6 +30,8 @@ import { Zap, Sofa, LogOut, Clock, ArrowLeft, Check, X, Play, Menu, UserCircle2,
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { TimeBadge } from "@/components/time-badge";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { ESTADO_LIMPIEZA_STYLE } from "@/components/estado-limpieza-badge";
 
 export const Route = createFileRoute("/mi-dia")({
   component: MiDiaPage,
@@ -127,6 +129,55 @@ function windowHours(outTime: string | null, inTime: string | null, fecha: strin
   if (mins < 0) return null;
   const h = Math.floor(mins / 60); const m = mins % 60;
   return m === 0 ? `${h}h` : `${h}h${String(m).padStart(2, "0")}`;
+}
+
+function shortAptName(name: string): string {
+  return name
+    .replace(/^\s*(Apartamento|Apart\.?)\s+/i, "")
+    .replace(/\s+(Apartamento|Apart\.?)\s*$/i, "")
+    .trim() || name;
+}
+
+const COMPACT_ESTADO: Record<string, { label: string; bg: string; fg: string }> = {
+  activa: { label: "ASIG", bg: ESTADO_LIMPIEZA_STYLE.activa.bg, fg: ESTADO_LIMPIEZA_STYLE.activa.fg },
+  comunicada: { label: "COMU", bg: ESTADO_LIMPIEZA_STYLE.comunicada.bg, fg: ESTADO_LIMPIEZA_STYLE.comunicada.fg },
+  aceptada: { label: "ACEP", bg: ESTADO_LIMPIEZA_STYLE.aceptada.bg, fg: ESTADO_LIMPIEZA_STYLE.aceptada.fg },
+  en_curso: { label: "CURSO", bg: ESTADO_LIMPIEZA_STYLE.en_curso.bg, fg: ESTADO_LIMPIEZA_STYLE.en_curso.fg },
+  finalizada: { label: "FINAL", bg: ESTADO_LIMPIEZA_STYLE.finalizada.bg, fg: ESTADO_LIMPIEZA_STYLE.finalizada.fg },
+  rechazada: { label: "RECH", bg: ESTADO_LIMPIEZA_STYLE.rechazada.bg, fg: ESTADO_LIMPIEZA_STYLE.rechazada.fg },
+  anulada: { label: "ANUL", bg: ESTADO_LIMPIEZA_STYLE.anulada.bg, fg: ESTADO_LIMPIEZA_STYLE.anulada.fg },
+};
+
+function CompactEstadoBadge({ estado }: { estado: string | null }) {
+  const cfg = COMPACT_ESTADO[estado ?? ""] ?? COMPACT_ESTADO.activa;
+  return (
+    <span
+      className="inline-block rounded px-1 py-px text-[9px] font-semibold uppercase tracking-wide"
+      style={{ backgroundColor: cfg.bg, color: cfg.fg }}
+    >
+      {cfg.label}
+    </span>
+  );
+}
+
+function CompactTipoBadge({ tipo }: { tipo: string | null }) {
+  const isSalida = tipo === "salida";
+  return (
+    <span
+      className={cn(
+        "inline-block rounded px-1.5 py-px text-[9px] font-semibold uppercase",
+        isSalida ? "bg-slate-200 text-slate-800" : "bg-fuchsia-200 text-fuchsia-900",
+      )}
+    >
+      {isSalida ? "STD" : "X-CR"}
+    </span>
+  );
+}
+
+function workerCode(id: number | null, workers: { id_persona: number; codigo: string | null }[]): string {
+  if (id == null) return "—";
+  const w = workers.find((x) => x.id_persona === id);
+  return w?.codigo ?? `#${id}`;
 }
 
 const VISIBLE_STATES = ["comunicada", "aceptada", "en_curso", "finalizada"] as const;
@@ -327,6 +378,67 @@ function WorkerView({
     for (const t of monthTasksQ.data ?? []) total += diffHoursMinutes(t.iniciada_en, t.finalizada_en);
     return total;
   }, [monthTasksQ.data]);
+
+  // ---- Resto del equipo hoy ----
+  const otherQ = useQuery({
+    queryKey: ["mi-dia-other-today", personalId, todayISO],
+    queryFn: async (): Promise<Limpieza[]> => {
+      const { data, error } = await supabase
+        .from("limpiezas")
+        .select("*")
+        .eq("fecha_limpieza", todayISO)
+        .not("worker", "is", null)
+        .neq("worker", personalId)
+        .order("orden_trabajo", { ascending: true, nullsFirst: false });
+      if (error) throw error;
+      return (data ?? []) as Limpieza[];
+    },
+  });
+
+  const otherWorkerIds = useMemo(() => {
+    const ids = new Set<number>();
+    for (const t of otherQ.data ?? []) {
+      if (t.worker != null) ids.add(t.worker);
+    }
+    return Array.from(ids);
+  }, [otherQ.data]);
+
+  const otherWorkersQ = useQuery({
+    queryKey: ["mi-dia-other-workers", otherWorkerIds.sort().join(",")],
+    enabled: otherWorkerIds.length > 0,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("personal")
+        .select("id_persona, codigo")
+        .in("id_persona", otherWorkerIds);
+      if (error) throw error;
+      return (data ?? []) as { id_persona: number; codigo: string | null }[];
+    },
+  });
+
+  const otherNumeros = useMemo(() => {
+    const s = new Set<string>();
+    for (const t of otherQ.data ?? []) {
+      if (t.numero_reserva) s.add(t.numero_reserva);
+      if (t.proxima_reserva_numero) s.add(t.proxima_reserva_numero);
+    }
+    return Array.from(s);
+  }, [otherQ.data]);
+
+  const otherResvQ = useQuery({
+    queryKey: ["mi-dia-other-resv", otherNumeros.sort().join(",")],
+    enabled: otherNumeros.length > 0,
+    queryFn: async (): Promise<Map<string, ResvLite>> => {
+      const { data, error } = await supabase
+        .from("reservas_kb")
+        .select(`"Número","Check in","Check-out","Huéspedes"`)
+        .in("Número", otherNumeros);
+      if (error) throw error;
+      const m = new Map<string, ResvLite>();
+      for (const r of (data ?? []) as ResvLite[]) m.set(r["Número"], r);
+      return m;
+    },
+  });
 
   // ---- Jornada (fichaje) + generic task ----
   type Fichaje = { id_fichaje: number; hora_entrada: string | null; hora_salida: string | null };
@@ -786,6 +898,71 @@ function WorkerView({
           />
         </SheetContent>
       </Sheet>
+
+      {/* Resto del equipo hoy */}
+      <div className="px-3 mt-6 mb-6">
+        <h2 className="text-sm font-semibold text-slate-800 mb-2">Resto del equipo hoy</h2>
+        {otherQ.isLoading ? (
+          <div className="text-xs text-muted-foreground py-4 text-center">Cargando…</div>
+        ) : (otherQ.data ?? []).length === 0 ? (
+          <div className="rounded-lg border border-dashed border-slate-300 px-4 py-6 text-center">
+            <p className="text-sm text-muted-foreground">No hay otras limpiezas asignadas para hoy</p>
+          </div>
+        ) : (
+          <div className="rounded-lg border border-slate-200 bg-white overflow-hidden">
+            <Table>
+              <TableHeader>
+                <TableRow className="bg-slate-50">
+                  <TableHead className="text-[10px] py-2 px-2 h-auto">Apto.</TableHead>
+                  <TableHead className="text-[10px] py-2 px-2 h-auto">Tipo</TableHead>
+                  <TableHead className="text-[10px] py-2 px-2 h-auto">N.</TableHead>
+                  <TableHead className="text-[10px] py-2 px-2 h-auto">Sale</TableHead>
+                  <TableHead className="text-[10px] py-2 px-2 h-auto">Entra</TableHead>
+                  <TableHead className="text-[10px] py-2 px-2 h-auto">Estado</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {(otherQ.data ?? []).map((t) => {
+                  const apt = aptsAllQ.data?.find((a) => a.id_apt === t.id_apt);
+                  const aptName = apt?.nombre ?? `Apt #${t.id_apt}`;
+                  const next = t.proxima_reserva_numero ? otherResvQ.data?.get(t.proxima_reserva_numero) ?? null : null;
+                  const isNentran = !next || next["Check in"] !== t.fecha_limpieza;
+                  return (
+                    <TableRow key={t.id_limpieza} className="text-xs">
+                      <TableCell className="py-2 px-2">
+                        <span className="truncate block max-w-[80px]" title={aptName}>
+                          {shortAptName(aptName)}
+                        </span>
+                      </TableCell>
+                      <TableCell className="py-2 px-2">
+                        <CompactTipoBadge tipo={t.tipo} />
+                      </TableCell>
+                      <TableCell className="py-2 px-2 text-[10px] font-medium">
+                        {workerCode(t.worker, otherWorkersQ.data ?? [])}
+                      </TableCell>
+                      <TableCell className="py-2 px-2">
+                        <TimeBadge time={t.hora_out_time} informed={t.hora_out_informed} size="xs" />
+                      </TableCell>
+                      <TableCell className="py-2 px-2">
+                        {isNentran ? (
+                          <span className="rounded px-1 py-px text-[9px] font-semibold bg-gray-200 text-gray-700">
+                            NE
+                          </span>
+                        ) : (
+                          <TimeBadge time={t.hora_in_time} informed={t.hora_in_informed} size="xs" />
+                        )}
+                      </TableCell>
+                      <TableCell className="py-2 px-2">
+                        <CompactEstadoBadge estado={t.estado} />
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
