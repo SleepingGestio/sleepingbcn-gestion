@@ -502,7 +502,13 @@ function PersonaDialog({
       setPeriodHoras("");
       setPeriodDiesVac("23");
     }
-  }, [currentPeriod?.id_periodo]);
+  }, [
+    currentPeriod?.id_periodo,
+    currentPeriod?.fecha_inicio,
+    currentPeriod?.motivo,
+    currentPeriod?.horas_objetivo_mes,
+    currentPeriod?.dies_vacances_any,
+  ]);
 
   // Create mode: primera alta
   const todayStr = new Date().toISOString().slice(0, 10);
@@ -559,6 +565,7 @@ function PersonaDialog({
           .update(periodPayload)
           .eq("id_periodo", currentPeriod.id_periodo);
         if (pErr) { toast.error("Error període: " + pErr.message); return null; }
+        periodosQ.refetch();
       }
     } else {
       const today = todayStr;
