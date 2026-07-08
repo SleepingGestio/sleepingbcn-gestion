@@ -30,6 +30,8 @@ import { Zap, Sofa, LogOut, Clock, ArrowLeft, Check, X, Play, Menu, UserCircle2,
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { TimeBadge } from "@/components/time-badge";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { ESTADO_LIMPIEZA_STYLE } from "@/components/estado-limpieza-badge";
 
 export const Route = createFileRoute("/mi-dia")({
   component: MiDiaPage,
