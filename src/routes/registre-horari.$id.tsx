@@ -30,6 +30,7 @@ import { formatHHMM as fmtHours } from "@/lib/utils";
 import { toast } from "sonner";
 import { LimpiezaPopover, type Limpieza } from "@/components/limpieza-popover";
 import { useCurrentPersonal } from "@/hooks/use-current-personal";
+import { HHMMInput } from "@/components/hhmm-input";
 
 export const Route = createFileRoute("/registre-horari/$id")({
   component: DetallPage,
@@ -803,6 +804,7 @@ function AjustModal({
   const [tipusComputa, setTipusComputa] = useState<"treballades" | "objectiu" | "ajust">("objectiu");
   const [tipo, setTipo] = useState("vacaciones");
   const [horas, setHoras] = useState<string>("");
+  const [horasValid, setHorasValid] = useState(true);
   const [notas, setNotas] = useState("");
   const [saving, setSaving] = useState(false);
 
@@ -858,7 +860,7 @@ function AjustModal({
           </div>
           <div>
             <label className="text-sm font-medium">Hores</label>
-            <Input type="number" step="0.25" value={horas} onChange={(e) => setHoras(e.target.value)} placeholder="ex. 8" />
+            <HHMMInput value={horas} onChange={setHoras} onValidityChange={setHorasValid} placeholder="ex. 8:00" />
           </div>
           <div>
             <label className="text-sm font-medium">Notes</label>
@@ -867,7 +869,7 @@ function AjustModal({
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>Cancel·lar</Button>
-          <Button onClick={save} disabled={saving}>Guardar</Button>
+          <Button onClick={save} disabled={saving || !horasValid}>Guardar</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

@@ -25,6 +25,7 @@ import { usePermissions } from "@/hooks/use-permissions";
 import { useCurrentPersonal } from "@/hooks/use-current-personal";
 import { formatHHMM } from "@/lib/utils";
 import { roleColor } from "@/lib/role-colors";
+import { HHMMInput } from "@/components/hhmm-input";
 
 type Persona = {
   id_persona: number;
@@ -483,6 +484,7 @@ function PersonaDialog({
   const [periodInicio, setPeriodInicio] = useState<string>("");
   const [periodMotivo, setPeriodMotivo] = useState<string>("");
   const [periodHoras, setPeriodHoras] = useState<string>("");
+  const [periodHorasValid, setPeriodHorasValid] = useState(true);
   const [periodDiesVac, setPeriodDiesVac] = useState<string>("23");
   useEffect(() => {
     if (currentPeriod) {
@@ -506,6 +508,7 @@ function PersonaDialog({
   const todayStr = new Date().toISOString().slice(0, 10);
   const [firstFechaInicio, setFirstFechaInicio] = useState<string>(todayStr);
   const [firstHoras, setFirstHoras] = useState<string>("");
+  const [firstHorasValid, setFirstHorasValid] = useState(true);
   const [firstDiesVac, setFirstDiesVac] = useState<string>("23");
   const [firstMotivo, setFirstMotivo] = useState<string>("Alta inicial");
 
@@ -692,7 +695,7 @@ function PersonaDialog({
                   </Field>
                   {controlHorario && tipoContrato !== "autonomo" && (
                     <Field label="Hores objectiu/mes">
-                      <Input type="number" min={0} step="0.5" value={firstHoras} onChange={(e) => setFirstHoras(e.target.value)} />
+                      <HHMMInput value={firstHoras} onChange={setFirstHoras} onValidityChange={setFirstHorasValid} />
                     </Field>
                   )}
                   {tipoContrato !== "autonomo" && (
@@ -749,12 +752,10 @@ function PersonaDialog({
                         <Input value={periodMotivo} onChange={(e) => setPeriodMotivo(e.target.value)} />
                       </Field>
                       <Field label="Hores objectiu/mes">
-                        <Input
-                          type="number"
-                          min={0}
-                          step="0.5"
+                        <HHMMInput
                           value={periodHoras}
-                          onChange={(e) => setPeriodHoras(e.target.value)}
+                          onChange={setPeriodHoras}
+                          onValidityChange={setPeriodHorasValid}
                         />
                       </Field>
                       <Field label="Dies vacances / any">
@@ -864,15 +865,15 @@ function PersonaDialog({
           <Button variant="outline" onClick={onClose} disabled={saving}>Cancelar</Button>
           {!persona ? (
             <>
-              <Button variant="secondary" onClick={saveOnly} disabled={saving}>
+              <Button variant="secondary" onClick={saveOnly} disabled={saving || !firstHorasValid}>
                 {saving ? "Guardando…" : "Crear sin acceso"}
               </Button>
-              <Button onClick={saveAndInvite} disabled={saving}>
+              <Button onClick={saveAndInvite} disabled={saving || !firstHorasValid}>
                 {saving ? "Guardando…" : "Crear y enviar invitación"}
               </Button>
             </>
           ) : (
-            <Button onClick={saveOnly} disabled={saving}>{saving ? "Guardando…" : "Guardar"}</Button>
+            <Button onClick={saveOnly} disabled={saving || !periodHorasValid}>{saving ? "Guardando…" : "Guardar"}</Button>
           )}
         </DialogFooter>
         {isEdit && novaAltaOpen && (
@@ -919,6 +920,7 @@ function NovaAltaDialog({
   const [fecha, setFecha] = useState(today);
   const [motivo, setMotivo] = useState("Alta");
   const [horas, setHoras] = useState("");
+  const [horasValid, setHorasValid] = useState(true);
   const [diesVac, setDiesVac] = useState("23");
   const [saving, setSaving] = useState(false);
 
@@ -966,12 +968,12 @@ function NovaAltaDialog({
         <div className="grid gap-3 text-sm">
           <Field label="Fecha inicio *"><Input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} /></Field>
           <Field label="Motivo"><Input value={motivo} onChange={(e) => setMotivo(e.target.value)} /></Field>
-          <Field label="Hores objectiu/mes"><Input type="number" min={0} step="0.5" value={horas} onChange={(e) => setHoras(e.target.value)} /></Field>
+          <Field label="Hores objectiu/mes"><HHMMInput value={horas} onChange={setHoras} onValidityChange={setHorasValid} /></Field>
           <Field label="Dies vacances / any"><Input type="number" min={0} step="0.5" value={diesVac} onChange={(e) => setDiesVac(e.target.value)} /></Field>
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={onClose} disabled={saving}>Cancel·lar</Button>
-          <Button onClick={save} disabled={saving}>{saving ? "Guardant…" : "Crear"}</Button>
+          <Button onClick={save} disabled={saving || !horasValid}>{saving ? "Guardant…" : "Crear"}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -1056,6 +1058,7 @@ function PeriodEditDialog({
   const [horas, setHoras] = useState(
     period.horas_objetivo_mes != null ? String(period.horas_objetivo_mes) : "",
   );
+  const [horasValid, setHorasValid] = useState(true);
   const [diesVac, setDiesVac] = useState(
     period.dies_vacances_any != null ? String(period.dies_vacances_any) : "23",
   );
@@ -1097,7 +1100,7 @@ function PeriodEditDialog({
             <Input value={motivo} onChange={(e) => setMotivo(e.target.value)} />
           </Field>
           <Field label="Hores objectiu/mes">
-            <Input type="number" min={0} step="0.5" value={horas} onChange={(e) => setHoras(e.target.value)} />
+            <HHMMInput value={horas} onChange={setHoras} onValidityChange={setHorasValid} />
           </Field>
           <Field label="Dies vacances / any">
             <Input type="number" min={0} step="0.5" value={diesVac} onChange={(e) => setDiesVac(e.target.value)} />
@@ -1105,7 +1108,7 @@ function PeriodEditDialog({
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={onClose} disabled={saving}>Cancel·lar</Button>
-          <Button onClick={save} disabled={saving}>{saving ? "Guardant…" : "Guardar"}</Button>
+          <Button onClick={save} disabled={saving || !horasValid}>{saving ? "Guardant…" : "Guardar"}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

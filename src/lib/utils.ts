@@ -17,3 +17,22 @@ export function formatHHMM(hours: number): string {
   const mm = totalMin % 60;
   return `${negative ? "-" : ""}${String(hh).padStart(2, "0")}:${String(mm).padStart(2, "0")}`;
 }
+
+/**
+ * Parses an "HH:MM" (or bare "HH") string into a decimal hour value.
+ * Reverse of formatHHMM. Accepts an optional leading "-", 1-2 digit minutes
+ * (e.g. "8:5" == "8:05"), and a bare integer (e.g. "8" == "8:00").
+ * Returns null for empty or invalid input.
+ */
+export function parseHHMM(value: string): number | null {
+  const trimmed = value.trim();
+  if (trimmed === "") return null;
+  const match = trimmed.match(/^(-)?(\d+)(?::(\d{1,2}))?$/);
+  if (!match) return null;
+  const sign = match[1] ? -1 : 1;
+  const hours = Number(match[2]);
+  const minutes = match[3] != null ? Number(match[3]) : 0;
+  if (minutes >= 60) return null;
+  const decimal = sign * (hours + minutes / 60);
+  return Math.round(decimal * 10000) / 10000;
+}
