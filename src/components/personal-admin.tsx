@@ -887,6 +887,7 @@ function PersonaDialog({
           <NovaAltaDialog
             idPersona={persona!.id_persona}
             creadoPor={currentUser?.id_persona ?? null}
+            currentPeriod={currentPeriod}
             onClose={() => setNovaAltaOpen(false)}
             onSaved={() => { setNovaAltaOpen(false); periodosQ.refetch(); }}
           />
@@ -916,10 +917,11 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
 }
 
 function NovaAltaDialog({
-  idPersona, creadoPor, onClose, onSaved,
+  idPersona, creadoPor, currentPeriod, onClose, onSaved,
 }: {
   idPersona: number;
   creadoPor: number | null;
+  currentPeriod: PeriodoActividad | null;
   onClose: () => void;
   onSaved: () => void;
 }) {
@@ -933,6 +935,10 @@ function NovaAltaDialog({
 
   async function save() {
     if (!fecha) { toast.error("La data és obligatòria"); return; }
+    if (currentPeriod) {
+      toast.error("Ya hay un período abierto, ciérralo primero desde Finalizar contrato");
+      return;
+    }
     setSaving(true);
     const diesN = diesVac.trim() !== "" ? Number(diesVac) : 23;
     const horasN = horas.trim() !== "" ? Number(horas) : null;
@@ -946,7 +952,11 @@ function NovaAltaDialog({
         dies_vacances_any: diesN,
         creado_por: creadoPor,
       });
-    if (error) { setSaving(false); toast.error("Error: " + error.message); return; }
+    if (error) {
+      setSaving(false);
+      toast.error(error.code === "23505" ? "Ya hay un período abierto para esta persona." : "Error: " + error.message);
+      return;
+    }
     try {
       await insertVacancesAny({
         id_persona: idPersona,
