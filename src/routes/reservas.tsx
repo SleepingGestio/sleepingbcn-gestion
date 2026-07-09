@@ -13,6 +13,7 @@ import { DateRangePicker, nextWeekRange } from "@/components/date-range-picker";
 import { fmtDate } from "@/lib/format";
 import { SortHeader } from "@/components/sort-header";
 import { GroupFilterChips, useGroupFilter } from "@/components/group-filter";
+import { usePermissions } from "@/hooks/use-permissions";
 
 export const Route = createFileRoute("/reservas")({
   component: ReservasPage,
@@ -28,6 +29,8 @@ function ReservasPage() {
   const [sortKey, setSortKey] = useState<SortKey>("checkin");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const filter = useGroupFilter();
+  const { canEdit } = usePermissions();
+  const canEditReservas = canEdit("reservas");
 
   const q = useQuery({
     queryKey: ["reservas", { estado, from: range.from, to: range.to }],
@@ -155,6 +158,7 @@ function ReservasPage() {
         open={!!selected}
         onOpenChange={(o) => !o && setSelected(null)}
         onSaved={() => q.refetch()}
+        readOnly={!canEditReservas}
       />
     </AppShell>
   );

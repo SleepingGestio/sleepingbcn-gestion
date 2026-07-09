@@ -13,6 +13,7 @@ import { toast } from "sonner";
 import { SortHeader } from "@/components/sort-header";
 import { fmtDate, fmtTime } from "@/lib/format";
 import { GroupFilterChips, useGroupFilter } from "@/components/group-filter";
+import { usePermissions } from "@/hooks/use-permissions";
 
 export const Route = createFileRoute("/checkins")({
   component: CheckinsPage,
@@ -26,6 +27,8 @@ function CheckinsPage() {
   const [sortKey, setSortKey] = useState<SortKey>("checkin");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const filter = useGroupFilter();
+  const { canEdit } = usePermissions();
+  const canEditCheckins = canEdit("checkins");
 
   const q = useQuery({
     queryKey: ["checkins", range.from, range.to],
@@ -34,8 +37,10 @@ function CheckinsPage() {
   });
 
   const toggleM = useMutation({
-    mutationFn: async ({ numero, value }: { numero: string; value: boolean }) =>
-      upsertGestio({ "Número": numero, ReadyCheckIn: value }),
+    mutationFn: async ({ numero, value }: { numero: string; value: boolean }) => {
+      if (!canEditCheckins) return;
+      await upsertGestio({ "Número": numero, ReadyCheckIn: value });
+    },
     onSuccess: () => { q.refetch(); },
     onError: (e) => toast.error("Error: " + (e as Error).message),
   });
@@ -118,7 +123,7 @@ function CheckinsPage() {
                 <TableCell onClick={(e) => e.stopPropagation()}>
                   <Switch
                     checked={!!r.gestio?.ReadyCheckIn}
-                    disabled={toggleM.isPending}
+                    disabled={toggleM.isPending || !canEditCheckins}
                     onCheckedChange={(v) => toggleM.mutate({ numero: r["Número"], value: v })}
                   />
                 </TableCell>
@@ -134,6 +139,7 @@ function CheckinsPage() {
         open={!!selected}
         onOpenChange={(o) => !o && setSelected(null)}
         onSaved={() => q.refetch()}
+        readOnly={!canEditCheckins}
       />
     </AppShell>
   );

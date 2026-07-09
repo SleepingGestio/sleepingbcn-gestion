@@ -13,17 +13,21 @@ import { fullName, type Reserva, type ReservaGestio } from "@/lib/types";
 import { toast } from "sonner";
 import { useQuery } from "@tanstack/react-query";
 import { fmtDate, fmtTime } from "@/lib/format";
+import { cn } from "@/lib/utils";
 
 export function ReservaDetail({
   numero,
   open,
   onOpenChange,
   onSaved,
+  readOnly = false,
 }: {
   numero: string | null;
   open: boolean;
   onOpenChange: (v: boolean) => void;
   onSaved?: () => void;
+  /** View-only: hides/disables every mutation path (fields + save button). */
+  readOnly?: boolean;
 }) {
   const [reserva, setReserva] = useState<Reserva | null>(null);
   const [g, setG] = useState<Partial<ReservaGestio>>({});
@@ -42,7 +46,7 @@ export function ReservaDetail({
   }, [numero, open]);
 
   async function save() {
-    if (!numero) return;
+    if (readOnly || !numero) return;
     setSaving(true);
     try {
       await upsertGestio({ "Número": numero, ...g });
@@ -110,6 +114,7 @@ export function ReservaDetail({
                     type="time"
                     value={g.HCheckInConf ?? ""}
                     onChange={(e) => setG({ ...g, HCheckInConf: e.target.value || null })}
+                    disabled={readOnly}
                   />
                 </div>
                 <div className="space-y-2">
@@ -118,6 +123,7 @@ export function ReservaDetail({
                     type="time"
                     value={g.HCheckOutConf ?? ""}
                     onChange={(e) => setG({ ...g, HCheckOutConf: e.target.value || null })}
+                    disabled={readOnly}
                   />
                 </div>
               </div>
@@ -140,6 +146,7 @@ export function ReservaDetail({
                   <Select
                     value={g.AgCheckIN != null ? String(g.AgCheckIN) : "none"}
                     onValueChange={(v) => setG({ ...g, AgCheckIN: v === "none" ? null : Number(v) })}
+                    disabled={readOnly}
                   >
                     <SelectTrigger><SelectValue placeholder="Sin asignar" /></SelectTrigger>
                     <SelectContent>
@@ -155,6 +162,7 @@ export function ReservaDetail({
                   <Select
                     value={g.PersLImpAsig != null ? String(g.PersLImpAsig) : "none"}
                     onValueChange={(v) => setG({ ...g, PersLImpAsig: v === "none" ? null : Number(v) })}
+                    disabled={readOnly}
                   >
                     <SelectTrigger><SelectValue placeholder="Sin asignar" /></SelectTrigger>
                     <SelectContent>
@@ -173,6 +181,7 @@ export function ReservaDetail({
                     type="datetime-local"
                     value={toLocal(g.ParteeEnv)}
                     onChange={(e) => setG({ ...g, ParteeEnv: e.target.value ? new Date(e.target.value).toISOString() : null })}
+                    disabled={readOnly}
                   />
                 </div>
                 <div className="space-y-2">
@@ -181,6 +190,7 @@ export function ReservaDetail({
                     type="datetime-local"
                     value={toLocal(g.ParteeRecl1)}
                     onChange={(e) => setG({ ...g, ParteeRecl1: e.target.value ? new Date(e.target.value).toISOString() : null })}
+                    disabled={readOnly}
                   />
                 </div>
                 <div className="space-y-2">
@@ -189,6 +199,7 @@ export function ReservaDetail({
                     type="datetime-local"
                     value={toLocal(g.ParteeRecl2)}
                     onChange={(e) => setG({ ...g, ParteeRecl2: e.target.value ? new Date(e.target.value).toISOString() : null })}
+                    disabled={readOnly}
                   />
                 </div>
                 <div className="space-y-2">
@@ -197,6 +208,7 @@ export function ReservaDetail({
                     type="datetime-local"
                     value={toLocal(g.ParteeRecl3)}
                     onChange={(e) => setG({ ...g, ParteeRecl3: e.target.value ? new Date(e.target.value).toISOString() : null })}
+                    disabled={readOnly}
                   />
                 </div>
               </div>
@@ -206,16 +218,24 @@ export function ReservaDetail({
                   rows={4}
                   value={g.NotasGestio ?? ""}
                   onChange={(e) => setG({ ...g, NotasGestio: e.target.value || null })}
+                  disabled={readOnly}
                 />
               </div>
             </section>
 
             {/* ── Footer ── */}
             <div className="flex items-center justify-between border-t pt-4">
-              <Check label="Listo para check-in" checked={!!g.ReadyCheckIn} onChange={(v) => setG({ ...g, ReadyCheckIn: v })} />
+              <Check
+                label="Listo para check-in"
+                checked={!!g.ReadyCheckIn}
+                onChange={(v) => setG({ ...g, ReadyCheckIn: v })}
+                disabled={readOnly}
+              />
               <div className="flex gap-2">
                 <Button variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
-                <Button onClick={save} disabled={saving}>{saving ? "Guardando…" : "Guardar"}</Button>
+                {!readOnly && (
+                  <Button onClick={save} disabled={saving}>{saving ? "Guardando…" : "Guardar"}</Button>
+                )}
               </div>
             </div>
           </div>
@@ -252,10 +272,20 @@ function InfoReadOnly({ label, value }: { label: string; value: React.ReactNode 
   );
 }
 
-function Check({ label, checked, onChange }: { label: string; checked: boolean; onChange: (v: boolean) => void }) {
+function Check({
+  label,
+  checked,
+  onChange,
+  disabled,
+}: {
+  label: string;
+  checked: boolean;
+  onChange: (v: boolean) => void;
+  disabled?: boolean;
+}) {
   return (
-    <label className="flex items-center gap-2 text-sm cursor-pointer">
-      <Checkbox checked={checked} onCheckedChange={(v) => onChange(!!v)} />
+    <label className={cn("flex items-center gap-2 text-sm", disabled ? "cursor-not-allowed" : "cursor-pointer")}>
+      <Checkbox checked={checked} onCheckedChange={(v) => onChange(!!v)} disabled={disabled} />
       <span>{label}</span>
     </label>
   );

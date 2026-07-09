@@ -391,13 +391,15 @@ function ProgramacionLimpiezasPage() {
         <Button variant="secondary" size="sm" onClick={resetToday}>
           Hoy
         </Button>
-        <Button
-          size="sm"
-          onClick={() => setGenOpen(true)}
-          className="bg-purple-700 hover:bg-purple-800 text-white"
-        >
-          <Sparkles className="h-4 w-4" /> Generar limpiezas automáticas
-        </Button>
+        {canEditProgramacion && (
+          <Button
+            size="sm"
+            onClick={() => setGenOpen(true)}
+            className="bg-purple-700 hover:bg-purple-800 text-white"
+          >
+            <Sparkles className="h-4 w-4" /> Generar limpiezas automáticas
+          </Button>
+        )}
         <div className="ml-auto" />
       </div>
 
@@ -679,6 +681,7 @@ function ProgramacionLimpiezasPage() {
         open={genOpen}
         onOpenChange={setGenOpen}
         onDone={() => limpiezasQ.refetch()}
+        canGenerate={canEditProgramacion}
       />
     </AppShell>
   );
@@ -688,10 +691,12 @@ function GenerarDialog({
   open,
   onOpenChange,
   onDone,
+  canGenerate,
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
   onDone: () => void;
+  canGenerate: boolean;
 }) {
   const today = toISO(new Date());
   const [mode, setMode] = useState<"hoy" | "3d" | "5d" | "custom">("hoy");
@@ -707,6 +712,7 @@ function GenerarDialog({
   }
 
   const run = async () => {
+    if (!canGenerate) return;
     setRunning(true);
     try {
       const r = effectiveRange();
@@ -770,7 +776,7 @@ function GenerarDialog({
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={running}>
             Cancelar
           </Button>
-          <Button onClick={run} disabled={running}>
+          <Button onClick={run} disabled={running || !canGenerate}>
             {running ? "Generando…" : "Generar"}
           </Button>
         </DialogFooter>
