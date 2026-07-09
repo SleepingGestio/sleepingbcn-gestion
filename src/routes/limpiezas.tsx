@@ -11,6 +11,7 @@ import { fmtDate } from "@/lib/format";
 import { supabase } from "@/integrations/supabase/client";
 import { GroupFilterChips, useGroupFilter } from "@/components/group-filter";
 import { LimpiezaPopover, type Limpieza } from "@/components/limpieza-popover";
+import { usePermissions } from "@/hooks/use-permissions";
 import { EstadoLimpiezaBadge } from "@/components/estado-limpieza-badge";
 import { TimeBadge } from "@/components/time-badge";
 import { SortHeader } from "@/components/sort-header";
@@ -92,6 +93,7 @@ function LimpiezasAsignadasPage() {
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [editing, setEditing] = useState<LimpiezaExt | null>(null);
   const [editLoadKey, setEditLoadKey] = useState(0);
+  const { canEdit } = usePermissions();
 
   const limpiadoresQ = useQuery({ queryKey: ["limpiadores"], queryFn: fetchLimpiadores });
   const filter = useGroupFilter();
@@ -345,6 +347,7 @@ function LimpiezasAsignadasPage() {
           }}
           fecha={editing.fecha_limpieza}
           existing={editing}
+          readOnly={!canEdit("limpiezas_asignadas")}
           onSaved={() => {
             q.refetch();
             setEditing(null);

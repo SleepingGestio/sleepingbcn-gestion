@@ -15,6 +15,7 @@ import {
 import { Link2, Sofa } from "lucide-react";
 import { fmtDate } from "@/lib/format";
 import { LimpiezaPopover, type Limpieza } from "@/components/limpieza-popover";
+import { usePermissions } from "@/hooks/use-permissions";
 import { getEstadoStyle } from "@/components/estado-limpieza-badge";
 import { TimeBadge } from "@/components/time-badge";
 import { fetchLimpiadores } from "@/lib/catalogos";
@@ -209,6 +210,8 @@ function ProgramacionLimpiezasPage() {
   >(null);
   const popoverLoadSeq = useRef(0);
   const [genOpen, setGenOpen] = useState(false);
+  const { canEdit } = usePermissions();
+  const canEditProgramacion = canEdit("programacion_limpiezas");
 
   const gruposQ = useQuery({ queryKey: ["grupos_apartamentos"], queryFn: fetchGrupos });
   const aptsQ = useQuery({ queryKey: ["apartamentos_activos"], queryFn: fetchApartamentos });
@@ -534,6 +537,9 @@ function ProgramacionLimpiezasPage() {
                                 onClick={() => {
                                   const existing =
                                     limpiezasByAptDay.get(`${a.id_apt}|${iso}`) ?? null;
+                                  // Empty cells open a "create new limpieza" flow — don't let a
+                                  // view-only user reach that, since there's nothing to view yet.
+                                  if (!existing && !canEditProgramacion) return;
                                   const loadKey = ++popoverLoadSeq.current;
                                   const skeleton: LimpiezaRow | null = existing
                                     ? null
@@ -665,6 +671,7 @@ function ProgramacionLimpiezasPage() {
           apt={popover.apt}
           fecha={popover.fecha}
           existing={popover.existing}
+          readOnly={!canEditProgramacion}
           onSaved={() => limpiezasQ.refetch()}
         />
       )}

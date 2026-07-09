@@ -88,6 +88,8 @@ type Props = {
   fecha: string; // YYYY-MM-DD
   existing: Limpieza | null;
   onSaved: () => void;
+  /** View-only: hides/disables every mutation path (fields + footer actions). */
+  readOnly?: boolean;
 };
 
 function emptyLimpieza(apt: AptInfo, fecha: string): Limpieza {
@@ -185,7 +187,7 @@ function fmtWindow(mins: number): string {
   return days > 0 ? `${days}d ${hm}` : hm;
 }
 
-export function LimpiezaPopover({ open, loadKey, onOpenChange, apt, fecha, existing, onSaved }: Props) {
+export function LimpiezaPopover({ open, loadKey, onOpenChange, apt, fecha, existing, onSaved, readOnly = false }: Props) {
   const [form, setForm] = useState<Limpieza>(() => emptyLimpieza(apt, fecha));
   const [loaded, setLoaded] = useState(false);
   const [realCheckoutDate, setRealCheckoutDate] = useState<string | null>(null);
@@ -479,6 +481,7 @@ export function LimpiezaPopover({ open, loadKey, onOpenChange, apt, fecha, exist
   };
 
   const save = async () => {
+    if (readOnly) return;
     setSaving(true);
     try {
       const prevWorker = existing?.worker ?? null;
@@ -604,7 +607,7 @@ export function LimpiezaPopover({ open, loadKey, onOpenChange, apt, fecha, exist
   const isCancelada = showKbAlert && kbChange?.reason === "cancelada";
 
   const applyFresh = async () => {
-    if (!kbChange?.fresh || form.id_limpieza === 0) return;
+    if (readOnly || !kbChange?.fresh || form.id_limpieza === 0) return;
     setSaving(true);
     try {
       const f = kbChange.fresh;
@@ -637,7 +640,7 @@ export function LimpiezaPopover({ open, loadKey, onOpenChange, apt, fecha, exist
   };
 
   const markReviewed = async () => {
-    if (form.id_limpieza === 0) return;
+    if (readOnly || form.id_limpieza === 0) return;
     setSaving(true);
     try {
       const { error } = await supabase
@@ -745,6 +748,7 @@ export function LimpiezaPopover({ open, loadKey, onOpenChange, apt, fecha, exist
                     Si la limpieza ya no es necesaria, usa el botón <span className="font-semibold">Anular limpieza</span>.
                   </div>
                 )}
+                {!readOnly && (
                 <div className="flex flex-wrap gap-2 pt-1">
                   {!isCancelada && (
                     <Button
@@ -766,6 +770,7 @@ export function LimpiezaPopover({ open, loadKey, onOpenChange, apt, fecha, exist
                     ✓ Marcar como revisada
                   </Button>
                 </div>
+                )}
               </div>
             )}
 
@@ -847,13 +852,15 @@ export function LimpiezaPopover({ open, loadKey, onOpenChange, apt, fecha, exist
                   type="date"
                   value={form.fecha_limpieza}
                   onChange={(e) => set("fecha_limpieza", e.target.value)}
+                  disabled={readOnly}
                   className="flex-1"
                 />
                 <button
                   type="button"
                   onClick={togglePriority}
+                  disabled={readOnly}
                   className={cn(
-                    "rounded-md border px-2 py-1.5 text-xs font-medium flex items-center gap-1 transition-colors",
+                    "rounded-md border px-2 py-1.5 text-xs font-medium flex items-center gap-1 transition-colors disabled:cursor-not-allowed disabled:opacity-50",
                     isPriority
                       ? "bg-orange-500 text-white border-orange-500"
                       : "bg-white text-muted-foreground hover:bg-muted",
@@ -882,6 +889,7 @@ export function LimpiezaPopover({ open, loadKey, onOpenChange, apt, fecha, exist
                     placeholder="--:--"
                     value={form.hora_sugerida ?? ""}
                     onChange={(e) => set("hora_sugerida", e.target.value || null)}
+                    disabled={readOnly}
                     className="flex-1"
                   />
                 </div>
@@ -897,11 +905,13 @@ export function LimpiezaPopover({ open, loadKey, onOpenChange, apt, fecha, exist
                   label="Cambiar toallas"
                   checked={!!form.check_toallas}
                   onChange={(v) => set("check_toallas", v)}
+                  disabled={readOnly}
                 />
                 <TaskRow
                   label="Cambiar sábanas"
                   checked={!!form.check_sabanas}
                   onChange={(v) => set("check_sabanas", v)}
+                  disabled={readOnly}
                 />
                 <TaskRow
                   label="Limpieza básica"
@@ -913,6 +923,7 @@ export function LimpiezaPopover({ open, loadKey, onOpenChange, apt, fecha, exist
                       check_limpieza_completa: v ? false : f.check_limpieza_completa,
                     }))
                   }
+                  disabled={readOnly}
                 />
                 <TaskRow
                   label="Limpieza completa"
@@ -926,6 +937,7 @@ export function LimpiezaPopover({ open, loadKey, onOpenChange, apt, fecha, exist
                       check_sabanas: v ? false : f.check_sabanas,
                     }))
                   }
+                  disabled={readOnly}
                 />
               </div>
             </section>
@@ -938,22 +950,26 @@ export function LimpiezaPopover({ open, loadKey, onOpenChange, apt, fecha, exist
                   checked={!!form.sfc_montar}
                   onChange={(v) => setForm((f) => ({ ...f, sfc_montar: v, sfc_montar_manual: v }))}
                   manualSet={form.sfc_montar_manual !== null && form.sfc_montar_manual !== undefined}
+                  disabled={readOnly}
                 />
                 <TaskRow
                   label="Desmontar sofá cama"
                   checked={!!form.sfc_desmontar}
                   onChange={(v) => setForm((f) => ({ ...f, sfc_desmontar: v, sfc_desmontar_manual: v }))}
                   manualSet={form.sfc_desmontar_manual !== null && form.sfc_desmontar_manual !== undefined}
+                  disabled={readOnly}
                 />
                 <TaskRow
                   label="Realizar check-in"
                   checked={!!form.check_checkin}
                   onChange={(v) => set("check_checkin", v)}
+                  disabled={readOnly}
                 />
                 <TaskRow
                   label="Cobrar tasas turísticas"
                   checked={!!form.check_tasas}
                   onChange={(v) => set("check_tasas", v)}
+                  disabled={readOnly}
                 />
               </div>
             </section>
@@ -967,6 +983,7 @@ export function LimpiezaPopover({ open, loadKey, onOpenChange, apt, fecha, exist
               <Select
                 value={form.worker == null ? "__none__" : String(form.worker)}
                 onValueChange={onChangeWorker}
+                disabled={readOnly}
               >
                 <SelectTrigger className="mt-2">
                   <SelectValue placeholder="Sin asignar" />
@@ -1001,6 +1018,7 @@ export function LimpiezaPopover({ open, loadKey, onOpenChange, apt, fecha, exist
                 className="mt-2"
                 value={form.observaciones ?? ""}
                 onChange={(e) => set("observaciones", e.target.value || null)}
+                disabled={readOnly}
               />
             </section>
               </>
@@ -1008,7 +1026,11 @@ export function LimpiezaPopover({ open, loadKey, onOpenChange, apt, fecha, exist
           </div>
 
           <DialogFooter className="px-4 py-3 border-t flex-row sm:justify-between gap-2">
-            {form.estado === "anulada" ? (
+            {readOnly ? (
+              <span className="text-xs text-muted-foreground italic py-1.5">
+                Solo lectura — no tienes permiso para editar
+              </span>
+            ) : form.estado === "anulada" ? (
               <>
                 <Button
                   variant="outline"
@@ -1145,15 +1167,17 @@ function TaskRow({
   checked,
   onChange,
   manualSet,
+  disabled,
 }: {
   label: string;
   checked: boolean;
   onChange: (v: boolean) => void;
   manualSet?: boolean;
+  disabled?: boolean;
 }) {
   return (
-    <label className="flex items-center gap-2 text-sm cursor-pointer">
-      <Checkbox checked={checked} onCheckedChange={(v) => onChange(!!v)} />
+    <label className={cn("flex items-center gap-2 text-sm", disabled ? "cursor-not-allowed" : "cursor-pointer")}>
+      <Checkbox checked={checked} onCheckedChange={(v) => onChange(!!v)} disabled={disabled} />
       <span className="flex-1">{label}</span>
       {manualSet !== undefined && (
         <span

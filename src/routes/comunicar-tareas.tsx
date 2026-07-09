@@ -13,6 +13,7 @@ import { cn } from "@/lib/utils";
 import { fetchLimpiadores } from "@/lib/catalogos";
 import { fullName } from "@/lib/types";
 import { LimpiezaPopover, type Limpieza } from "@/components/limpieza-popover";
+import { usePermissions } from "@/hooks/use-permissions";
 import { toast } from "sonner";
 import { TimeBadge } from "@/components/time-badge";
 
@@ -166,6 +167,7 @@ function ComunicarTareasPage() {
       }
   >(null);
   const popoverSeq = useRef(0);
+  const { canEdit } = usePermissions();
 
   const limpiadoresQ = useQuery({ queryKey: ["limpiadores"], queryFn: fetchLimpiadores });
   const aptsQ = useQuery({ queryKey: ["apartamentos_activos_min"], queryFn: fetchApartamentos });
@@ -361,6 +363,7 @@ function ComunicarTareasPage() {
           apt={popover.apt}
           fecha={popover.fecha}
           existing={popover.existing}
+          readOnly={!canEdit("comunicar_tareas")}
           onSaved={() => {
             tasksQ.refetch();
           }}
