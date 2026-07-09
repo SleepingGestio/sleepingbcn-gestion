@@ -1,7 +1,7 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { useCurrentPersonal } from "@/hooks/use-current-personal";
-import { usePermissions, type MenuKey } from "@/hooks/use-permissions";
+import { usePermissions, ROUTE_TO_MENU } from "@/hooks/use-permissions";
 import { useRouter, useRouterState } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -30,35 +30,33 @@ function RoleRouter({ children }: { children: ReactNode }) {
   const { signOut } = useAuth();
   const router = useRouter();
   const path = useRouterState({ select: (s) => s.location.pathname });
+
+  // Whether the current path is one this user is allowed to view. Computed
+  // synchronously in render (not just inside the redirect effect below) so
+  // it can also gate {children} — otherwise the protected route component
+  // would mount for one render before the effect's redirect kicks in.
+  const routeAllowed = useMemo(() => {
+    if (isAdmin) return true;
+    if (onlyMiDia) return path === "/mi-dia";
+    const isConfig = path === "/configuracion" || path.startsWith("/configuracion/");
+    if (isConfig) {
+      return canView("config_general") || canView("config_personal") || canView("config_apartamentos");
+    }
+    const match = ROUTE_TO_MENU.find((m) => path === m.route || path.startsWith(m.route + "/"));
+    return match ? canView(match.menu) : true;
+  }, [isAdmin, onlyMiDia, path, canView]);
+
   useEffect(() => {
-    if (loading || permLoading) return;
-    if (onlyMiDia && path !== "/mi-dia") {
+    if (loading || permLoading || routeAllowed) return;
+    if (onlyMiDia) {
       router.navigate({ to: "/mi-dia", replace: true });
       return;
     }
-    if (isAdmin || onlyMiDia) return;
-    const ROUTE_TO_MENU: { route: string; menu: MenuKey }[] = [
-      { route: "/reservas", menu: "reservas" },
-      { route: "/checkins", menu: "checkins" },
-      { route: "/limpiezas", menu: "limpiezas_asignadas" },
-      { route: "/programacion-limpiezas", menu: "programacion_limpiezas" },
-      { route: "/comunicar-tareas", menu: "comunicar_tareas" },
-      { route: "/registre-horari", menu: "registre_horari" },
-      { route: "/mi-dia", menu: "mi_dia" },
-    ];
-    const isConfig = path === "/configuracion" || path.startsWith("/configuracion/");
-    const allowed =
-      isConfig
-        ? canView("config_general") || canView("config_personal") || canView("config_apartamentos")
-        : (ROUTE_TO_MENU.find((m) => path === m.route || path.startsWith(m.route + "/"))?.menu
-            ? canView(ROUTE_TO_MENU.find((m) => path === m.route || path.startsWith(m.route + "/"))!.menu)
-            : true);
-    if (!allowed) {
-      const first = ROUTE_TO_MENU.find((m) => canView(m.menu));
-      const target = first?.route ?? "/mi-dia";
-      router.navigate({ to: target, replace: true });
-    }
-  }, [onlyMiDia, loading, path, router, isAdmin, permLoading, canView]);
+    const first = ROUTE_TO_MENU.find((m) => canView(m.menu));
+    const target = first?.route ?? "/mi-dia";
+    router.navigate({ to: target, replace: true });
+  }, [loading, permLoading, routeAllowed, onlyMiDia, router, canView]);
+
   if (loading || permLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center text-sm text-muted-foreground">
@@ -79,7 +77,7 @@ function RoleRouter({ children }: { children: ReactNode }) {
       </div>
     );
   }
-  if (onlyMiDia && path !== "/mi-dia") {
+  if (!routeAllowed) {
     return (
       <div className="min-h-screen flex items-center justify-center text-sm text-muted-foreground">
         Cargando…

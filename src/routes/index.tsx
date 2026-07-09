@@ -1,16 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect } from "react";
-import { usePermissions, type MenuKey } from "@/hooks/use-permissions";
-
-const ROUTE_TO_MENU: { route: string; menu: MenuKey }[] = [
-  { route: "/reservas", menu: "reservas" },
-  { route: "/checkins", menu: "checkins" },
-  { route: "/limpiezas", menu: "limpiezas_asignadas" },
-  { route: "/programacion-limpiezas", menu: "programacion_limpiezas" },
-  { route: "/comunicar-tareas", menu: "comunicar_tareas" },
-  { route: "/registre-horari", menu: "registre_horari" },
-  { route: "/mi-dia", menu: "mi_dia" },
-];
+import { usePermissions, ROUTE_TO_MENU } from "@/hooks/use-permissions";
 
 function IndexRedirect() {
   const navigate = useNavigate();

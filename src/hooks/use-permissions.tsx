@@ -27,6 +27,20 @@ export const ALL_MENUS: { key: MenuKey; label: string }[] = [
   { key: "config_apartamentos", label: "Configuración · Apartamentos" },
 ];
 
+// Single source of truth for which top-level route maps to which menu
+// permission. Used both for sidebar visibility and for route-level
+// access guards (RoleRouter in auth-gate.tsx, IndexRedirect in
+// routes/index.tsx) — keep this the only place this mapping is defined.
+export const ROUTE_TO_MENU: { route: string; menu: MenuKey }[] = [
+  { route: "/reservas", menu: "reservas" },
+  { route: "/checkins", menu: "checkins" },
+  { route: "/limpiezas", menu: "limpiezas_asignadas" },
+  { route: "/programacion-limpiezas", menu: "programacion_limpiezas" },
+  { route: "/comunicar-tareas", menu: "comunicar_tareas" },
+  { route: "/registre-horari", menu: "registre_horari" },
+  { route: "/mi-dia", menu: "mi_dia" },
+];
+
 type PermMap = Record<string, { v: boolean; e: boolean }>;
 
 export function usePermissions() {
