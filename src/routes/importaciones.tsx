@@ -195,7 +195,6 @@ function ImportacionesPage() {
                 const selected = selectedId === imp.id;
                 const nuevas = imp.nuevas ?? 0;
                 const modificadas = imp.modificadas ?? 0;
-                const eliminadas = imp.eliminadas_candidatas ?? 0;
                 return (
                   <button
                     key={imp.id}
@@ -217,14 +216,6 @@ function ImportacionesPage() {
                     </span>
                     <span className="shrink-0 rounded px-1.5 py-0.5 text-xs font-semibold bg-amber-100 text-amber-800">
                       {modificadas} modificadas
-                    </span>
-                    <span
-                      className={cn(
-                        "shrink-0 rounded px-1.5 py-0.5 text-xs font-semibold",
-                        eliminadas > 0 ? "bg-red-100 text-red-800" : "bg-gray-100 text-gray-500",
-                      )}
-                    >
-                      {eliminadas} eliminadas
                     </span>
                     <ChevronRight
                       className={cn(
