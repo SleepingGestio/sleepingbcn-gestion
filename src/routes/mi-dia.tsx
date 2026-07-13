@@ -91,6 +91,14 @@ function trimHM(s: string | null | undefined): string | null {
   const m = String(s).match(/(\d{1,2}):(\d{2})/);
   return m ? `${m[1].padStart(2, "0")}:${m[2]}` : null;
 }
+// For timestamptz values (e.g. registre_temps_generic.inici) — trimHM's raw
+// digit extraction would show UTC instead of local time, unlike time-only columns.
+function localHM(s: string | null | undefined): string | null {
+  if (!s) return null;
+  const d = new Date(s);
+  if (isNaN(d.getTime())) return null;
+  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+}
 function startOfMonth(d: Date) { return new Date(d.getFullYear(), d.getMonth(), 1); }
 function endOfMonth(d: Date) { return new Date(d.getFullYear(), d.getMonth() + 1, 0); }
 
@@ -1542,7 +1550,7 @@ function ActiveGenericBanner({
   }, []);
   const startMs = new Date(gen.inici).getTime();
   const elapsed = Math.max(0, (now - startMs) / 3_600_000);
-  const startHM = trimHM(gen.inici) ?? "—";
+  const startHM = localHM(gen.inici) ?? "—";
 
   return (
     <div className="mx-3 mt-3 rounded-xl bg-emerald-50 border border-emerald-300 p-3 shadow-sm">
