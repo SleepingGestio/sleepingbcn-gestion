@@ -45,10 +45,10 @@ type PersonaRol = { id_persona: number; id_rol: number; fecha_hasta: string | nu
 
 const CONTRATOS: { value: string; label: string }[] = [
   { value: "fijo", label: "Fijo" },
-  { value: "discontinuo", label: "Discontinu" },
-  { value: "autonomo", label: "Autònom" },
+  { value: "discontinuo", label: "Discontinuo" },
+  { value: "autonomo", label: "Autónomo" },
   { value: "temporal", label: "Temporal" },
-  { value: "practicas", label: "Pràctiques" },
+  { value: "practicas", label: "Prácticas" },
   { value: "otro", label: "Otro" },
 ];
 
@@ -202,7 +202,7 @@ export function PersonalAdmin() {
       .update({ activo: false, mail: null, onboarding_completat: false })
       .eq("id_persona", deactivateFor.id_persona);
     if (error) { toast.error("Error: " + error.message); return; }
-    toast.success("Persona desactivada i accés revocat");
+    toast.success("Persona desactivada y acceso revocado");
     setDeactivateFor(null);
     personalQ.refetch();
   }
@@ -221,7 +221,7 @@ export function PersonalAdmin() {
     if (!p.mail) return;
     try {
       await sendInvite(p.mail);
-      toast.success("Magic link enviat a " + p.mail);
+      toast.success("Magic link enviado a " + p.mail);
     } catch (e) {
       toast.error("Error: " + (e as Error).message);
     }
@@ -246,7 +246,7 @@ export function PersonalAdmin() {
               <TableHead>Teléfono</TableHead>
               <TableHead>Rol(s)</TableHead>
               <TableHead>Email</TableHead>
-              <TableHead>{isAdmin ? "Compte" : "Acceso app"}</TableHead>
+              <TableHead>{isAdmin ? "Cuenta" : "Acceso app"}</TableHead>
               <TableHead>Activo</TableHead>
               <TableHead className="text-right">Acciones</TableHead>
             </TableRow>
@@ -377,11 +377,11 @@ export function PersonalAdmin() {
               Desactivar {[deactivateFor?.nombre, deactivateFor?.apellidos].filter(Boolean).join(" ") || "persona"}?
             </AlertDialogTitle>
             <AlertDialogDescription>
-              Perdrà l'accés a l'aplicació immediatament.
+              Perderá el acceso a la aplicación inmediatamente.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel·lar</AlertDialogCancel>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
             <AlertDialogAction onClick={confirmDeactivate}>Confirmar</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -480,7 +480,7 @@ function PersonaDialog({
     return map;
   }, [periodos, vacAnyQ.data, vacAjustosQ.data]);
 
-  // Període actiu (editable)
+  // Período activo (editable)
   const [periodInicio, setPeriodInicio] = useState<string>("");
   const [periodMotivo, setPeriodMotivo] = useState<string>("");
   const [periodHoras, setPeriodHoras] = useState<string>("");
@@ -564,13 +564,13 @@ function PersonaDialog({
           .from("personal_periodos_actividad")
           .update(periodPayload)
           .eq("id_periodo", currentPeriod.id_periodo);
-        if (pErr) { toast.error("Error període: " + pErr.message); return null; }
+        if (pErr) { toast.error("Error periodo: " + pErr.message); return null; }
         periodosQ.refetch();
       }
     } else {
       const today = todayStr;
       if (!firstFechaInicio) {
-        toast.error("La data d'alta és obligatòria");
+        toast.error("La fecha de alta es obligatoria");
         return null;
       }
       const { data, error } = await supabase
@@ -610,7 +610,7 @@ function PersonaDialog({
             creado_por: currentUser?.id_persona ?? null,
           });
         } catch (e) {
-          toast.error("Error vacances: " + (e as Error).message);
+          toast.error("Error vacaciones: " + (e as Error).message);
         }
       }
     }
@@ -670,7 +670,7 @@ function PersonaDialog({
         <div className="space-y-5 text-sm">
           {/* Dades personals */}
           <section className="space-y-2">
-            <SectionTitle>Dades personals</SectionTitle>
+            <SectionTitle>Datos personales</SectionTitle>
             <div className="grid grid-cols-2 gap-3">
               <Field label="Nombre *"><Input value={nombre} onChange={(e) => setNombre(e.target.value)} /></Field>
               <Field label="Apellidos"><Input value={apellidos} onChange={(e) => setApellidos(e.target.value)} /></Field>
@@ -684,7 +684,7 @@ function PersonaDialog({
 
           {/* Contracte */}
           <section className="space-y-2">
-            <SectionTitle>{isEdit ? "Contracte" : "Contracte i primera alta"}</SectionTitle>
+            <SectionTitle>{isEdit ? "Contrato" : "Contrato y primera alta"}</SectionTitle>
             <div className="grid grid-cols-2 gap-3">
               <Field label="Tipo de contrato">
                 <Select value={tipoContrato ?? "none"} onValueChange={(v) => setTipoContrato(v === "none" ? null : v)}>
@@ -697,16 +697,16 @@ function PersonaDialog({
               </Field>
               {!isEdit && (
                 <>
-                  <Field label="Data d'alta *">
+                  <Field label="Fecha de alta *">
                     <Input type="date" value={firstFechaInicio} onChange={(e) => setFirstFechaInicio(e.target.value)} />
                   </Field>
                   {controlHorario && tipoContrato !== "autonomo" && (
-                    <Field label="Hores objectiu/mes">
+                    <Field label="Horas objetivo/mes">
                       <HHMMInput value={firstHoras} onChange={setFirstHoras} onValidityChange={setFirstHorasValid} />
                     </Field>
                   )}
                   {tipoContrato !== "autonomo" && (
-                    <Field label="Dies vacances / any">
+                    <Field label="Días de vacaciones / año">
                       <Input type="number" min={0} step="0.5" value={firstDiesVac} onChange={(e) => setFirstDiesVac(e.target.value)} />
                     </Field>
                   )}
@@ -723,20 +723,20 @@ function PersonaDialog({
             <>
               <hr className="border-border" />
               <section className="space-y-2">
-                <SectionTitle>Període actiu</SectionTitle>
+                <SectionTitle>Periodo activo</SectionTitle>
                 {periodosQ.isLoading ? (
-                  <p className="text-xs text-muted-foreground">Carregant…</p>
+                  <p className="text-xs text-muted-foreground">Cargando…</p>
                 ) : currentPeriod ? (
                   <div className="rounded-md border border-emerald-300 bg-emerald-50 p-3 space-y-3">
                     <div className="flex items-start justify-between gap-2">
-                      <p className="text-xs font-medium text-emerald-800">Període obert</p>
+                      <p className="text-xs font-medium text-emerald-800">Periodo abierto</p>
                       <div className="flex gap-2">
                         <Button
                           type="button"
                           size="sm"
                           variant="outline"
                           onClick={() => setEditPeriod(currentPeriod)}
-                          aria-label="Editar període actiu"
+                          aria-label="Editar periodo activo"
                         >
                           <Pencil className="h-3.5 w-3.5" />
                         </Button>
@@ -747,7 +747,7 @@ function PersonaDialog({
                           className="border-rose-300 text-rose-700 hover:bg-rose-50"
                           onClick={() => setBaixaOpen(true)}
                         >
-                          Finalitzar contracte
+                          Finalizar contrato
                         </Button>
                       </div>
                     </div>
@@ -758,14 +758,14 @@ function PersonaDialog({
                       <Field label="Motivo alta">
                         <Input value={periodMotivo} onChange={(e) => setPeriodMotivo(e.target.value)} />
                       </Field>
-                      <Field label="Hores objectiu/mes">
+                      <Field label="Horas objetivo/mes">
                         <HHMMInput
                           value={periodHoras}
                           onChange={setPeriodHoras}
                           onValidityChange={setPeriodHorasValid}
                         />
                       </Field>
-                      <Field label="Dies vacances / any">
+                      <Field label="Días de vacaciones / año">
                         <Input
                           type="number"
                           min={0}
@@ -777,7 +777,7 @@ function PersonaDialog({
                     </div>
                   </div>
                 ) : (
-                  <p className="text-xs text-muted-foreground">Sense període obert. Crea una nova alta a sota.</p>
+                  <p className="text-xs text-muted-foreground">Sin periodo abierto. Crea una nueva alta debajo.</p>
                 )}
               </section>
 
@@ -785,13 +785,13 @@ function PersonaDialog({
               <hr className="border-border" />
               <section className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <SectionTitle>Historial de períodes</SectionTitle>
+                  <SectionTitle>Historial de periodos</SectionTitle>
                   <Button type="button" size="sm" variant="outline" onClick={() => setNovaAltaOpen(true)}>
-                    <Plus className="h-3.5 w-3.5 mr-1" /> Nova alta
+                    <Plus className="h-3.5 w-3.5 mr-1" /> Nueva alta
                   </Button>
                 </div>
                 {periodos.length === 0 ? (
-                  <p className="text-xs text-muted-foreground">Cap període registrat</p>
+                  <p className="text-xs text-muted-foreground">Ningún periodo registrado</p>
                 ) : (
                   <div className="rounded-md border divide-y">
                     {periodos.map((p) => {
@@ -803,7 +803,7 @@ function PersonaDialog({
                         >
                           <div>
                             <span className="font-medium">{p.fecha_inicio}</span>
-                            <span className="text-muted-foreground"> → {p.fecha_fin ?? "obert"}</span>
+                            <span className="text-muted-foreground"> → {p.fecha_fin ?? "abierto"}</span>
                           </div>
                           <div className="text-muted-foreground truncate">{p.motivo ?? "—"}</div>
                           <div className="text-right tabular-nums">
@@ -825,7 +825,7 @@ function PersonaDialog({
                             variant="ghost"
                             className="h-7 w-7 p-0"
                             onClick={() => setEditPeriod(p)}
-                            aria-label="Editar període"
+                            aria-label="Editar periodo"
                           >
                             <Pencil className="h-3.5 w-3.5" />
                           </Button>
@@ -842,11 +842,11 @@ function PersonaDialog({
 
           {/* Control horari */}
           <section className="space-y-2">
-            <SectionTitle>Control horari</SectionTitle>
+            <SectionTitle>Control horario</SectionTitle>
             <div className="flex items-start justify-between gap-3 rounded-md border p-3">
               <div>
-                <Label className="text-sm">Inclou al registre horari</Label>
-                <p className="text-xs text-muted-foreground">Apareix al dashboard de Registre horari</p>
+                <Label className="text-sm">Incluye en el registro horario</Label>
+                <p className="text-xs text-muted-foreground">Aparece en el dashboard de Registro horario</p>
               </div>
               <Switch checked={controlHorario} onCheckedChange={setControlHorario} />
             </div>
@@ -856,7 +856,7 @@ function PersonaDialog({
 
           {/* Rols */}
           <section className="space-y-2">
-            <SectionTitle>Rols</SectionTitle>
+            <SectionTitle>Roles</SectionTitle>
             <div className="grid grid-cols-2 gap-2">
               {roles.map((r) => (
                 <label key={r.id_rol} className="flex items-center gap-2 cursor-pointer text-sm">
@@ -934,7 +934,7 @@ function NovaAltaDialog({
   const [saving, setSaving] = useState(false);
 
   async function save() {
-    if (!fecha) { toast.error("La data és obligatòria"); return; }
+    if (!fecha) { toast.error("La fecha es obligatoria"); return; }
     if (currentPeriod) {
       toast.error("Ya hay un período abierto, ciérralo primero desde Finalizar contrato");
       return;
@@ -967,11 +967,11 @@ function NovaAltaDialog({
       });
     } catch (e) {
       setSaving(false);
-      toast.error("Error vacances: " + (e as Error).message);
+      toast.error("Error vacaciones: " + (e as Error).message);
       return;
     }
     setSaving(false);
-    toast.success("Nova alta creada");
+    toast.success("Nueva alta creada");
     onSaved();
   }
 
@@ -979,18 +979,18 @@ function NovaAltaDialog({
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-w-sm">
         <DialogHeader>
-          <DialogTitle>Nova alta</DialogTitle>
-          <DialogDescription className="sr-only">Afegir un nou període d'activitat</DialogDescription>
+          <DialogTitle>Nueva alta</DialogTitle>
+          <DialogDescription className="sr-only">Añadir un nuevo periodo de actividad</DialogDescription>
         </DialogHeader>
         <div className="grid gap-3 text-sm">
           <Field label="Fecha inicio *"><Input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} /></Field>
           <Field label="Motivo"><Input value={motivo} onChange={(e) => setMotivo(e.target.value)} /></Field>
-          <Field label="Hores objectiu/mes"><HHMMInput value={horas} onChange={setHoras} onValidityChange={setHorasValid} /></Field>
-          <Field label="Dies vacances / any"><Input type="number" min={0} step="0.5" value={diesVac} onChange={(e) => setDiesVac(e.target.value)} /></Field>
+          <Field label="Horas objetivo/mes"><HHMMInput value={horas} onChange={setHoras} onValidityChange={setHorasValid} /></Field>
+          <Field label="Días de vacaciones / año"><Input type="number" min={0} step="0.5" value={diesVac} onChange={(e) => setDiesVac(e.target.value)} /></Field>
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={onClose} disabled={saving}>Cancel·lar</Button>
-          <Button onClick={save} disabled={saving || !horasValid}>{saving ? "Guardant…" : "Crear"}</Button>
+          <Button variant="outline" onClick={onClose} disabled={saving}>Cancelar</Button>
+          <Button onClick={save} disabled={saving || !horasValid}>{saving ? "Guardando…" : "Crear"}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -1011,7 +1011,7 @@ function BaixaDialog({
   const [saving, setSaving] = useState(false);
 
   async function save() {
-    if (!fecha) { toast.error("La data és obligatòria"); return; }
+    if (!fecha) { toast.error("La fecha es obligatoria"); return; }
     setSaving(true);
     const { error } = await (supabase as any)
       .from("personal")
@@ -1023,10 +1023,10 @@ function BaixaDialog({
         .from("personal_periodos_actividad")
         .update({ fecha_fin: fecha, motivo: motivo.trim() || null })
         .eq("id_periodo", currentPeriod.id_periodo);
-      if (pErr) { setSaving(false); toast.error("Error període: " + pErr.message); return; }
+      if (pErr) { setSaving(false); toast.error("Error periodo: " + pErr.message); return; }
     }
     setSaving(false);
-    toast.success("Baixa registrada");
+    toast.success("Baja registrada");
     onSaved();
   }
 
@@ -1034,19 +1034,19 @@ function BaixaDialog({
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-w-sm">
         <DialogHeader>
-          <DialogTitle>Donar de baixa</DialogTitle>
-          <DialogDescription>Es tancarà el període actiu i s'establirà la data de baixa.</DialogDescription>
+          <DialogTitle>Dar de baja</DialogTitle>
+          <DialogDescription>Se cerrará el periodo activo y se establecerá la fecha de baja.</DialogDescription>
         </DialogHeader>
         <div className="grid gap-3 text-sm">
           <Field label="Fecha baja *"><Input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} /></Field>
           <Field label="Motivo baja *">
-            <Input value={motivo} onChange={(e) => setMotivo(e.target.value)} placeholder="Motiu de la baixa" />
-            {motivo.trim() === "" && <p className="text-xs text-rose-600 mt-1">El motiu és obligatori</p>}
+            <Input value={motivo} onChange={(e) => setMotivo(e.target.value)} placeholder="Motivo de la baja" />
+            {motivo.trim() === "" && <p className="text-xs text-rose-600 mt-1">El motivo es obligatorio</p>}
           </Field>
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={onClose} disabled={saving}>Cancel·lar</Button>
-          <Button variant="destructive" onClick={save} disabled={saving || !motivo.trim()}>{saving ? "Guardant…" : "Confirmar baixa"}</Button>
+          <Button variant="outline" onClick={onClose} disabled={saving}>Cancelar</Button>
+          <Button variant="destructive" onClick={save} disabled={saving || !motivo.trim()}>{saving ? "Guardando…" : "Confirmar baja"}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -1082,7 +1082,7 @@ function PeriodEditDialog({
   const [saving, setSaving] = useState(false);
 
   async function save() {
-    if (!fechaInicio) { toast.error("La data d'inici és obligatòria"); return; }
+    if (!fechaInicio) { toast.error("La fecha de inicio es obligatoria"); return; }
     setSaving(true);
     const { error } = await (supabase as any)
       .from("personal_periodos_actividad")
@@ -1096,7 +1096,7 @@ function PeriodEditDialog({
       .eq("id_periodo", period.id_periodo);
     setSaving(false);
     if (error) { toast.error("Error: " + error.message); return; }
-    toast.success("Període actualitzat");
+    toast.success("Periodo actualizado");
     onSaved();
   }
 
@@ -1104,7 +1104,7 @@ function PeriodEditDialog({
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-w-sm">
         <DialogHeader>
-          <DialogTitle>Editar període</DialogTitle>
+          <DialogTitle>Editar periodo</DialogTitle>
         </DialogHeader>
         <div className="grid gap-3 text-sm">
           <Field label="Fecha inicio *">
@@ -1116,16 +1116,16 @@ function PeriodEditDialog({
           <Field label="Motivo">
             <Input value={motivo} onChange={(e) => setMotivo(e.target.value)} />
           </Field>
-          <Field label="Hores objectiu/mes">
+          <Field label="Horas objetivo/mes">
             <HHMMInput value={horas} onChange={setHoras} onValidityChange={setHorasValid} />
           </Field>
-          <Field label="Dies vacances / any">
+          <Field label="Días de vacaciones / año">
             <Input type="number" min={0} step="0.5" value={diesVac} onChange={(e) => setDiesVac(e.target.value)} />
           </Field>
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={onClose} disabled={saving}>Cancel·lar</Button>
-          <Button onClick={save} disabled={saving || !horasValid}>{saving ? "Guardant…" : "Guardar"}</Button>
+          <Button variant="outline" onClick={onClose} disabled={saving}>Cancelar</Button>
+          <Button onClick={save} disabled={saving || !horasValid}>{saving ? "Guardando…" : "Guardar"}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -1145,10 +1145,10 @@ function CompteBadge({
     return <span className="text-xs text-muted-foreground">…</span>;
   }
   const cfg = {
-    sense: { dot: "bg-slate-400", text: "Sense compte", cls: "text-slate-600" },
-    pendent: { dot: "bg-amber-500", text: "Pendent", cls: "text-amber-700" },
-    actiu: { dot: "bg-emerald-500", text: lastSignIn ? `Actiu · ${lastSignIn}` : "Actiu", cls: "text-emerald-700" },
-    revocat: { dot: "bg-rose-500", text: "Revocat", cls: "text-rose-700" },
+    sense: { dot: "bg-slate-400", text: "Sin cuenta", cls: "text-slate-600" },
+    pendent: { dot: "bg-amber-500", text: "Pendiente", cls: "text-amber-700" },
+    actiu: { dot: "bg-emerald-500", text: lastSignIn ? `Activo · ${lastSignIn}` : "Activo", cls: "text-emerald-700" },
+    revocat: { dot: "bg-rose-500", text: "Revocado", cls: "text-rose-700" },
   }[status];
   return (
     <div className={cn("inline-flex items-center gap-2 text-xs font-medium", cfg.cls)}>

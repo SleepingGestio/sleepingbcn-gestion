@@ -489,7 +489,7 @@ export function LimpiezaPopover({ open, loadKey, onOpenChange, apt, fecha, exist
       const prevEstado = existing?.estado ?? null;
       const workerChanged = form.id_limpieza > 0 && (form.worker ?? null) !== prevWorker;
       if (workerChanged && prevEstado && ["en_curso", "finalizada", "anulada"].includes(prevEstado)) {
-        toast.error("No es pot reasignar una tasca en curs, finalitzada o anulada");
+        toast.error("No se puede reasignar una tarea en curso, finalizada o anulada");
         setSaving(false);
         return;
       }

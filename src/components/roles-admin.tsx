@@ -66,9 +66,9 @@ export function RolesAdmin() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <p className="text-sm text-muted-foreground">{rolesQ.data?.length ?? 0} rols</p>
+        <p className="text-sm text-muted-foreground">{rolesQ.data?.length ?? 0} roles</p>
         <Button size="sm" onClick={() => setCreating(true)}>
-          <Plus className="h-4 w-4 mr-1" /> Nou rol
+          <Plus className="h-4 w-4 mr-1" /> Nuevo rol
         </Button>
       </div>
 
@@ -109,7 +109,7 @@ function RoleRow({
     if (!name.trim() || name === rol.nombre) { setEditingName(false); return; }
     const { error } = await supabase.from("roles").update({ nombre: name.trim() }).eq("id_rol", rol.id_rol);
     if (error) { toast.error("Error: " + error.message); return; }
-    toast.success("Nom actualitzat");
+    toast.success("Nombre actualizado");
     setEditingName(false);
     onChanged();
   }
@@ -177,18 +177,18 @@ function RoleRow({
           )}
           {isCheckIn && (
             <span className="rounded-full px-2 py-0.5 text-[11px] font-semibold bg-amber-100 text-amber-800">
-              Desactivat
+              Desactivado
             </span>
           )}
           {isAdminApp && (
-            <span className="text-xs text-muted-foreground italic">Accés total — no modificable</span>
+            <span className="text-xs text-muted-foreground italic">Acceso total — no modificable</span>
           )}
         </div>
       </AccordionTrigger>
       <AccordionContent className="px-4 pb-4">
         {isCheckIn && (
           <p className="text-xs text-muted-foreground mb-2">
-            Aquest rol no s'assigna a nous usuaris.
+            Este rol no se asigna a nuevos usuarios.
           </p>
         )}
         <Card className="overflow-hidden">
@@ -196,8 +196,8 @@ function RoleRow({
             <TableHeader>
               <TableRow>
                 <TableHead>Menú</TableHead>
-                <TableHead className="w-28 text-center">Pot veure</TableHead>
-                <TableHead className="w-28 text-center">Pot editar</TableHead>
+                <TableHead className="w-28 text-center">Puede ver</TableHead>
+                <TableHead className="w-28 text-center">Puede editar</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -252,7 +252,7 @@ function NewRoleDialog({ onClose, onCreated }: { onClose: () => void; onCreated:
   }
 
   async function create() {
-    if (!nombre.trim()) { toast.error("El nom és obligatori"); return; }
+    if (!nombre.trim()) { toast.error("El nombre es obligatorio"); return; }
     setSaving(true);
     const permRows = ALL_MENUS.map(({ key }) => ({
       menu: key,
@@ -271,7 +271,7 @@ function NewRoleDialog({ onClose, onCreated }: { onClose: () => void; onCreated:
     const { error: pErr } = await supabase.from("rol_permisos").insert(rows);
     setSaving(false);
     if (pErr) { toast.error("Error permisos: " + pErr.message); return; }
-    toast.success("Rol creat");
+    toast.success("Rol creado");
     onCreated();
     onClose();
   }
@@ -280,17 +280,17 @@ function NewRoleDialog({ onClose, onCreated }: { onClose: () => void; onCreated:
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Nou rol</DialogTitle>
-          <DialogDescription>Defineix el nom i els permisos del rol.</DialogDescription>
+          <DialogTitle>Nuevo rol</DialogTitle>
+          <DialogDescription>Define el nombre y los permisos del rol.</DialogDescription>
         </DialogHeader>
         <div className="space-y-3">
           <div className="space-y-1">
-            <Label className="text-xs">Nom *</Label>
+            <Label className="text-xs">Nombre *</Label>
             <Input value={nombre} onChange={(e) => setNombre(e.target.value)} />
           </div>
           <div className="flex items-center gap-2">
             <Switch checked={activo} onCheckedChange={setActivo} id="new-role-activo" />
-            <Label htmlFor="new-role-activo" className="text-xs">Actiu</Label>
+            <Label htmlFor="new-role-activo" className="text-xs">Activo</Label>
           </div>
           <div>
             <Label className="text-xs mb-2 block">Permisos</Label>
@@ -299,8 +299,8 @@ function NewRoleDialog({ onClose, onCreated }: { onClose: () => void; onCreated:
                 <TableHeader>
                   <TableRow>
                     <TableHead>Menú</TableHead>
-                    <TableHead className="w-28 text-center">Pot veure</TableHead>
-                    <TableHead className="w-28 text-center">Pot editar</TableHead>
+                    <TableHead className="w-28 text-center">Puede ver</TableHead>
+                    <TableHead className="w-28 text-center">Puede editar</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -324,8 +324,8 @@ function NewRoleDialog({ onClose, onCreated }: { onClose: () => void; onCreated:
           </div>
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={onClose} disabled={saving}>Cancel·lar</Button>
-          <Button onClick={create} disabled={saving}>{saving ? "Creant…" : "Crear"}</Button>
+          <Button variant="outline" onClick={onClose} disabled={saving}>Cancelar</Button>
+          <Button onClick={create} disabled={saving}>{saving ? "Creando…" : "Crear"}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

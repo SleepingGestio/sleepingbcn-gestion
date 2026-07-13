@@ -10,9 +10,9 @@ export const Route = createFileRoute("/registre-horari/")({
   component: RegistreHorariPage,
 });
 
-const MONTH_CA = [
-  "gener", "febrer", "març", "abril", "maig", "juny",
-  "juliol", "agost", "setembre", "octubre", "novembre", "desembre",
+const MONTH_ES = [
+  "enero", "febrero", "marzo", "abril", "mayo", "junio",
+  "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre",
 ];
 
 type Persona = {
@@ -187,10 +187,10 @@ function RegistreHorariPage() {
   const loading = workersQ.isLoading || limpiezasQ.isLoading || genericQ.isLoading || ajustosQ.isLoading || activePeriodsQ.isLoading;
 
   return (
-    <AppShell title="Registre horari">
+    <AppShell title="Registro horario">
     <div className="max-w-6xl mx-auto">
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-semibold">Registre horari</h1>
+        <h1 className="text-2xl font-semibold">Registro horario</h1>
       </div>
 
       <div className="flex items-center justify-center gap-4 mb-8">
@@ -198,18 +198,18 @@ function RegistreHorariPage() {
           <ChevronLeft className="h-4 w-4" />
         </Button>
         <div className="text-lg font-medium capitalize min-w-[180px] text-center">
-          {MONTH_CA[month0]} {year}
+          {MONTH_ES[month0]} {year}
         </div>
-        <Button variant="outline" size="icon" onClick={nextMonth} aria-label="Mes següent">
+        <Button variant="outline" size="icon" onClick={nextMonth} aria-label="Mes siguiente">
           <ChevronRight className="h-4 w-4" />
         </Button>
       </div>
 
       {loading ? (
-        <div className="text-center text-muted-foreground py-16">Carregant…</div>
+        <div className="text-center text-muted-foreground py-16">Cargando…</div>
       ) : workers.length === 0 ? (
         <div className="text-center text-muted-foreground py-16">
-          No hi ha treballadors amb control horari actiu.
+          No hay trabajadores con control horario activo.
         </div>
       ) : (
         <div className="rounded-xl border bg-card p-4 md:p-6">
@@ -268,19 +268,19 @@ function WorkerColumn({
           <div
             className="w-8 rounded-t bg-slate-300"
             style={{ height: `${objPx}px` }}
-            title={`Objectiu: ${fmtHours(objective as number)}`}
+            title={`Objetivo: ${fmtHours(objective as number)}`}
           />
         )}
         <div
           className="w-8 rounded-t"
           style={{ height: `${actualPx}px`, backgroundColor: color }}
-          title={`Reals: ${fmtHours(actual)}`}
+          title={`Reales: ${fmtHours(actual)}`}
         />
       </div>
       <div className="mt-3 text-center">
         <div className="text-[14px] font-semibold truncate max-w-[110px]">{firstName}</div>
         <div className="text-[13px] text-muted-foreground">
-          {fmtHours(actual)} / {hasObjective ? fmtHours(objective as number) : "autònom"}
+          {fmtHours(actual)} / {hasObjective ? fmtHours(objective as number) : "autónomo"}
         </div>
         {hasObjective && (
           <div
@@ -292,7 +292,7 @@ function WorkerColumn({
         )}
         <Button asChild variant="outline" size="sm" className="mt-2">
           <Link to="/registre-horari/$id" params={{ id: String(worker.id_persona) }}>
-            Detall
+            Detalle
           </Link>
         </Button>
       </div>

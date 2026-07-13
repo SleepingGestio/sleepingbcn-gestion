@@ -36,9 +36,9 @@ export const Route = createFileRoute("/registre-horari/$id")({
   component: DetallPage,
 });
 
-const MONTH_CA = [
-  "gener", "febrer", "març", "abril", "maig", "juny",
-  "juliol", "agost", "setembre", "octubre", "novembre", "desembre",
+const MONTH_ES = [
+  "enero", "febrero", "marzo", "abril", "mayo", "junio",
+  "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre",
 ];
 
 function pad(n: number) { return String(n).padStart(2, "0"); }
@@ -145,7 +145,7 @@ function DetallPage() {
           .maybeSingle(),
         supabase.from("limpiezas").select("*").eq("id_limpieza", raw.id_limpieza).maybeSingle(),
       ]);
-      if (!apt) { toast.error("Apartament no trobat"); return; }
+      if (!apt) { toast.error("Apartamento no encontrado"); return; }
       setLimpiezaPopover({
         loadKey: Date.now(),
         apt: {
@@ -311,7 +311,7 @@ function DetallPage() {
         inici: r.inici,
         fi: r.fi,
         propietat: r.id_apt != null ? (aptName.get(r.id_apt) ?? `Apt #${r.id_apt}`) : "—",
-        tipus: r.tipos_tarea_generica?.nombre ?? "Tasca genèrica",
+        tipus: r.tipos_tarea_generica?.nombre ?? "Tarea genérica",
         hores: diffHours(r.inici, r.fi),
         raw: r as unknown as Record<string, unknown>,
       });
@@ -324,7 +324,7 @@ function DetallPage() {
         inici: null,
         fi: null,
         propietat: "—",
-        tipus: a.tipo ?? "Ajust manual",
+        tipus: a.tipo ?? "Ajuste manual",
         hores: Number(a.horas ?? 0),
         tipus_computa: a.tipus_computa ?? "ajust",
         raw: a as unknown as Record<string, unknown>,
@@ -389,7 +389,7 @@ function DetallPage() {
       if (error) throw error;
     },
     onSuccess: () => {
-      toast.success("Ajust eliminat");
+      toast.success("Ajuste eliminado");
       qc.invalidateQueries({ queryKey: ["reg-horari-det-ajustos", idPersona] });
     },
     onError: (e: unknown) => toast.error((e as Error).message),
@@ -401,20 +401,20 @@ function DetallPage() {
 
   const CONTRACT_LABELS: Record<string, string> = {
     fijo: "Fijo",
-    discontinuo: "Discontinu",
-    autonomo: "Autònom",
+    discontinuo: "Discontinuo",
+    autonomo: "Autónomo",
     temporal: "Temporal",
-    practicas: "Pràctiques",
+    practicas: "Prácticas",
     otro: "Otro",
   };
   const contractLabel = CONTRACT_LABELS[personaQ.data?.tipo_contrato ?? ""] ?? "";
 
   return (
-    <AppShell title="Registre horari">
+    <AppShell title="Registro horario">
       <div className="max-w-6xl mx-auto">
         <div className="flex flex-wrap items-center gap-3 mb-4">
           <Link to="/registre-horari" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:underline">
-            <ArrowLeft className="h-4 w-4" /> Tornar
+            <ArrowLeft className="h-4 w-4" /> Volver
           </Link>
           <div className="flex-1" />
           {activeTab !== "vacances" && (
@@ -423,9 +423,9 @@ function DetallPage() {
                 <ChevronLeft className="h-4 w-4" />
               </Button>
               <div className="text-sm font-medium capitalize min-w-[140px] text-center">
-                {MONTH_CA[month0]} {year}
+                {MONTH_ES[month0]} {year}
               </div>
-              <Button variant="outline" size="icon" onClick={nextMonth} aria-label="Mes següent">
+              <Button variant="outline" size="icon" onClick={nextMonth} aria-label="Mes siguiente">
                 <ChevronRight className="h-4 w-4" />
               </Button>
             </div>
@@ -439,9 +439,9 @@ function DetallPage() {
 
         <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "mes" | "tancaments" | "vacances")} className="mb-4">
           <TabsList>
-            <TabsTrigger value="mes">Mes en curs</TabsTrigger>
-            <TabsTrigger value="tancaments">Tancaments</TabsTrigger>
-            <TabsTrigger value="vacances">Vacances</TabsTrigger>
+            <TabsTrigger value="mes">Mes en curso</TabsTrigger>
+            <TabsTrigger value="tancaments">Cierres</TabsTrigger>
+            <TabsTrigger value="vacances">Vacaciones</TabsTrigger>
           </TabsList>
 
         <TabsContent value="mes" className="mt-4">
@@ -460,11 +460,11 @@ function DetallPage() {
           <Select value={typeFilter} onValueChange={setTypeFilter}>
             <SelectTrigger className="w-[200px]"><SelectValue /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">Tots</SelectItem>
+              <SelectItem value="all">Todos</SelectItem>
               <SelectItem value="checkout">Check-out</SelectItem>
               <SelectItem value="extra_cr">Extra-CR</SelectItem>
-              <SelectItem value="generica">Tasca genèrica</SelectItem>
-              <SelectItem value="ajust">Ajust manual</SelectItem>
+              <SelectItem value="generica">Tarea genérica</SelectItem>
+              <SelectItem value="ajust">Ajuste manual</SelectItem>
             </SelectContent>
           </Select>
           <div className="relative flex-1 min-w-[200px] max-w-sm">
@@ -472,13 +472,13 @@ function DetallPage() {
             <Input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Cerca per propietat o tipus…"
+              placeholder="Buscar por propiedad o tipo…"
               className="pl-8"
             />
           </div>
           <div className="flex-1" />
           <Button onClick={() => setAjustOpen(true)} className="gap-1">
-            <Plus className="h-4 w-4" /> Ajust manual
+            <Plus className="h-4 w-4" /> Ajuste manual
           </Button>
         </div>
 
@@ -488,25 +488,25 @@ function DetallPage() {
               <thead className="border-b bg-muted/40">
                 <tr>
                   <th className="text-left p-3">
-                    <SortHeader label="Data" active={sortKey === "fecha"} dir={sortDir} onClick={() => toggleSort("fecha")} />
+                    <SortHeader label="Fecha" active={sortKey === "fecha"} dir={sortDir} onClick={() => toggleSort("fecha")} />
                   </th>
-                  <th className="text-left p-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Inici</th>
-                  <th className="text-left p-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Fi</th>
+                  <th className="text-left p-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Inicio</th>
+                  <th className="text-left p-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Fin</th>
                   <th className="text-left p-3">
-                    <SortHeader label="Propietat" active={sortKey === "propietat"} dir={sortDir} onClick={() => toggleSort("propietat")} />
+                    <SortHeader label="Propiedad" active={sortKey === "propietat"} dir={sortDir} onClick={() => toggleSort("propietat")} />
                   </th>
                   <th className="text-left p-3">
-                    <SortHeader label="Tipus / Activitat" active={sortKey === "tipus"} dir={sortDir} onClick={() => toggleSort("tipus")} />
+                    <SortHeader label="Tipo / Actividad" active={sortKey === "tipus"} dir={sortDir} onClick={() => toggleSort("tipus")} />
                   </th>
                   <th className="text-right p-3">
-                    <SortHeader label="Hores" active={sortKey === "hores"} dir={sortDir} onClick={() => toggleSort("hores")} />
+                    <SortHeader label="Horas" active={sortKey === "hores"} dir={sortDir} onClick={() => toggleSort("hores")} />
                   </th>
                   <th className="w-10" />
                 </tr>
               </thead>
               <tbody>
                 {filteredRows.length === 0 ? (
-                  <tr><td colSpan={7} className="text-center text-muted-foreground py-10">Cap registre en aquest mes.</td></tr>
+                  <tr><td colSpan={7} className="text-center text-muted-foreground py-10">Sin registros este mes.</td></tr>
                 ) : (
                   filteredRows.map((r) => (
                     <Popover key={r.key}>
@@ -528,11 +528,11 @@ function DetallPage() {
                                 className="text-muted-foreground hover:text-red-600"
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  if (confirm("Eliminar aquest ajust?")) {
+                                  if (confirm("¿Eliminar este ajuste?")) {
                                     deleteAjust.mutate((r.raw as { id_ajuste: number }).id_ajuste);
                                   }
                                 }}
-                                aria-label="Eliminar ajust"
+                                aria-label="Eliminar ajuste"
                               >
                                 <Trash2 className="h-4 w-4" />
                               </button>
@@ -623,29 +623,29 @@ function DetailPopoverDialog({ row, onClose }: { row: Row | null; onClose: () =>
     <Dialog open={!!row} onOpenChange={(o) => { if (!o) onClose(); }}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>Detall activitat</DialogTitle>
+          <DialogTitle>Detalle de actividad</DialogTitle>
         </DialogHeader>
         {row && (
           <div className="space-y-2 text-sm">
-            <Field label="Data" value={fmtDate(row.fecha)} />
-            <Field label="Tipus" value={row.tipus} />
-            <Field label="Propietat" value={row.propietat} />
+            <Field label="Fecha" value={fmtDate(row.fecha)} />
+            <Field label="Tipo" value={row.tipus} />
+            <Field label="Propiedad" value={row.propietat} />
             {row.kind !== "ajust" && (
               <>
-                <Field label="Inici" value={fmtHM(row.inici)} />
-                <Field label="Fi" value={fmtHM(row.fi)} />
+                <Field label="Inicio" value={fmtHM(row.inici)} />
+                <Field label="Fin" value={fmtHM(row.fi)} />
               </>
             )}
             <Field
-              label="Hores"
+              label="Horas"
               value={row.kind === "ajust" ? fmtAjustSigned(row.hores).text : fmtHours(row.hores)}
               valueClassName={row.kind === "ajust" ? fmtAjustSigned(row.hores).className : ""}
             />
             {(row.raw as { notes?: string | null; notas?: string | null }).notes && (
-              <Field label="Notes" value={String((row.raw as { notes: string }).notes)} />
+              <Field label="Notas" value={String((row.raw as { notes: string }).notes)} />
             )}
             {(row.raw as { notas?: string | null }).notas && (
-              <Field label="Notes" value={String((row.raw as { notas: string }).notas)} />
+              <Field label="Notas" value={String((row.raw as { notas: string }).notas)} />
             )}
           </div>
         )}
@@ -698,11 +698,11 @@ function HoresProgress({
     saldoText = `${saldo >= 0 ? "+" : "−"}${fmtHours(Math.abs(saldo))}`;
   }
 
-  const reductionLabel = reductionTipo === "vacaciones" ? "vacances" : reductionTipo === "baja" ? "baixa" : reductionTipo ?? "";
+  const reductionLabel = reductionTipo === "vacaciones" ? "vacaciones" : reductionTipo === "baja" ? "baja" : reductionTipo ?? "";
   const infoText = !hasObjective
-    ? (isAutonom ? "Autònom" : "Sense objectiu")
+    ? (isAutonom ? "Autónomo" : "Sin objetivo")
     : reductions > 0
-      ? `Obj. ${fmtHours(baseObjective!)} · −${fmtHours(reductions)} ${reductionLabel} → ${fmtHours(effectiveObjective!)} efectiu`
+      ? `Obj. ${fmtHours(baseObjective!)} · −${fmtHours(reductions)} ${reductionLabel} → ${fmtHours(effectiveObjective!)} efectivo`
       : `Obj. ${fmtHours(baseObjective!)}`;
 
   return (
@@ -780,7 +780,7 @@ function HoresProgress({
         >
           {saldoText}
         </div>
-        <div className="text-[11px] text-muted-foreground mt-1">saldo mes</div>
+        <div className="text-[11px] text-muted-foreground mt-1">saldo del mes</div>
       </div>
     </div>
   );
@@ -834,7 +834,7 @@ function AjustModal({
 
     if (isRangeTipo) {
       if (!fecha || !fechaFin || !isFinite(h) || h === 0) {
-        toast.error("Data i hores són obligatòries");
+        toast.error("La fecha y las horas son obligatorias");
         return;
       }
       if (fechaFin < fecha) {
@@ -863,14 +863,14 @@ function AjustModal({
         toast.error(`No se pudo crear ningún ajuste (0 de ${dates.length}): ${error.message}`);
         return;
       }
-      toast.success(dates.length === 1 ? "Ajust creat" : `${dates.length} ajustes creados`);
+      toast.success(dates.length === 1 ? "Ajuste creado" : `${dates.length} ajustes creados`);
       setHoras(""); setNotas("");
       onSaved();
       return;
     }
 
     if (!fecha || !isFinite(h) || h === 0) {
-      toast.error("Data i hores són obligatòries");
+      toast.error("La fecha y las horas son obligatorias");
       return;
     }
     setSaving(true);
@@ -880,7 +880,7 @@ function AjustModal({
     } as never);
     setSaving(false);
     if (error) { toast.error(error.message); return; }
-    toast.success("Ajust creat");
+    toast.success("Ajuste creado");
     setHoras(""); setNotas("");
     onSaved();
   }
@@ -888,7 +888,7 @@ function AjustModal({
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
       <DialogContent className="max-w-md">
-        <DialogHeader><DialogTitle>Nou ajust manual</DialogTitle></DialogHeader>
+        <DialogHeader><DialogTitle>Nuevo ajuste manual</DialogTitle></DialogHeader>
         <div className="space-y-3">
           {isRangeTipo ? (
             <div className="grid grid-cols-2 gap-3">
@@ -903,44 +903,44 @@ function AjustModal({
             </div>
           ) : (
           <div>
-            <label className="text-sm font-medium">Data</label>
+            <label className="text-sm font-medium">Fecha</label>
             <Input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} />
           </div>
           )}
           <div>
-            <label className="text-sm font-medium">Com computa</label>
+            <label className="text-sm font-medium">Cómo computa</label>
             <Select value={tipusComputa} onValueChange={(v) => setTipusComputa(v as "treballades" | "objectiu" | "ajust")}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="treballades">Hores treballades no registrades</SelectItem>
-                <SelectItem value="objectiu">Reducció d'objectiu (vacances/baixa)</SelectItem>
-                <SelectItem value="ajust">Ajust de saldo</SelectItem>
+                <SelectItem value="treballades">Horas trabajadas no registradas</SelectItem>
+                <SelectItem value="objectiu">Reducción de objetivo (vacaciones/baja)</SelectItem>
+                <SelectItem value="ajust">Ajuste de saldo</SelectItem>
               </SelectContent>
             </Select>
           </div>
           <div>
-            <label className="text-sm font-medium">Tipus</label>
+            <label className="text-sm font-medium">Tipo</label>
             <Select value={tipo} onValueChange={setTipo}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="vacaciones">Vacances</SelectItem>
-                <SelectItem value="baja">Baixa</SelectItem>
-                <SelectItem value="festivo">Festiu</SelectItem>
-                <SelectItem value="otro">Altre</SelectItem>
+                <SelectItem value="vacaciones">Vacaciones</SelectItem>
+                <SelectItem value="baja">Baja</SelectItem>
+                <SelectItem value="festivo">Festivo</SelectItem>
+                <SelectItem value="otro">Otro</SelectItem>
               </SelectContent>
             </Select>
           </div>
           <div>
-            <label className="text-sm font-medium">Hores</label>
-            <HHMMInput value={horas} onChange={setHoras} onValidityChange={setHorasValid} placeholder="ex. 8:00" />
+            <label className="text-sm font-medium">Horas</label>
+            <HHMMInput value={horas} onChange={setHoras} onValidityChange={setHorasValid} placeholder="ej. 8:00" />
           </div>
           <div>
-            <label className="text-sm font-medium">Notes</label>
+            <label className="text-sm font-medium">Notas</label>
             <Textarea value={notas} onChange={(e) => setNotas(e.target.value)} rows={3} />
           </div>
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={onClose}>Cancel·lar</Button>
+          <Button variant="outline" onClick={onClose}>Cancelar</Button>
           <Button onClick={save} disabled={saving || !horasValid}>Guardar</Button>
         </DialogFooter>
       </DialogContent>
@@ -1080,7 +1080,7 @@ function TancamentsTab({
       }
     },
     onSuccess: () => {
-      toast.success("Mes tancat");
+      toast.success("Mes cerrado");
       qc.invalidateQueries({ queryKey: ["resum-mes-current", idPersona] });
       qc.invalidateQueries({ queryKey: ["resum-mes-history", idPersona] });
     },
@@ -1098,7 +1098,7 @@ function TancamentsTab({
   });
 
   const closed = currentMonthQ.data?.cerrado === true;
-  const monthLabel = `${MONTH_CA[month0]} ${year}`;
+  const monthLabel = `${MONTH_ES[month0]} ${year}`;
 
   return (
     <div className="space-y-6">
@@ -1109,28 +1109,28 @@ function TancamentsTab({
             {closed ? <Lock className="h-5 w-5 text-emerald-600" /> : <LockOpen className="h-5 w-5 text-amber-600" />}
             <span className="font-semibold capitalize">{monthLabel}</span>
             {closed ? (
-              <span className="rounded-md bg-emerald-100 text-emerald-800 px-2 py-0.5 text-xs font-medium">Tancat</span>
+              <span className="rounded-md bg-emerald-100 text-emerald-800 px-2 py-0.5 text-xs font-medium">Cerrado</span>
             ) : (
-              <span className="rounded-md bg-amber-100 text-amber-800 px-2 py-0.5 text-xs font-medium">Pendent</span>
+              <span className="rounded-md bg-amber-100 text-amber-800 px-2 py-0.5 text-xs font-medium">Pendiente</span>
             )}
           </div>
           <div className="text-xs text-muted-foreground">
             {closed
-              ? `Tancat el ${fmtDate(currentMonthQ.data?.cerrado_en ?? null)}${cerradorNameQ.data ? ` per ${cerradorNameQ.data}` : ""}`
-              : "Proposta del sistema"}
+              ? `Cerrado el ${fmtDate(currentMonthQ.data?.cerrado_en ?? null)}${cerradorNameQ.data ? ` por ${cerradorNameQ.data}` : ""}`
+              : "Propuesta del sistema"}
           </div>
         </div>
 
         {totals.isAutonom ? (
           <div className="space-y-4">
             <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground">Hores registrades</span>
+              <span className="text-muted-foreground">Horas registradas</span>
               <span className="font-semibold tabular-nums">{fmtHours(totals.worked)}</span>
             </div>
             {!closed && (
               <div className="flex justify-end">
                 <Button onClick={() => closeMonth.mutate("acumular")} disabled={closeMonth.isPending} className="bg-emerald-600 hover:bg-emerald-700">
-                  Confirmar tancament
+                  Confirmar cierre
                 </Button>
               </div>
             )}
@@ -1156,7 +1156,7 @@ function TancamentsTab({
                     <div className="rounded-full px-3 py-1 tabular-nums" style={{ background: st.bg, color: st.fg, fontSize: 16, fontWeight: 700 }}>
                       {fmtSigned(saldoVal)}
                     </div>
-                    <div className="text-[11px] text-muted-foreground mt-1">saldo mes</div>
+                    <div className="text-[11px] text-muted-foreground mt-1">saldo del mes</div>
                   </div>
                 );
               })()}
@@ -1176,12 +1176,12 @@ function TancamentsTab({
 
             <div className="space-y-2">
               <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Saldo acumulat anterior</span>
+                <span className="text-muted-foreground">Saldo acumulado anterior</span>
                 <span className="tabular-nums font-medium">{fmtSigned(closed ? currentMonthQ.data!.saldo_acumulat_anterior : Number(prevAcumulat))}</span>
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-sm text-muted-foreground">
-                  {closed ? "Saldo acumulat final" : "Saldo acumulat si es confirma"}
+                  {closed ? "Saldo acumulado final" : "Saldo acumulado si se confirma"}
                 </span>
                 {(() => {
                   const acc = closed ? currentMonthQ.data!.saldo_acumulat_fi : (totals.saldo + Number(prevAcumulat));
@@ -1198,7 +1198,7 @@ function TancamentsTab({
             {!closed && (
               <div className="mt-5 flex items-center justify-between gap-2">
                 <Button variant="ghost" size="sm" className="gap-1">
-                  <Plus className="h-4 w-4" /> Afegir ajust
+                  <Plus className="h-4 w-4" /> Añadir ajuste
                 </Button>
                 <div className="flex gap-2">
                   <Button
@@ -1206,7 +1206,7 @@ function TancamentsTab({
                     disabled={closeMonth.isPending}
                     className="bg-amber-500 hover:bg-amber-600 text-white"
                   >
-                    Liquidar i saldar
+                    Liquidar y saldar
                   </Button>
                   <Button
                     onClick={() => closeMonth.mutate("acumular")}
@@ -1224,35 +1224,35 @@ function TancamentsTab({
 
       {/* History */}
       <div>
-        <h3 className="text-sm font-semibold mb-2">Historial de saldos acumulats</h3>
+        <h3 className="text-sm font-semibold mb-2">Historial de saldos acumulados</h3>
         <div className="rounded-xl border bg-card overflow-hidden">
           <table className="w-full text-sm">
             <thead className="border-b bg-muted/40">
               <tr>
                 <th className="text-left p-3">Mes</th>
-                <th className="text-right p-3">Obj. efectiu</th>
-                <th className="text-right p-3">Treballades</th>
-                <th className="text-right p-3">Saldo mes</th>
-                <th className="text-right p-3">Acumulat</th>
+                <th className="text-right p-3">Obj. efectivo</th>
+                <th className="text-right p-3">Trabajadas</th>
+                <th className="text-right p-3">Saldo del mes</th>
+                <th className="text-right p-3">Acumulado</th>
                 <th className="w-10" />
               </tr>
             </thead>
             <tbody>
               {(historyQ.data ?? []).length === 0 ? (
-                <tr><td colSpan={6} className="text-center text-muted-foreground py-8">Sense historial.</td></tr>
+                <tr><td colSpan={6} className="text-center text-muted-foreground py-8">Sin historial.</td></tr>
               ) : (
                 (historyQ.data ?? []).map((r) => (
                   <tr key={r.id_resum} className="border-b">
-                    <td className="p-3 capitalize">{MONTH_CA[r.mes - 1]} {r.any_mes}</td>
+                    <td className="p-3 capitalize">{MONTH_ES[r.mes - 1]} {r.any_mes}</td>
                     <td className="p-3 text-right tabular-nums">
                       {fmtHours(Number(r.horas_objetivo_efectiu))}
-                      {r.decisio_tancament === "liquidar" && <span className="ml-1 text-amber-600 text-xs">★ liquidat</span>}
+                      {r.decisio_tancament === "liquidar" && <span className="ml-1 text-amber-600 text-xs">★ liquidado</span>}
                     </td>
                     <td className="p-3 text-right tabular-nums">{fmtHours(Number(r.horas_treballades))}</td>
                     <td className={`p-3 text-right tabular-nums ${saldoColor(Number(r.saldo_mes))}`}>{fmtSigned(Number(r.saldo_mes))}</td>
                     <td className={`p-3 text-right tabular-nums ${saldoColor(Number(r.saldo_acumulat_fi))}`}>{fmtSigned(Number(r.saldo_acumulat_fi))}</td>
                     <td className="p-3">
-                      <button className="text-muted-foreground hover:text-foreground" onClick={() => setDetailRow(r)} aria-label="Veure detall">
+                      <button className="text-muted-foreground hover:text-foreground" onClick={() => setDetailRow(r)} aria-label="Ver detalle">
                         <Eye className="h-4 w-4" />
                       </button>
                     </td>
@@ -1269,20 +1269,20 @@ function TancamentsTab({
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle className="capitalize">
-              {detailRow ? `${MONTH_CA[detailRow.mes - 1]} ${detailRow.any_mes}` : ""}
+              {detailRow ? `${MONTH_ES[detailRow.mes - 1]} ${detailRow.any_mes}` : ""}
             </DialogTitle>
           </DialogHeader>
           {detailRow && (
             <div className="space-y-1 text-sm">
-              <Field label="Objectiu base" value={fmtHours(Number(detailRow.horas_objetivo_base))} />
-              <Field label="Reducció" value={`−${fmtHours(Number(detailRow.horas_reduccion))}`} />
-              <Field label="Objectiu efectiu" value={fmtHours(Number(detailRow.horas_objetivo_efectiu))} />
-              <Field label="Hores treballades" value={fmtHours(Number(detailRow.horas_treballades))} />
-              <Field label="Ajust de saldo" value={fmtSigned(Number(detailRow.horas_ajust_saldo))} />
-              <Field label="Saldo mes" value={fmtSigned(Number(detailRow.saldo_mes))} />
-              <Field label="Acumulat anterior" value={fmtSigned(Number(detailRow.saldo_acumulat_anterior))} />
-              <Field label="Acumulat final" value={fmtSigned(Number(detailRow.saldo_acumulat_fi))} />
-              <Field label="Decisió" value={detailRow.decisio_tancament ?? "—"} />
+              <Field label="Objetivo base" value={fmtHours(Number(detailRow.horas_objetivo_base))} />
+              <Field label="Reducción" value={`−${fmtHours(Number(detailRow.horas_reduccion))}`} />
+              <Field label="Objetivo efectivo" value={fmtHours(Number(detailRow.horas_objetivo_efectiu))} />
+              <Field label="Horas trabajadas" value={fmtHours(Number(detailRow.horas_treballades))} />
+              <Field label="Ajuste de saldo" value={fmtSigned(Number(detailRow.horas_ajust_saldo))} />
+              <Field label="Saldo del mes" value={fmtSigned(Number(detailRow.saldo_mes))} />
+              <Field label="Acumulado anterior" value={fmtSigned(Number(detailRow.saldo_acumulat_anterior))} />
+              <Field label="Acumulado final" value={fmtSigned(Number(detailRow.saldo_acumulat_fi))} />
+              <Field label="Decisión" value={detailRow.decisio_tancament ?? "—"} />
             </div>
           )}
         </DialogContent>
@@ -1316,11 +1316,11 @@ function ClosureProgressBar({
     color = deficit >= 0.15 ? "#E24B4A" : "#EF9F27";
   }
 
-  const reductionLabel = reductionTipo === "vacaciones" ? "vacances" : reductionTipo === "baja" ? "baixa" : reductionTipo ?? "";
+  const reductionLabel = reductionTipo === "vacaciones" ? "vacaciones" : reductionTipo === "baja" ? "baja" : reductionTipo ?? "";
   const infoText = !has
-    ? "Sense objectiu"
+    ? "Sin objetivo"
     : reductions > 0
-      ? `Obj. ${fmtHours(baseObjective)} · −${fmtHours(reductions)} ${reductionLabel} → ${fmtHours(effectiveObjective)} efectiu`
+      ? `Obj. ${fmtHours(baseObjective)} · −${fmtHours(reductions)} ${reductionLabel} → ${fmtHours(effectiveObjective)} efectivo`
       : `Obj. ${fmtHours(baseObjective)}`;
 
   return (
@@ -1372,32 +1372,32 @@ function BreakdownRows({
   baseObjective: number; reductions: number; reductionTipo: string | null;
   effectiveObjective: number; worked: number; adjustments: number; saldoMes: number;
 }) {
-  const redLabel = reductionTipo === "vacaciones" ? "vacances" : reductionTipo === "baja" ? "baixa" : reductionTipo ?? "";
+  const redLabel = reductionTipo === "vacaciones" ? "vacaciones" : reductionTipo === "baja" ? "baja" : reductionTipo ?? "";
   return (
     <div className="space-y-1 text-sm">
       <div className="flex justify-between">
-        <span className="text-muted-foreground">Objectiu base</span>
+        <span className="text-muted-foreground">Objetivo base</span>
         <span className="tabular-nums">{fmtHours(baseObjective)}</span>
       </div>
       {reductions > 0 && (
         <div className="flex justify-between text-amber-700">
-          <span>− {redLabel} (ajust objectiu)</span>
+          <span>− {redLabel} (ajuste objetivo)</span>
           <span className="tabular-nums">−{fmtHours(reductions)}</span>
         </div>
       )}
       <div className="border-t my-1" />
       <div className="flex justify-between font-medium">
-        <span>Objectiu efectiu</span>
+        <span>Objetivo efectivo</span>
         <span className="tabular-nums">{fmtHours(effectiveObjective)}</span>
       </div>
       <div className="border-t my-1" />
       <div className="flex justify-between">
-        <span className="text-muted-foreground">Hores treballades</span>
+        <span className="text-muted-foreground">Horas trabajadas</span>
         <span className="tabular-nums">{fmtHours(worked)}</span>
       </div>
       {adjustments !== 0 && (
         <div className="flex justify-between">
-          <span className="text-muted-foreground">Ajust de saldo</span>
+          <span className="text-muted-foreground">Ajuste de saldo</span>
           <span className="tabular-nums">{fmtSigned(adjustments)}</span>
         </div>
       )}
@@ -1490,7 +1490,7 @@ function VacancesTab({
   if (isAutonom) {
     return (
       <div className="rounded-xl border bg-muted/30 p-6 text-center text-sm text-muted-foreground">
-        Els autònoms no tenen dies de vacances assignats.
+        Los autónomos no tienen días de vacaciones asignados.
       </div>
     );
   }
@@ -1499,13 +1499,13 @@ function VacancesTab({
     <div className="space-y-4">
       <div className="flex justify-end">
         <Button onClick={() => setNewOpen(true)} className="gap-1">
-          <Plus className="h-4 w-4" /> Nou any
+          <Plus className="h-4 w-4" /> Nuevo año
         </Button>
       </div>
 
       {(vacsQ.data ?? []).length === 0 ? (
         <div className="rounded-xl border bg-card p-8 text-center text-sm text-muted-foreground">
-          Encara no hi ha cap any de vacances configurat.
+          Todavía no hay ningún año de vacaciones configurado.
         </div>
       ) : (
         (vacsQ.data ?? []).map((v) => (
@@ -1567,7 +1567,7 @@ function VacYearCard({ row, idPersona }: { row: VacAnyRow; idPersona: number }) 
   const yearStart = new Date(row.data_inici_any).getFullYear();
   const yearEnd = new Date(row.data_fi_any).getFullYear();
 
-  const status = isActive ? "Actiu" : isPast ? "Tancat" : "Futur";
+  const status = isActive ? "Activo" : isPast ? "Cerrado" : "Futuro";
   const statusClass = isActive
     ? "bg-emerald-100 text-emerald-800"
     : isPast ? "bg-gray-100 text-gray-700" : "bg-blue-100 text-blue-800";
@@ -1578,9 +1578,9 @@ function VacYearCard({ row, idPersona }: { row: VacAnyRow; idPersona: number }) 
       <div className="flex items-center justify-between mb-3">
         <div>
           <div className="flex items-center gap-2">
-            <span className="font-semibold">Any contractual {yearStart}–{yearEnd}</span>
+            <span className="font-semibold">Año contractual {yearStart}–{yearEnd}</span>
             <span className={`rounded-md px-2 py-0.5 text-xs font-medium ${consumed > assigned ? advancedClass : statusClass}`}>
-              {consumed > assigned ? "Avançades" : status}
+              {consumed > assigned ? "Adelantadas" : status}
             </span>
           </div>
           <div className="text-xs text-muted-foreground mt-0.5">
@@ -1599,7 +1599,7 @@ function VacYearCard({ row, idPersona }: { row: VacAnyRow; idPersona: number }) 
       <div className="flex items-end gap-4">
         <div className="flex-1 min-w-0">
           <div className="text-xs text-muted-foreground mb-1">
-            Vac. {fmtHours(Number(row.hores_calculades))} assignades (≈ {row.dies_assignats} dies naturals)
+            Vac. {fmtHours(Number(row.hores_calculades))} asignadas (≈ {row.dies_assignats} días naturales)
           </div>
           <div className="relative w-full" style={{ overflow: "visible" }}>
             {/* Thin bar - assigned */}
@@ -1610,7 +1610,7 @@ function VacYearCard({ row, idPersona }: { row: VacAnyRow; idPersona: number }) 
             <div className="relative w-full" style={{ height: 18 }}>
               <div className="absolute inset-y-0 left-0 flex items-center justify-end pr-2 text-xs font-semibold text-white"
                 style={{ width: `${assigned > 0 ? (consumed / assigned) * 80 : 0}%`, background: barColor }}>
-                {pct > 10 ? `${fmtHours(consumed)} consumides` : ""}
+                {pct > 10 ? `${fmtHours(consumed)} consumidas` : ""}
               </div>
             </div>
             {/* Vertical marker at 80% */}
@@ -1641,14 +1641,14 @@ function VacYearCard({ row, idPersona }: { row: VacAnyRow; idPersona: number }) 
             {remaining >= 0 ? fmtHours(remaining) : `−${fmtHours(Math.abs(remaining))}`}
           </div>
           <div className="text-[11px] text-muted-foreground mt-1">
-            {remaining >= 0 ? "per gaudir" : "avançades"}
+            {remaining >= 0 ? "por disfrutar" : "adelantadas"}
           </div>
         </div>
       </div>
 
       {(consumedQ.data ?? []).length > 0 && (
         <div className="mt-4 border-t pt-3">
-          <div className="text-xs font-medium text-muted-foreground mb-2">Consumit</div>
+          <div className="text-xs font-medium text-muted-foreground mb-2">Consumido</div>
           <div className="space-y-1 text-sm">
             {(consumedQ.data ?? []).map((c) => (
               <div key={c.id_ajuste} className="flex justify-between">
@@ -1700,7 +1700,7 @@ function NouAnyModal({
   const horesCalc = diesN * (horesPerMes / 30);
 
   async function save() {
-    if (diesN <= 0) { toast.error("Dies han de ser > 0"); return; }
+    if (diesN <= 0) { toast.error("Los días deben ser > 0"); return; }
     setSaving(true);
     const { error } = await supabase.from("personal_vacances_any" as never).insert({
       id_persona: idPersona,
@@ -1714,40 +1714,40 @@ function NouAnyModal({
     } as never);
     setSaving(false);
     if (error) { toast.error(error.message); return; }
-    toast.success("Any creat");
+    toast.success("Año creado");
     onSaved();
   }
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
       <DialogContent className="max-w-md">
-        <DialogHeader><DialogTitle>Nou any de vacances</DialogTitle></DialogHeader>
+        <DialogHeader><DialogTitle>Nuevo año de vacaciones</DialogTitle></DialogHeader>
         <div className="space-y-3">
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="text-sm font-medium">Inici</label>
+              <label className="text-sm font-medium">Inicio</label>
               <Input value={fmtDate(inici)} readOnly />
             </div>
             <div>
-              <label className="text-sm font-medium">Fi</label>
+              <label className="text-sm font-medium">Fin</label>
               <Input value={fmtDate(fi)} readOnly />
             </div>
           </div>
           <div>
-            <label className="text-sm font-medium">Dies assignats</label>
+            <label className="text-sm font-medium">Días asignados</label>
             <Input type="number" value={dies} onChange={(e) => setDies(e.target.value)} />
           </div>
           <div className="text-xs text-muted-foreground">
-            Hores calculades: <span className="font-medium">{fmtHours(horesCalc)}</span>
+            Horas calculadas: <span className="font-medium">{fmtHours(horesCalc)}</span>
             {" "}({fmtHours(horesPerMes)} / mes)
           </div>
           <div>
-            <label className="text-sm font-medium">Notes</label>
+            <label className="text-sm font-medium">Notas</label>
             <Textarea value={notas} onChange={(e) => setNotas(e.target.value)} rows={2} />
           </div>
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={onClose}>Cancel·lar</Button>
+          <Button variant="outline" onClick={onClose}>Cancelar</Button>
           <Button onClick={save} disabled={saving}>Guardar</Button>
         </DialogFooter>
       </DialogContent>

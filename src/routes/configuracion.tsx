@@ -27,7 +27,7 @@ function ConfigPage() {
     { value: "general", label: "General", visible: isAdmin || canView("config_general") },
     { value: "personal", label: "Personal", visible: isAdmin || canView("config_personal") },
     { value: "apartamentos", label: "Apartamentos", visible: isAdmin || canView("config_apartamentos") },
-    { value: "tasques", label: "Tasques genèriques", visible: isAdmin || canEdit("config_personal") },
+    { value: "tasques", label: "Tareas genéricas", visible: isAdmin || canEdit("config_personal") },
     { value: "roles", label: "Roles", visible: isAdmin },
   ].filter((t) => t.visible);
   const defaultTab = tabs[0]?.value ?? "general";

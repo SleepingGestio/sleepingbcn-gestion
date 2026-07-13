@@ -113,17 +113,17 @@ export function TiposGenericasAdmin() {
     <Card className="p-4 space-y-4">
       <div className="flex items-center justify-between">
         <div className="text-sm text-muted-foreground">
-          Gestiona la llista de tasques genèriques disponibles.
+          Gestiona la lista de tareas genéricas disponibles.
         </div>
         <Button onClick={() => setCreateOpen(true)}>
-          <Plus className="h-4 w-4" /> Nova tasca
+          <Plus className="h-4 w-4" /> Nueva tarea
         </Button>
       </div>
 
       <div className="rounded-md border divide-y">
         {(q.data ?? []).length === 0 && (
           <div className="text-center text-sm text-muted-foreground py-8">
-            Encara no hi ha tipus definits.
+            Todavía no hay tipos definidos.
           </div>
         )}
         {(q.data ?? []).map((t) => (
@@ -195,7 +195,7 @@ function CreateTaskModal({
 
   async function crear() {
     const n = nombre.toUpperCase().trim();
-    if (!n) { toast.error("Indica un nom"); return; }
+    if (!n) { toast.error("Indica un nombre"); return; }
     setBusy(true);
     const payload: Record<string, unknown> = {
       nombre: n,
@@ -208,7 +208,7 @@ function CreateTaskModal({
     const { error } = await supabase.from("tipos_tarea_generica").insert(payload);
     setBusy(false);
     if (error) { toast.error("Error: " + error.message); return; }
-    toast.success("Tasca creada");
+    toast.success("Tarea creada");
     reset();
     onOpenChange(false);
     onCreated();
@@ -218,25 +218,25 @@ function CreateTaskModal({
     <Dialog open={open} onOpenChange={(v) => { if (!v) reset(); onOpenChange(v); }}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Nova tasca genèrica</DialogTitle>
-          <DialogDescription className="sr-only">Crear tasca genèrica</DialogDescription>
+          <DialogTitle>Nueva tarea genérica</DialogTitle>
+          <DialogDescription className="sr-only">Crear tarea genérica</DialogDescription>
         </DialogHeader>
         <div className="space-y-3">
           <div className="space-y-1.5">
-            <Label>Nom</Label>
+            <Label>Nombre</Label>
             <Input
               value={nombre}
               onChange={(e) => setNombre(e.target.value)}
-              placeholder="Nom de la tasca"
+              placeholder="Nombre de la tarea"
               className="uppercase"
             />
           </div>
           <div className="space-y-1.5">
-            <Label>Notes internes (opcional)</Label>
+            <Label>Notas internas (opcional)</Label>
             <Textarea
               value={notas}
               onChange={(e) => setNotas(e.target.value)}
-              placeholder="Comentaris interns…"
+              placeholder="Comentarios internos…"
               rows={3}
             />
           </div>
@@ -247,10 +247,10 @@ function CreateTaskModal({
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={busy}>
-            Cancel·lar
+            Cancelar
           </Button>
           <Button onClick={crear} disabled={busy || !nombre.trim()} className="bg-blue-600 hover:bg-blue-700 text-white">
-            Crear tasca
+            Crear tarea
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -285,7 +285,7 @@ function EditTaskModal({
   async function guardar() {
     if (!tipus) return;
     const n = nombre.toUpperCase().trim();
-    if (!n) { toast.error("Indica un nom"); return; }
+    if (!n) { toast.error("Indica un nombre"); return; }
     setBusy(true);
     const { error } = await supabase
       .from("tipos_tarea_generica")
@@ -293,7 +293,7 @@ function EditTaskModal({
       .eq("id_tipus", tipus.id_tipus);
     setBusy(false);
     if (error) { toast.error("Error: " + error.message); return; }
-    toast.success("Desat");
+    toast.success("Guardado");
     onOpenChange(false);
     onSaved();
   }
@@ -302,12 +302,12 @@ function EditTaskModal({
     <Dialog open={!!tipus} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Editar tasca</DialogTitle>
-          <DialogDescription className="sr-only">Editar tasca genèrica</DialogDescription>
+          <DialogTitle>Editar tarea</DialogTitle>
+          <DialogDescription className="sr-only">Editar tarea genérica</DialogDescription>
         </DialogHeader>
         <div className="space-y-3">
           <div className="space-y-1.5">
-            <Label>Nom</Label>
+            <Label>Nombre</Label>
             <Input
               value={nombre}
               onChange={(e) => setNombre(e.target.value)}
@@ -315,7 +315,7 @@ function EditTaskModal({
             />
           </div>
           <div className="space-y-1.5">
-            <Label>Notes internes (opcional)</Label>
+            <Label>Notas internas (opcional)</Label>
             <Textarea
               value={notas}
               onChange={(e) => setNotas(e.target.value)}
@@ -329,15 +329,15 @@ function EditTaskModal({
 
           <div className="border-t pt-3 space-y-1 text-xs text-muted-foreground">
             <div>
-              <span className="font-medium text-foreground/70">Creada per:</span>{" "}
+              <span className="font-medium text-foreground/70">Creada por:</span>{" "}
               {personaName(createdBy)}
             </div>
             <div>
-              <span className="font-medium text-foreground/70">Data de creació:</span>{" "}
+              <span className="font-medium text-foreground/70">Fecha de creación:</span>{" "}
               {fmtDate(tipus?.creado_en ?? null)}
             </div>
             <div>
-              <span className="font-medium text-foreground/70">Registres associats:</span>{" "}
+              <span className="font-medium text-foreground/70">Registros asociados:</span>{" "}
               <button
                 type="button"
                 onClick={onOpenRecords}
@@ -350,7 +350,7 @@ function EditTaskModal({
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={busy}>
-            Cancel·lar
+            Cancelar
           </Button>
           <Button onClick={guardar} disabled={busy}>Guardar</Button>
         </DialogFooter>
@@ -401,14 +401,14 @@ function RecordsPanel({
       <DialogContent className="max-w-2xl">
         <DialogHeader>
           <DialogTitle className="uppercase tracking-wide">
-            {tipus?.nombre?.toUpperCase() ?? "Registres"}
+            {tipus?.nombre?.toUpperCase() ?? "Registros"}
           </DialogTitle>
-          <DialogDescription className="sr-only">Registres associats</DialogDescription>
+          <DialogDescription className="sr-only">Registros asociados</DialogDescription>
         </DialogHeader>
         <div className="max-h-[60vh] overflow-y-auto">
           {(q.data?.regs ?? []).length === 0 && (
             <div className="text-center text-sm text-muted-foreground py-8">
-              {q.isLoading ? "Carregant…" : "Sense registres."}
+              {q.isLoading ? "Cargando…" : "Sin registros."}
             </div>
           )}
           <div className="divide-y">
@@ -428,7 +428,7 @@ function RecordsPanel({
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
-            <X className="h-4 w-4" /> Tancar
+            <X className="h-4 w-4" /> Cerrar
           </Button>
         </DialogFooter>
       </DialogContent>
