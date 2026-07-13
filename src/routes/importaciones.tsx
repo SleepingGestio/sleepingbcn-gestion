@@ -190,7 +190,7 @@ function ImportacionesPage() {
                 No hay importaciones registradas.
               </div>
             )}
-            <div className="divide-y">
+            <div className="max-h-[260px] overflow-y-auto divide-y">
               {(importsQ.data ?? []).map((imp) => {
                 const selected = selectedId === imp.id;
                 const nuevas = imp.nuevas ?? 0;
