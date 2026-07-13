@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { AppShell } from "@/components/app-shell";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { useAuth } from "@/hooks/use-auth";
@@ -63,9 +63,16 @@ function ConfigPage() {
             <CardTitle>Datos de Krossbooking</CardTitle>
             <CardDescription>Sincronización automática</CardDescription>
           </CardHeader>
-          <CardContent className="text-sm text-muted-foreground">
-            Las reservas se importan automáticamente desde Krossbooking en la tabla <code>reservas_kb</code>.
-            Esta aplicación no modifica esa tabla; los campos editables se guardan en <code>reservas_gestio</code>.
+          <CardContent className="text-sm text-muted-foreground space-y-2">
+            <p>
+              Las reservas se importan automáticamente desde Krossbooking en la tabla <code>reservas_kb</code>.
+              Esta aplicación no modifica esa tabla; los campos editables se guardan en <code>reservas_gestio</code>.
+            </p>
+            {(isAdmin || canView("importaciones")) && (
+              <Link to="/importaciones" className="inline-block text-primary hover:underline font-medium">
+                Ver historial de importaciones →
+              </Link>
+            )}
           </CardContent>
           </Card>
         </TabsContent>
