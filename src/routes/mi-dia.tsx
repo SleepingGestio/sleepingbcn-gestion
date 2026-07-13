@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState, useEffect, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useCurrentPersonal } from "@/hooks/use-current-personal";
@@ -535,41 +535,48 @@ function WorkerView({
     monthTasksQ.refetch();
   };
 
+  const startGenericInFlightRef = useRef(false);
+
   async function startGeneric(
     idTipus: number,
     notes: string,
     idGrupo: number | null,
     idApt: number | null,
   ) {
-    if (disabled) return;
-    const nowIso = new Date().toISOString();
-    // 1. Asegurar fichaje abierto hoy
-    let fichajeId = fichaje?.id_fichaje ?? null;
-    if (!fichajeId) {
-      const { data: f, error: fErr } = await supabase
-        .from("fichajes")
-        .insert({ id_persona: personalId, fecha: todayISO, hora_entrada: nowIso })
-        .select("id_fichaje")
-        .single();
-      if (fErr) { toast.error("Error fichaje: " + fErr.message); return; }
-      fichajeId = (f as { id_fichaje: number }).id_fichaje;
+    if (disabled || startGenericInFlightRef.current) return;
+    startGenericInFlightRef.current = true;
+    try {
+      const nowIso = new Date().toISOString();
+      // 1. Asegurar fichaje abierto hoy
+      let fichajeId = fichaje?.id_fichaje ?? null;
+      if (!fichajeId) {
+        const { data: f, error: fErr } = await supabase
+          .from("fichajes")
+          .insert({ id_persona: personalId, fecha: todayISO, hora_entrada: nowIso })
+          .select("id_fichaje")
+          .single();
+        if (fErr) { toast.error("Error fichaje: " + fErr.message); return; }
+        fichajeId = (f as { id_fichaje: number }).id_fichaje;
+      }
+      // 2. Insert registre genèric
+      const payload: Record<string, unknown> = {
+        id_persona: personalId,
+        id_tipus: idTipus,
+        inici: nowIso,
+        notes: notes.trim() || null,
+      };
+      if (idApt != null) payload.id_apt = idApt;
+      if (idGrupo != null) payload.id_grupo = idGrupo;
+      const { error: rErr } = await supabase
+        .from("registre_temps_generic")
+        .insert(payload);
+      if (rErr) { toast.error("Error: " + rErr.message); return; }
+      toast.success("Tarea iniciada");
+      setStartSheetOpen(false);
+      refetchJornada();
+    } finally {
+      startGenericInFlightRef.current = false;
     }
-    // 2. Insert registre genèric
-    const payload: Record<string, unknown> = {
-      id_persona: personalId,
-      id_tipus: idTipus,
-      inici: nowIso,
-      notes: notes.trim() || null,
-    };
-    if (idApt != null) payload.id_apt = idApt;
-    if (idGrupo != null) payload.id_grupo = idGrupo;
-    const { error: rErr } = await supabase
-      .from("registre_temps_generic")
-      .insert(payload);
-    if (rErr) { toast.error("Error: " + rErr.message); return; }
-    toast.success("Tarea iniciada");
-    setStartSheetOpen(false);
-    refetchJornada();
   }
 
   async function finishGeneric() {
@@ -1524,10 +1531,11 @@ function ActiveGenericBanner({
   gen, onFinish, disabled,
 }: {
   gen: { id_registre: number; inici: string; tipos_tarea_generica: { nombre: string } | null };
-  onFinish: () => void;
+  onFinish: () => void | Promise<void>;
   disabled: boolean;
 }) {
   const [now, setNow] = useState(() => Date.now());
+  const [submitting, setSubmitting] = useState(false);
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 30_000);
     return () => clearInterval(t);
@@ -1555,10 +1563,18 @@ function ActiveGenericBanner({
       <div className="mt-3">
         <Button
           className="w-full h-11 bg-emerald-600 hover:bg-emerald-700 text-white"
-          disabled={disabled}
-          onClick={onFinish}
+          disabled={disabled || submitting}
+          onClick={async () => {
+            if (submitting) return;
+            setSubmitting(true);
+            try {
+              await onFinish();
+            } finally {
+              setSubmitting(false);
+            }
+          }}
         >
-          <Square className="h-4 w-4" /> Finalizar tarea
+          <Square className="h-4 w-4" /> {submitting ? "Finalizando…" : "Finalizar tarea"}
         </Button>
       </div>
     </div>
@@ -1577,7 +1593,7 @@ function StartJornadaPanel({
     notes: string,
     idGrupo: number | null,
     idApt: number | null,
-  ) => void;
+  ) => void | Promise<void>;
   onCancel: () => void;
   onCreateType: (nombre: string) => Promise<number | null>;
 }) {
@@ -1588,6 +1604,7 @@ function StartJornadaPanel({
   const [idGrupo, setIdGrupo] = useState<number | null>(null);
   const [idApt, setIdApt] = useState<number | null>(null);
   const [creating, setCreating] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
   const sortedTipos = useMemo(
     () => [...tipos].sort((a, b) => a.nombre.localeCompare(b.nombre, "ca", { sensitivity: "base" })),
@@ -1737,13 +1754,21 @@ function StartJornadaPanel({
         />
       </div>
       <div className="flex gap-2 pt-2">
-        <Button variant="outline" className="flex-1 h-12" onClick={onCancel}>Cancelar</Button>
+        <Button variant="outline" className="flex-1 h-12" onClick={onCancel} disabled={submitting}>Cancelar</Button>
         <Button
           className="flex-1 h-12 bg-[#26215C] hover:bg-[#1e1a48] text-white"
-          disabled={disabled || selected == null}
-          onClick={() => selected != null && onStart(selected, notes, idGrupo, idApt)}
+          disabled={disabled || selected == null || submitting}
+          onClick={async () => {
+            if (selected == null || submitting) return;
+            setSubmitting(true);
+            try {
+              await onStart(selected, notes, idGrupo, idApt);
+            } finally {
+              setSubmitting(false);
+            }
+          }}
         >
-          <Play className="h-4 w-4" /> Iniciar
+          <Play className="h-4 w-4" /> {submitting ? "Iniciando…" : "Iniciar"}
         </Button>
       </div>
     </div>
