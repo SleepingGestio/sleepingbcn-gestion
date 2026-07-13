@@ -29,8 +29,6 @@ export type ReservaKB = {
 
 export type ReservaGestio = {
   "Número": string;
-  HCheckInConf: string | null;
-  HCheckOutConf: string | null;
   ParteeEnv: string | null;
   ParteeRecl1: string | null;
   ParteeRecl2: string | null;

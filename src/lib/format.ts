@@ -68,6 +68,24 @@ export function formatKbTimeLocal(v: string | null | undefined): string | null {
   return null;
 }
 
+/**
+ * Resolves the display/storage time for a cleaning's check-in/out edge from
+ * the KB "Hora estimada de llegada/salida" field. informed=true (→ green
+ * badge, per TimeBadge) when the KB field has a usable value; informed=false
+ * (→ gray, defaultVal used) otherwise. Always returns "HH:MM:SS" so DB
+ * `time`-column writes and stored-value comparisons line up exactly. Uses
+ * formatKbTimeLocal so a full-timestamp KB value is converted to Europe/Madrid
+ * local time rather than showing the raw UTC digits.
+ */
+export function resolveTime(
+  estimada: string | null | undefined,
+  defaultVal: string,
+): { value: string; informed: boolean } {
+  const hm = formatKbTimeLocal(estimada);
+  if (hm) return { value: `${hm}:00`, informed: true };
+  return { value: defaultVal, informed: false };
+}
+
 export function fmtDateTime(v: string | null | undefined): string {
   if (!v) return "—";
   const d = new Date(v);

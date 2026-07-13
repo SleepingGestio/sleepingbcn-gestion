@@ -13,7 +13,7 @@ import {
   HoverCardTrigger,
 } from "@/components/ui/hover-card";
 import { Link2, Sofa } from "lucide-react";
-import { fmtDate } from "@/lib/format";
+import { fmtDate, resolveTime } from "@/lib/format";
 import { LimpiezaPopover, type Limpieza } from "@/components/limpieza-popover";
 import { usePermissions } from "@/hooks/use-permissions";
 import { getEstadoStyle } from "@/components/estado-limpieza-badge";
@@ -60,8 +60,6 @@ type ReservaRow = {
   es_reserva_compartida: boolean | null;
   habitaciones_original: string | null;
   referencia: string | null;
-  hCheckInConf: string | null;
-  hCheckOutConf: string | null;
 };
 
 type LimpiezaRow = Limpieza;
@@ -126,15 +124,8 @@ async function fetchReservas(fromISO: string, toExclusiveISO: string): Promise<R
   const rows = (vres ?? []) as any[];
   if (rows.length === 0) return [];
   const numeros = Array.from(new Set(rows.map((r) => r["Número"]).filter(Boolean)));
-  const [kbRes, gestRes] = await Promise.all([
-    supabase.from("reservas_kb").select("Número, Referencia").in("Número", numeros),
-    supabase
-      .from("reservas_gestio")
-      .select("Número, HCheckInConf, HCheckOutConf")
-      .in("Número", numeros),
-  ]);
-  const kbMap = new Map((kbRes.data ?? []).map((r: any) => [r["Número"], r["Referencia"]]));
-  const gestMap = new Map((gestRes.data ?? []).map((r: any) => [r["Número"], r]));
+  const { data: kb } = await supabase.from("reservas_kb").select("Número, Referencia").in("Número", numeros);
+  const kbMap = new Map((kb ?? []).map((r: any) => [r["Número"], r["Referencia"]]));
   return rows.map((r) => ({
     Número: r["Número"],
     "Check in": r["Check in"],
@@ -148,8 +139,6 @@ async function fetchReservas(fromISO: string, toExclusiveISO: string): Promise<R
     es_reserva_compartida: r.es_reserva_compartida,
     habitaciones_original: r.habitaciones_original,
     referencia: kbMap.get(r["Número"]) ?? null,
-    hCheckInConf: gestMap.get(r["Número"])?.HCheckInConf ?? null,
-    hCheckOutConf: gestMap.get(r["Número"])?.HCheckOutConf ?? null,
   }));
 }
 
@@ -176,23 +165,6 @@ const ESTADO_BAR: Record<string, string> = {
   "Cancelada": "bg-rose-500/80 text-white",
 };
 
-function trimHM(s: string | null | undefined): string | null {
-  if (!s) return null;
-  const m = String(s).match(/(\d{1,2}):(\d{2})/);
-  return m ? `${m[1].padStart(2, "0")}:${m[2]}` : null;
-}
-
-function resolveTime(
-  conf: string | null,
-  estimada: string | null,
-  defaultVal: string,
-): { value: string; informed: boolean } {
-  const c = trimHM(conf);
-  if (c) return { value: c, informed: true };
-  const e = trimHM(estimada);
-  if (e) return { value: e, informed: true };
-  return { value: defaultVal, informed: false };
-}
 type FilterMode = "default" | "all" | "custom";
 
 function ProgramacionLimpiezasPage() {
@@ -821,8 +793,8 @@ function ReservaBar({
     ESTADO_BAR[r.Estado ?? ""] ?? "bg-secondary text-secondary-foreground";
 
   // LEFT edge = check-in time; RIGHT edge = check-out time
-  const leftTime = resolveTime(r.hCheckInConf, r["Hora estimada de llegada"], "15:00");
-  const rightTime = resolveTime(r.hCheckOutConf, r["Hora estimada de salida"], "11:00");
+  const leftTime = resolveTime(r["Hora estimada de llegada"], "15:00:00");
+  const rightTime = resolveTime(r["Hora estimada de salida"], "11:00:00");
 
   const guestCount = r["Huéspedes"] ?? 0;
   const overCapacity =
@@ -842,7 +814,7 @@ function ReservaBar({
           )}
           style={{ left, width, top: 3, height: 20 }}
         >
-          <TimeBadge {...leftTime} size="xs" />
+          <TimeBadge value={leftTime.value.slice(0, 5)} informed={leftTime.informed} size="xs" />
           {!r.es_reserva_compartida && (
             <span className="shrink-0 rounded-full bg-black/25 px-1.5 py-px text-[10px] leading-4 flex items-center gap-0.5">
               {guestCount}p
@@ -855,7 +827,7 @@ function ReservaBar({
             )}
             <span className="truncate">{guestLabel}</span>
           </span>
-          <TimeBadge {...rightTime} size="xs" />
+          <TimeBadge value={rightTime.value.slice(0, 5)} informed={rightTime.informed} size="xs" />
         </div>
       </HoverCardTrigger>
       <HoverCardContent className="w-72 text-xs" align="center">

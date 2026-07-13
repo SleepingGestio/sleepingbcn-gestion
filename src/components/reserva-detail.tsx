@@ -107,26 +107,6 @@ export function ReservaDetail({
                 <InfoReadOnly label="Hora llegada (KB)" value={formatKbTimeLocal(reserva["Hora estimada de llegada"]) ?? "—"} />
                 <InfoReadOnly label="Hora salida (KB)" value={formatKbTimeLocal(reserva["Hora estimada de salida"]) ?? "—"} />
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label className="text-xs uppercase tracking-wide text-muted-foreground">Hora check-in confirmada</Label>
-                  <Input
-                    type="time"
-                    value={g.HCheckInConf ?? ""}
-                    onChange={(e) => setG({ ...g, HCheckInConf: e.target.value || null })}
-                    disabled={readOnly}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label className="text-xs uppercase tracking-wide text-muted-foreground">Hora check-out confirmada</Label>
-                  <Input
-                    type="time"
-                    value={g.HCheckOutConf ?? ""}
-                    onChange={(e) => setG({ ...g, HCheckOutConf: e.target.value || null })}
-                    disabled={readOnly}
-                  />
-                </div>
-              </div>
             </section>
 
             {/* ── Notas internas (KB) ── */}

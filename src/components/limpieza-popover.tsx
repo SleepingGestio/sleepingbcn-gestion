@@ -11,7 +11,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { fmtDate } from "@/lib/format";
+import { fmtDate, resolveTime } from "@/lib/format";
 import { fetchLimpiadores } from "@/lib/catalogos";
 import { fullName } from "@/lib/types";
 import { getUnavailableWorkerIds } from "@/lib/worker-availability";
@@ -72,12 +72,6 @@ type ReservaPopoverRow = {
   "Hora estimada de salida": string | null;
   id_apt: number | null;
   es_reserva_compartida: boolean | null;
-};
-
-type GestioTimes = {
-  "Número": string;
-  HCheckInConf: string | null;
-  HCheckOutConf: string | null;
 };
 
 type Props = {
@@ -152,18 +146,6 @@ function parseHM(s: string | null | undefined): { h: number; m: number } | null 
   if (!s) return null;
   const m = String(s).match(/(\d{1,2}):(\d{2})/);
   return m ? { h: Number(m[1]), m: Number(m[2]) } : null;
-}
-
-function resolveTime(
-  conf: string | null,
-  estimada: string | null,
-  defaultVal: string,
-): { value: string; informed: boolean } {
-  const c = parseHM(conf);
-  if (c) return { value: `${String(c.h).padStart(2, "0")}:${String(c.m).padStart(2, "0")}:00`, informed: true };
-  const e = parseHM(estimada);
-  if (e) return { value: `${String(e.h).padStart(2, "0")}:${String(e.m).padStart(2, "0")}:00`, informed: true };
-  return { value: defaultVal, informed: false };
 }
 
 // Combine an ISO date (YYYY-MM-DD) and HH:MM[:SS] into a UTC-anchored Date
@@ -297,22 +279,11 @@ export function LimpiezaPopover({ open, loadKey, onOpenChange, apt, fecha, exist
       if (nextError) throw nextError;
       next = ((nextRows ?? []) as ReservaPopoverRow[]).find((r) => r["Número"] !== currentNumero) ?? null;
 
-      const numeros = Array.from(new Set([currentNumero, next?.["Número"]].filter(Boolean))) as string[];
-      const gestRows = numeros.length
-        ? await supabase.from("reservas_gestio").select('"Número",HCheckInConf,HCheckOutConf').in("Número", numeros)
-        : { data: [] as GestioTimes[], error: null };
-      if (gestRows.error) throw gestRows.error;
-      const gestMap = new Map<string, GestioTimes>(
-        ((gestRows.data ?? []) as GestioTimes[]).map((g) => [g["Número"], g]),
-      );
-
-      const currentGest = currentNumero ? gestMap.get(currentNumero) : null;
-      const nextGest = next?.["Número"] ? gestMap.get(next["Número"]) : null;
       const out = current
-        ? resolveTime(currentGest?.HCheckOutConf ?? null, current["Hora estimada de salida"], "11:00:00")
+        ? resolveTime(current["Hora estimada de salida"], "11:00:00")
         : { value: persisted.hora_out_time ?? "11:00:00", informed: persisted.hora_out_informed ?? false };
       const inRes = next
-        ? resolveTime(nextGest?.HCheckInConf ?? null, next["Hora estimada de llegada"], "15:00:00")
+        ? resolveTime(next["Hora estimada de llegada"], "15:00:00")
         : null;
       const checkoutDT = combineDateTime(checkoutDate, out.value);
       const checkinDT = combineDateTime(next?.["Check in"] ?? null, inRes?.value ?? null);

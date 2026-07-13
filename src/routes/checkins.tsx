@@ -11,7 +11,7 @@ import { Switch } from "@/components/ui/switch";
 import { DateRangePicker, todayRange } from "@/components/date-range-picker";
 import { toast } from "sonner";
 import { SortHeader } from "@/components/sort-header";
-import { fmtDate, fmtTime, formatKbTimeLocal } from "@/lib/format";
+import { fmtDate, formatKbTimeLocal } from "@/lib/format";
 import { GroupFilterChips, useGroupFilter } from "@/components/group-filter";
 import { usePermissions } from "@/hooks/use-permissions";
 
@@ -19,7 +19,7 @@ export const Route = createFileRoute("/checkins")({
   component: CheckinsPage,
 });
 
-type SortKey = "checkin" | "habitaciones" | "horaKB" | "horaConf";
+type SortKey = "checkin" | "habitaciones" | "horaKB";
 
 function CheckinsPage() {
   const [selected, setSelected] = useState<string | null>(null);
@@ -60,7 +60,6 @@ function CheckinsPage() {
           case "checkin": return r["Check in"] ?? "";
           case "habitaciones": return r["Habitaciones"] ?? "";
           case "horaKB": return r["Hora estimada de llegada"] ?? "";
-          case "horaConf": return r.gestio?.HCheckInConf ?? "";
         }
       };
       const av = pick(a);
@@ -93,9 +92,6 @@ function CheckinsPage() {
               <TableHead>
                 <SortHeader label="Hora (KB)" active={sortKey === "horaKB"} dir={sortDir} onClick={() => toggleSort("horaKB")} />
               </TableHead>
-              <TableHead>
-                <SortHeader label="Hora (conf.)" active={sortKey === "horaConf"} dir={sortDir} onClick={() => toggleSort("horaConf")} />
-              </TableHead>
               <TableHead>Huésped</TableHead>
               <TableHead>
                 <SortHeader label="Apartamento" active={sortKey === "habitaciones"} dir={sortDir} onClick={() => toggleSort("habitaciones")} />
@@ -107,15 +103,14 @@ function CheckinsPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {q.isLoading && <TableRow><TableCell colSpan={9} className="text-center py-8 text-muted-foreground">Cargando…</TableCell></TableRow>}
+            {q.isLoading && <TableRow><TableCell colSpan={8} className="text-center py-8 text-muted-foreground">Cargando…</TableCell></TableRow>}
             {!q.isLoading && sorted.length === 0 && (
-              <TableRow><TableCell colSpan={9} className="text-center py-8 text-muted-foreground">No hay check-ins en el rango</TableCell></TableRow>
+              <TableRow><TableCell colSpan={8} className="text-center py-8 text-muted-foreground">No hay check-ins en el rango</TableCell></TableRow>
             )}
             {sorted.map((r) => (
               <TableRow key={r["Número"]} className="cursor-pointer" onClick={() => setSelected(r["Número"])}>
                 <TableCell>{fmtDate(r["Check in"])}</TableCell>
                 <TableCell>{formatKbTimeLocal(r["Hora estimada de llegada"]) ?? "—"}</TableCell>
-                <TableCell>{fmtTime(r.gestio?.HCheckInConf)}</TableCell>
                 <TableCell className="font-medium">{r["Referencia"] ?? "—"}</TableCell>
                 <TableCell>{r["Habitaciones"] ?? "—"}</TableCell>
                 <TableCell>{r["Huéspedes"] ?? "—"}</TableCell>

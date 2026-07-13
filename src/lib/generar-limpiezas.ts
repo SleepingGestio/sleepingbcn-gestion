@@ -1,5 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
-import { formatKbTimeLocal } from "@/lib/format";
+import { formatKbTimeLocal, resolveTime } from "@/lib/format";
 
 type ResVw = {
   "Número": string;
@@ -20,12 +20,6 @@ type Apt = {
   camas_fijas: number | null;
   tiene_sofa_cama: boolean | null;
   requiere_limpieza_intermedia: boolean | null;
-};
-
-type Gestio = {
-  "Número": string;
-  HCheckInConf: string | null;
-  HCheckOutConf: string | null;
 };
 
 type Grupo = {
@@ -69,18 +63,6 @@ function addDaysISO(iso: string, n: number): string {
 function trimHM(s: string | null | undefined): string | null {
   const hm = formatKbTimeLocal(s);
   return hm ? `${hm}:00` : null;
-}
-
-function resolveTime(
-  conf: string | null,
-  estimada: string | null,
-  defaultVal: string,
-): { value: string; informed: boolean } {
-  const c = trimHM(conf);
-  if (c) return { value: c, informed: true };
-  const e = trimHM(estimada);
-  if (e) return { value: e, informed: true };
-  return { value: defaultVal, informed: false };
 }
 
 function minsBetween(a: string | null, b: string | null): number | null {
@@ -143,31 +125,21 @@ export async function generarLimpiezas(fromISO: string, toISO: string): Promise<
   for (const arr of futureByApt.values())
     arr.sort((a, b) => a.ci.localeCompare(b.ci) || a.ciTime.localeCompare(b.ciTime));
 
-  // Apartments + gestio + grupos
+  // Apartments + grupos
   const aptIds = Array.from(new Set(vres.map((r) => r.id_apt).filter((x): x is number => x != null)));
   const numeros = Array.from(new Set(vres.map((r) => r["Número"]).filter(Boolean)));
-  const [aptsRes, gestRes, gruposRes] = await Promise.all([
+  const [aptsRes, gruposRes] = await Promise.all([
     aptIds.length
       ? supabase
           .from("apartamentos")
           .select("id_apt, id_grupo, camas_fijas, tiene_sofa_cama, requiere_limpieza_intermedia")
           .in("id_apt", aptIds)
       : Promise.resolve({ data: [] as Apt[], error: null }),
-    numeros.length
-      ? supabase
-          .from("reservas_gestio")
-          .select(`"Número",HCheckInConf,HCheckOutConf`)
-          .in("Número", numeros)
-      : Promise.resolve({ data: [] as Gestio[], error: null }),
     supabase.from("grupos_apartamentos").select("id_grupo, mostrar_por_defecto"),
   ]);
   if ((aptsRes as any).error) throw (aptsRes as any).error;
-  if ((gestRes as any).error) throw (gestRes as any).error;
   if (gruposRes.error) throw gruposRes.error;
   const aptMap = new Map<number, Apt>(((aptsRes.data ?? []) as Apt[]).map((a) => [a.id_apt, a]));
-  const gestMap = new Map<string, Gestio>(
-    ((gestRes.data ?? []) as Gestio[]).map((g) => [g["Número"], g]),
-  );
   const grupoMap = new Map<number, boolean>(
     ((gruposRes.data ?? []) as Grupo[]).map((g) => [g.id_grupo, g.mostrar_por_defecto !== false]),
   );
@@ -243,14 +215,6 @@ export async function generarLimpiezas(fromISO: string, toISO: string): Promise<
         .in("id_apt", extraAptIds);
       for (const a of ((extraApts ?? []) as Apt[])) aptMap.set(a.id_apt, a);
     }
-    const missingGestNums = lookupNums.filter((n) => !gestMap.has(n));
-    if (missingGestNums.length) {
-      const { data: extraGest } = await supabase
-        .from("reservas_gestio")
-        .select(`"Número",HCheckInConf,HCheckOutConf`)
-        .in("Número", missingGestNums);
-      for (const g of ((extraGest ?? []) as Gestio[])) gestMap.set(g["Número"], g);
-    }
 
     type UpdatePayload = {
       affected_by_kb_change: boolean;
@@ -285,24 +249,14 @@ export async function generarLimpiezas(fromISO: string, toISO: string): Promise<
       const freshNextNumero = freshNext?.numero ?? null;
 
       if (!reason) {
-        const gest = gestMap.get(numero) ?? null;
-        const outRes = resolveTime(
-          gest?.HCheckOutConf ?? null,
-          cur?.["Hora estimada de salida"] ?? null,
-          "11:00:00",
-        );
+        const outRes = resolveTime(cur?.["Hora estimada de salida"] ?? null, "11:00:00");
         let inTime: string | null = null;
         if (freshNext) {
-          const gestNext = gestMap.get(freshNext.numero) ?? null;
           const nextRow =
             resByNumero.get(freshNext.numero) ??
             vres.find((x) => x["Número"] === freshNext.numero) ??
             null;
-          const inRes = resolveTime(
-            gestNext?.HCheckInConf ?? null,
-            nextRow?.["Hora estimada de llegada"] ?? null,
-            "15:00:00",
-          );
+          const inRes = resolveTime(nextRow?.["Hora estimada de llegada"] ?? null, "15:00:00");
           inTime = inRes.value;
         }
         const apt = aptMap.get(cur?.id_apt ?? l.id_apt);
@@ -403,12 +357,7 @@ export async function generarLimpiezas(fromISO: string, toISO: string): Promise<
     // ---- SALIDA: checkout in [fromISO, toISO]
     if (co >= fromISO && co <= toISO) {
       if (!existingSalida.has(salidaKey(r["Número"], r.id_apt))) {
-        const gest = gestMap.get(r["Número"]) ?? null;
-        const out = resolveTime(
-          gest?.HCheckOutConf ?? null,
-          r["Hora estimada de salida"],
-          "11:00:00",
-        );
+        const out = resolveTime(r["Hora estimada de salida"], "11:00:00");
         // find next reservation for same apt within 7 days
         const arr = futureByApt.get(r.id_apt) ?? [];
         const next = arr.find(
@@ -419,16 +368,11 @@ export async function generarLimpiezas(fromISO: string, toISO: string): Promise<
         let sfc_montar = false;
         let sfc_desmontar = false;
         if (next) {
-          const gestNext = gestMap.get(next.numero) ?? null;
           // We don't have Hora estimada de llegada for next here; refetch lightly via existing vres if possible.
           const nextRow = vres.find(
             (x) => x["Número"] === next.numero && x.id_apt === r.id_apt,
           );
-          const inRes = resolveTime(
-            gestNext?.HCheckInConf ?? null,
-            nextRow?.["Hora estimada de llegada"] ?? null,
-            "15:00:00",
-          );
+          const inRes = resolveTime(nextRow?.["Hora estimada de llegada"] ?? null, "15:00:00");
           inTime = inRes.value;
           inInformed = inRes.informed;
         }
