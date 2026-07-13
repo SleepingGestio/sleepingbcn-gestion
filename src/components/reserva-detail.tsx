@@ -12,7 +12,7 @@ import { fetchAgentes, fetchLimpiadores } from "@/lib/catalogos";
 import { fullName, type Reserva, type ReservaGestio } from "@/lib/types";
 import { toast } from "sonner";
 import { useQuery } from "@tanstack/react-query";
-import { fmtDate, fmtTime } from "@/lib/format";
+import { fmtDate, formatKbTimeLocal } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 export function ReservaDetail({
@@ -104,8 +104,8 @@ export function ReservaDetail({
                 <InfoReadOnly label="Check-out" value={fmtDate(reserva["Check-out"])} />
               </div>
               <div className="grid grid-cols-2 gap-3">
-                <InfoReadOnly label="Hora llegada (KB)" value={fmtTime(reserva["Hora estimada de llegada"])} />
-                <InfoReadOnly label="Hora salida (KB)" value={fmtTime(reserva["Hora estimada de salida"])} />
+                <InfoReadOnly label="Hora llegada (KB)" value={formatKbTimeLocal(reserva["Hora estimada de llegada"]) ?? "—"} />
+                <InfoReadOnly label="Hora salida (KB)" value={formatKbTimeLocal(reserva["Hora estimada de salida"]) ?? "—"} />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">

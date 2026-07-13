@@ -38,6 +38,36 @@ export function fmtTime(v: string | null | undefined): string {
   return s;
 }
 
+/**
+ * Formats a KB/Beds24-sourced time value (e.g. "Hora estimada de
+ * llegada/salida") as local "HH:MM". These fields arrive either as a bare
+ * "HH:MM"/"HH:MM:SS" string or as a full ISO timestamp (with or without TZ)
+ * that must be converted from UTC to Europe/Madrid before display — a naive
+ * digit extraction (like fmtTime) would show the raw UTC hour instead.
+ * Returns null when the value is empty or matches neither shape.
+ */
+export function formatKbTimeLocal(v: string | null | undefined): string | null {
+  if (!v) return null;
+  const str = String(v).trim();
+  if (/^\d{1,2}:\d{2}/.test(str)) {
+    const m = str.match(/^(\d{1,2}):(\d{2})/)!;
+    return `${m[1].padStart(2, "0")}:${m[2]}`;
+  }
+  if (/^\d{4}-\d{2}-\d{2}[T ]/.test(str)) {
+    const d = new Date(str);
+    if (isNaN(d.getTime())) return null;
+    const fmt = new Intl.DateTimeFormat("es-ES", {
+      timeZone: "Europe/Madrid",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    });
+    const parts = fmt.format(d).match(/(\d{2}):(\d{2})/);
+    return parts ? `${parts[1]}:${parts[2]}` : null;
+  }
+  return null;
+}
+
 export function fmtDateTime(v: string | null | undefined): string {
   if (!v) return "—";
   const d = new Date(v);

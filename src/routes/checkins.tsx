@@ -11,7 +11,7 @@ import { Switch } from "@/components/ui/switch";
 import { DateRangePicker, todayRange } from "@/components/date-range-picker";
 import { toast } from "sonner";
 import { SortHeader } from "@/components/sort-header";
-import { fmtDate, fmtTime } from "@/lib/format";
+import { fmtDate, fmtTime, formatKbTimeLocal } from "@/lib/format";
 import { GroupFilterChips, useGroupFilter } from "@/components/group-filter";
 import { usePermissions } from "@/hooks/use-permissions";
 
@@ -114,7 +114,7 @@ function CheckinsPage() {
             {sorted.map((r) => (
               <TableRow key={r["Número"]} className="cursor-pointer" onClick={() => setSelected(r["Número"])}>
                 <TableCell>{fmtDate(r["Check in"])}</TableCell>
-                <TableCell>{fmtTime(r["Hora estimada de llegada"])}</TableCell>
+                <TableCell>{formatKbTimeLocal(r["Hora estimada de llegada"]) ?? "—"}</TableCell>
                 <TableCell>{fmtTime(r.gestio?.HCheckInConf)}</TableCell>
                 <TableCell className="font-medium">{r["Referencia"] ?? "—"}</TableCell>
                 <TableCell>{r["Habitaciones"] ?? "—"}</TableCell>

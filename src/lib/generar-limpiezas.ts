@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import { formatKbTimeLocal } from "@/lib/format";
 
 type ResVw = {
   "Número": string;
@@ -66,28 +67,8 @@ function addDaysISO(iso: string, n: number): string {
 }
 
 function trimHM(s: string | null | undefined): string | null {
-  if (!s) return null;
-  const str = String(s).trim();
-  // Pure time value like "15:00" or "15:00:00"
-  if (/^\d{1,2}:\d{2}/.test(str)) {
-    const m = str.match(/^(\d{1,2}):(\d{2})/)!;
-    return `${m[1].padStart(2, "0")}:${m[2]}:00`;
-  }
-  // Timestamp value (with or without TZ). Convert to Europe/Madrid local time
-  // to recover the time the operator actually entered.
-  if (/^\d{4}-\d{2}-\d{2}[T ]/.test(str)) {
-    const d = new Date(str);
-    if (isNaN(d.getTime())) return null;
-    const fmt = new Intl.DateTimeFormat("es-ES", {
-      timeZone: "Europe/Madrid",
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: false,
-    });
-    const parts = fmt.format(d).match(/(\d{2}):(\d{2})/);
-    return parts ? `${parts[1]}:${parts[2]}:00` : null;
-  }
-  return null;
+  const hm = formatKbTimeLocal(s);
+  return hm ? `${hm}:00` : null;
 }
 
 function resolveTime(
