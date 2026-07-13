@@ -12,8 +12,9 @@ import { fetchAgentes, fetchLimpiadores } from "@/lib/catalogos";
 import { fullName, type Reserva, type ReservaGestio } from "@/lib/types";
 import { toast } from "sonner";
 import { useQuery } from "@tanstack/react-query";
-import { fmtDate, formatKbTimeLocal } from "@/lib/format";
+import { fmtDate, resolveTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { TimeBadge } from "@/components/time-badge";
 
 export function ReservaDetail({
   numero,
@@ -35,6 +36,9 @@ export function ReservaDetail({
 
   const agentesQ = useQuery({ queryKey: ["agentes"], queryFn: fetchAgentes });
   const limpiadoresQ = useQuery({ queryKey: ["limpiadores"], queryFn: fetchLimpiadores });
+
+  const llegada = reserva ? resolveTime(reserva["Hora estimada de llegada"], "15:00:00") : null;
+  const salida = reserva ? resolveTime(reserva["Hora estimada de salida"], "11:00:00") : null;
 
   useEffect(() => {
     if (!numero || !open) return;
@@ -104,8 +108,14 @@ export function ReservaDetail({
                 <InfoReadOnly label="Check-out" value={fmtDate(reserva["Check-out"])} />
               </div>
               <div className="grid grid-cols-2 gap-3">
-                <InfoReadOnly label="Hora llegada (KB)" value={formatKbTimeLocal(reserva["Hora estimada de llegada"]) ?? "—"} />
-                <InfoReadOnly label="Hora salida (KB)" value={formatKbTimeLocal(reserva["Hora estimada de salida"]) ?? "—"} />
+                <InfoReadOnly
+                  label="Hora llegada (KB)"
+                  value={llegada && <TimeBadge value={llegada.value.slice(0, 5)} informed={llegada.informed} />}
+                />
+                <InfoReadOnly
+                  label="Hora salida (KB)"
+                  value={salida && <TimeBadge value={salida.value.slice(0, 5)} informed={salida.informed} />}
+                />
               </div>
             </section>
 

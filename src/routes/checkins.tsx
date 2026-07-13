@@ -11,9 +11,10 @@ import { Switch } from "@/components/ui/switch";
 import { DateRangePicker, todayRange } from "@/components/date-range-picker";
 import { toast } from "sonner";
 import { SortHeader } from "@/components/sort-header";
-import { fmtDate, formatKbTimeLocal } from "@/lib/format";
+import { fmtDate, resolveTime } from "@/lib/format";
 import { GroupFilterChips, useGroupFilter } from "@/components/group-filter";
 import { usePermissions } from "@/hooks/use-permissions";
+import { TimeBadge } from "@/components/time-badge";
 
 export const Route = createFileRoute("/checkins")({
   component: CheckinsPage,
@@ -107,24 +108,27 @@ function CheckinsPage() {
             {!q.isLoading && sorted.length === 0 && (
               <TableRow><TableCell colSpan={8} className="text-center py-8 text-muted-foreground">No hay check-ins en el rango</TableCell></TableRow>
             )}
-            {sorted.map((r) => (
-              <TableRow key={r["Número"]} className="cursor-pointer" onClick={() => setSelected(r["Número"])}>
-                <TableCell>{fmtDate(r["Check in"])}</TableCell>
-                <TableCell>{formatKbTimeLocal(r["Hora estimada de llegada"]) ?? "—"}</TableCell>
-                <TableCell className="font-medium">{r["Referencia"] ?? "—"}</TableCell>
-                <TableCell>{r["Habitaciones"] ?? "—"}</TableCell>
-                <TableCell>{r["Huéspedes"] ?? "—"}</TableCell>
-                <TableCell>{r["Teléfono"] ?? "—"}</TableCell>
-                <TableCell onClick={(e) => e.stopPropagation()}>
-                  <Switch
-                    checked={!!r.gestio?.ReadyCheckIn}
-                    disabled={toggleM.isPending || !canEditCheckins}
-                    onCheckedChange={(v) => toggleM.mutate({ numero: r["Número"], value: v })}
-                  />
-                </TableCell>
-                <TableCell><EstadoBadge estado={r["Estado"]} enLimpieza={r.gestio?.EnLimpieza} /></TableCell>
-              </TableRow>
-            ))}
+            {sorted.map((r) => {
+              const llegada = resolveTime(r["Hora estimada de llegada"], "15:00:00");
+              return (
+                <TableRow key={r["Número"]} className="cursor-pointer" onClick={() => setSelected(r["Número"])}>
+                  <TableCell>{fmtDate(r["Check in"])}</TableCell>
+                  <TableCell><TimeBadge value={llegada.value.slice(0, 5)} informed={llegada.informed} /></TableCell>
+                  <TableCell className="font-medium">{r["Referencia"] ?? "—"}</TableCell>
+                  <TableCell>{r["Habitaciones"] ?? "—"}</TableCell>
+                  <TableCell>{r["Huéspedes"] ?? "—"}</TableCell>
+                  <TableCell>{r["Teléfono"] ?? "—"}</TableCell>
+                  <TableCell onClick={(e) => e.stopPropagation()}>
+                    <Switch
+                      checked={!!r.gestio?.ReadyCheckIn}
+                      disabled={toggleM.isPending || !canEditCheckins}
+                      onCheckedChange={(v) => toggleM.mutate({ numero: r["Número"], value: v })}
+                    />
+                  </TableCell>
+                  <TableCell><EstadoBadge estado={r["Estado"]} enLimpieza={r.gestio?.EnLimpieza} /></TableCell>
+                </TableRow>
+              );
+            })}
           </TableBody>
         </Table>
       </Card>
