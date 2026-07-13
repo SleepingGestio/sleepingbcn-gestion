@@ -18,12 +18,12 @@ import { usePermissions, type MenuKey } from "@/hooks/use-permissions";
 type NavItem = { title: string; url: string; icon: typeof Calendar; menu: MenuKey | null };
 
 const NAV_ITEMS: NavItem[] = [
+  { title: "Importaciones", url: "/importaciones", icon: History, menu: "importaciones" },
   { title: "Reservas", url: "/reservas", icon: Calendar, menu: "reservas" },
   { title: "Check-ins de hoy", url: "/checkins", icon: LogIn, menu: "checkins" },
-  { title: "Limpiezas asignadas", url: "/limpiezas", icon: Sparkles, menu: "limpiezas_asignadas" },
   { title: "Programación limpiezas", url: "/programacion-limpiezas", icon: CalendarRange, menu: "programacion_limpiezas" },
-  { title: "Importaciones", url: "/importaciones", icon: History, menu: "importaciones" },
   { title: "Comunicar tareas", url: "/comunicar-tareas", icon: Megaphone, menu: "comunicar_tareas" },
+  { title: "Limpiezas asignadas", url: "/limpiezas", icon: Sparkles, menu: "limpiezas_asignadas" },
   { title: "Registro horario", url: "/registre-horari", icon: Clock, menu: "registre_horari" },
   { title: "Mi día", url: "/mi-dia", icon: Smartphone, menu: "mi_dia" },
   { title: "Configuración", url: "/configuracion", icon: Settings, menu: null },
