@@ -1,140 +1,51 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { AppShell } from "@/components/app-shell";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
-import { toast } from "sonner";
 import { fmtDate, fmtDateTime } from "@/lib/format";
-import { formatHHMM, cn } from "@/lib/utils";
-import { fetchMantenimiento } from "@/lib/catalogos";
+import { formatHHMM } from "@/lib/utils";
 import { fullName } from "@/lib/types";
-import { useCurrentPersonal } from "@/hooks/use-current-personal";
 import { usePermissions } from "@/hooks/use-permissions";
+import {
+  usePersonalLite,
+  useApartamentosLite,
+  useEspaciosLite,
+  useMantenimientoWorkers,
+  useMantenimientoActions,
+} from "@/hooks/use-mantenimiento";
+import { TipoBadge, PrioridadPill, EstadoPill } from "@/components/mantenimiento-badges";
+import { AsignarDialog } from "@/components/mantenimiento-asignar-dialog";
+import { MantenimientoPopover } from "@/components/mantenimiento-popover";
+import {
+  INCIDENCIA_COLUMNS,
+  REGISTRE_COLUMNS,
+  PRIORIDAD_RANK,
+  resolveLocation,
+  rightPanelStyle,
+  findOpenSessionId,
+  type Incidencia,
+  type Registre,
+  type PersonaLite,
+} from "@/lib/mantenimiento";
 import { Home } from "lucide-react";
 
 export const Route = createFileRoute("/mantenimiento")({
   component: MantenimientoPage,
 });
 
-type IncidenciaTipo = "averia_rotura" | "manteniment" | "material_danyat" | "altre";
-type Prioridad = "alta" | "normal" | "baixa";
-type Estat = "pendent_validacio" | "validada" | "en_curs" | "finalitzada" | "rebutjada";
-
-type Incidencia = {
-  id_incidencia: number;
-  titol: string;
-  descripcio: string | null;
-  tipus: IncidenciaTipo;
-  estat: Estat;
-  id_apt: number | null;
-  id_tipo_espacio_comun: number | null;
-  id_reporter: number | null;
-  id_assignat: number | null;
-  prioritat_proposta: Prioridad;
-  prioritat_confirmada: Prioridad | null;
-  data_prevista: string | null;
-  creado_en: string;
-  iniciat_en: string | null;
-  finalitzat_en: string | null;
-};
-
-type Registre = {
-  id_registre: number;
-  id_incidencia: number;
-  id_persona: number;
-  inici: string;
-  fi: string | null;
-  hores: number | null;
-};
-
-type PersonaLite = { id_persona: number; nombre: string | null; apellidos: string | null; codigo?: string | null };
-type AptLite = { id_apt: number; nombre: string };
-type EspacioLite = { id_tipo: number; nombre: string };
-
-const INCIDENCIA_COLUMNS =
-  "id_incidencia,titol,descripcio,tipus,estat,id_apt,id_tipo_espacio_comun,id_reporter,id_assignat,prioritat_proposta,prioritat_confirmada,data_prevista,creado_en,iniciat_en,finalitzat_en";
-
-const TIPO_STYLE: Record<IncidenciaTipo, { bg: string; fg: string; label: string }> = {
-  averia_rotura: { bg: "#DC2626", fg: "#FFFFFF", label: "Avería / Rotura" },
-  manteniment: { bg: "#2563EB", fg: "#FFFFFF", label: "Mantenimiento" },
-  material_danyat: { bg: "#D97706", fg: "#FFFFFF", label: "Material dañado" },
-  altre: { bg: "#6B7280", fg: "#FFFFFF", label: "Otro" },
-};
-
-const PRIORIDAD_STYLE: Record<Prioridad, { bg: string; fg: string; letter: string; label: string }> = {
-  alta: { bg: "#DC2626", fg: "#FFFFFF", letter: "A", label: "Alta" },
-  normal: { bg: "#D97706", fg: "#FFFFFF", letter: "M", label: "Media" },
-  baixa: { bg: "#9CA3AF", fg: "#FFFFFF", letter: "B", label: "Baja" },
-};
-
-const ESTADO_PILL_STYLE: Partial<Record<Estat, { bg: string; fg: string; label: string }>> = {
-  finalitzada: { bg: "#639922", fg: "#FFFFFF", label: "Finalizada" },
-  rebutjada: { bg: "#DC2626", fg: "#FFFFFF", label: "Rechazada" },
-};
-
 type TareasFilter = "asignadas_curso" | "en_curso" | "finalizadas" | "rechazadas" | "todas";
 type SortKey = "prioridad" | "fecha_prevista" | "fecha_inicio" | "fecha_fin" | "titulo" | "ubicacion" | "operario";
 
-const PRIORIDAD_RANK: Record<Prioridad, number> = { alta: 0, normal: 1, baixa: 2 };
-
-function resolveLocation(
-  inc: Incidencia,
-  aptById: Map<number, AptLite>,
-  espacioById: Map<number, EspacioLite>,
-): string {
-  if (inc.id_apt != null) return aptById.get(inc.id_apt)?.nombre ?? `#${inc.id_apt}`;
-  if (inc.id_tipo_espacio_comun != null) {
-    const nombre = espacioById.get(inc.id_tipo_espacio_comun)?.nombre ?? "?";
-    return `${nombre} (zona común)`;
-  }
-  return "Otro";
-}
-
-function rightPanelStyle(estat: Estat, sessionCount: number): { bg: string; borderColor: string | null } {
-  if (estat === "en_curs") return { bg: "rgba(55,138,221,0.13)", borderColor: "#378ADD" };
-  if (estat === "validada" && sessionCount > 0) return { bg: "rgba(216,90,48,0.10)", borderColor: "#D85A30" };
-  if (estat === "finalitzada") return { bg: "rgba(99,153,34,0.14)", borderColor: "#639922" };
-  return { bg: "transparent", borderColor: null };
-}
-
-function TipoBadge({ tipus }: { tipus: IncidenciaTipo }) {
-  const s = TIPO_STYLE[tipus];
-  return (
-    <span
-      className="inline-block rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide"
-      style={{ backgroundColor: s.bg, color: s.fg }}
-    >
-      {s.label}
-    </span>
-  );
-}
-
-function PrioridadPill({ prioridad }: { prioridad: Prioridad | null }) {
-  if (!prioridad) return <span className="text-muted-foreground text-xs">—</span>;
-  const s = PRIORIDAD_STYLE[prioridad];
-  return (
-    <span
-      title={s.label}
-      className="inline-flex items-center justify-center rounded-full w-5 h-5 text-[10px] font-bold shrink-0"
-      style={{ backgroundColor: s.bg, color: s.fg }}
-    >
-      {s.letter}
-    </span>
-  );
-}
-
 function MantenimientoPage() {
   const { canEdit } = usePermissions();
-  const { persona } = useCurrentPersonal();
   const editable = canEdit("mantenimiento");
 
   const [assignTarget, setAssignTarget] = useState<Incidencia | null>(null);
+  const [detailId, setDetailId] = useState<number | null>(null);
   const [filtro, setFiltro] = useState<TareasFilter>("asignadas_curso");
   const [sortKey, setSortKey] = useState<SortKey>("prioridad");
 
@@ -174,7 +85,7 @@ function MantenimientoPage() {
     queryFn: async (): Promise<Registre[]> => {
       const { data, error } = await supabase
         .from("manteniment_registre")
-        .select("id_registre,id_incidencia,id_persona,inici,fi,hores")
+        .select(REGISTRE_COLUMNS)
         .in("id_incidencia", tareaIds)
         .order("inici", { ascending: true });
       if (error) throw error;
@@ -192,40 +103,27 @@ function MantenimientoPage() {
     return m;
   }, [registreQ.data]);
 
-  const personalQ = useQuery({
-    queryKey: ["mantenimiento-personal-lite"],
-    queryFn: async (): Promise<PersonaLite[]> => {
-      const { data, error } = await supabase.from("personal").select("id_persona,nombre,apellidos,codigo");
-      if (error) throw error;
-      return (data ?? []) as PersonaLite[];
-    },
-  });
+  const personalQ = usePersonalLite();
   const personaById = useMemo(
     () => new Map((personalQ.data ?? []).map((p) => [p.id_persona, p])),
     [personalQ.data],
   );
 
-  const aptQ = useQuery({
-    queryKey: ["mantenimiento-apts"],
-    queryFn: async (): Promise<AptLite[]> => {
-      const { data, error } = await supabase.from("apartamentos").select("id_apt,nombre");
-      if (error) throw error;
-      return (data ?? []) as AptLite[];
-    },
-  });
+  const aptQ = useApartamentosLite();
   const aptById = useMemo(() => new Map((aptQ.data ?? []).map((a) => [a.id_apt, a])), [aptQ.data]);
 
-  const espaciosQ = useQuery({
-    queryKey: ["mantenimiento-espacios"],
-    queryFn: async (): Promise<EspacioLite[]> => {
-      const { data, error } = await supabase.from("tipos_espacio_comun").select("id_tipo,nombre");
-      if (error) throw error;
-      return (data ?? []) as EspacioLite[];
-    },
-  });
+  const espaciosQ = useEspaciosLite();
   const espacioById = useMemo(() => new Map((espaciosQ.data ?? []).map((e) => [e.id_tipo, e])), [espaciosQ.data]);
 
-  const workersQ = useQuery({ queryKey: ["mantenimiento-workers"], queryFn: fetchMantenimiento });
+  const workersQ = useMantenimientoWorkers();
+
+  function refetchLists() {
+    pendientesQ.refetch();
+    tareasQ.refetch();
+    registreQ.refetch();
+  }
+
+  const actions = useMantenimientoActions(refetchLists);
 
   const sortedTareas = useMemo(() => {
     const arr = [...(tareasQ.data ?? [])];
@@ -270,128 +168,14 @@ function MantenimientoPage() {
     return arr;
   }, [tareasQ.data, sortKey, aptById, espacioById, personaById]);
 
-  async function rechazar(inc: Incidencia) {
-    if (!window.confirm(`¿Rechazar la incidencia "${inc.titol}"?`)) return;
-    const { error } = await supabase
-      .from("manteniment_incidencies")
-      .update({
-        estat: "rebutjada",
-        validat_per: persona?.id_persona ?? null,
-        validat_en: new Date().toISOString(),
-      })
-      .eq("id_incidencia", inc.id_incidencia);
-    if (error) {
-      toast.error("Error: " + error.message);
-      return;
-    }
-    toast.success("Incidencia rechazada");
-    pendientesQ.refetch();
-    tareasQ.refetch();
-  }
-
-  async function confirmarAsignacion(
+  async function handleConfirmarAsignacion(
     inc: Incidencia,
     workerId: number,
     fecha: string | null,
-    prioridad: Prioridad,
+    prioridad: "alta" | "normal" | "baixa",
   ) {
-    const { error } = await supabase
-      .from("manteniment_incidencies")
-      .update({
-        estat: "validada",
-        id_assignat: workerId,
-        data_prevista: fecha,
-        prioritat_confirmada: prioridad,
-        validat_per: persona?.id_persona ?? null,
-        validat_en: new Date().toISOString(),
-      })
-      .eq("id_incidencia", inc.id_incidencia);
-    if (error) {
-      toast.error("Error: " + error.message);
-      return;
-    }
-    toast.success("Incidencia asignada");
+    await actions.confirmarAsignacion(inc, workerId, fecha, prioridad);
     setAssignTarget(null);
-    pendientesQ.refetch();
-    tareasQ.refetch();
-  }
-
-  async function iniciar(inc: Incidencia) {
-    const nowIso = new Date().toISOString();
-    const { error: e1 } = await supabase.from("manteniment_registre").insert({
-      id_incidencia: inc.id_incidencia,
-      id_persona: inc.id_assignat,
-      inici: nowIso,
-    });
-    if (e1) {
-      toast.error("Error: " + e1.message);
-      return;
-    }
-    const patch: Record<string, unknown> = { estat: "en_curs" };
-    if (!inc.iniciat_en) patch.iniciat_en = nowIso;
-    const { error: e2 } = await supabase
-      .from("manteniment_incidencies")
-      .update(patch)
-      .eq("id_incidencia", inc.id_incidencia);
-    if (e2) {
-      toast.error("Error: " + e2.message);
-      return;
-    }
-    toast.success("Tarea iniciada");
-    tareasQ.refetch();
-    registreQ.refetch();
-  }
-
-  async function finParcial(inc: Incidencia) {
-    const open = (registreByIncidencia.get(inc.id_incidencia) ?? []).find((s) => s.fi == null);
-    const nowIso = new Date().toISOString();
-    if (open) {
-      const { error: e1 } = await supabase
-        .from("manteniment_registre")
-        .update({ fi: nowIso })
-        .eq("id_registre", open.id_registre);
-      if (e1) {
-        toast.error("Error: " + e1.message);
-        return;
-      }
-    }
-    const { error: e2 } = await supabase
-      .from("manteniment_incidencies")
-      .update({ estat: "validada" })
-      .eq("id_incidencia", inc.id_incidencia);
-    if (e2) {
-      toast.error("Error: " + e2.message);
-      return;
-    }
-    toast.success("Sesión pausada");
-    tareasQ.refetch();
-    registreQ.refetch();
-  }
-
-  async function finTotal(inc: Incidencia) {
-    const open = (registreByIncidencia.get(inc.id_incidencia) ?? []).find((s) => s.fi == null);
-    const nowIso = new Date().toISOString();
-    if (open) {
-      const { error: e1 } = await supabase
-        .from("manteniment_registre")
-        .update({ fi: nowIso })
-        .eq("id_registre", open.id_registre);
-      if (e1) {
-        toast.error("Error: " + e1.message);
-        return;
-      }
-    }
-    const { error: e2 } = await supabase
-      .from("manteniment_incidencies")
-      .update({ estat: "finalitzada", finalitzat_en: nowIso })
-      .eq("id_incidencia", inc.id_incidencia);
-    if (e2) {
-      toast.error("Error: " + e2.message);
-      return;
-    }
-    toast.success("Tarea finalizada");
-    tareasQ.refetch();
-    registreQ.refetch();
   }
 
   const pendientes = pendientesQ.data ?? [];
@@ -415,7 +199,8 @@ function MantenimientoPage() {
                 location={resolveLocation(inc, aptById, espacioById)}
                 reporter={inc.id_reporter != null ? fullName(personaById.get(inc.id_reporter)) : "—"}
                 editable={editable}
-                onRechazar={() => rechazar(inc)}
+                onOpenDetail={() => setDetailId(inc.id_incidencia)}
+                onRechazar={() => actions.rechazar(inc)}
                 onAsignar={() => setAssignTarget(inc)}
               />
             ))}
@@ -469,9 +254,10 @@ function MantenimientoPage() {
                 worker={t.id_assignat != null ? personaById.get(t.id_assignat) : null}
                 personaById={personaById}
                 editable={editable}
-                onIniciar={() => iniciar(t)}
-                onFinParcial={() => finParcial(t)}
-                onFinTotal={() => finTotal(t)}
+                onOpenDetail={() => setDetailId(t.id_incidencia)}
+                onIniciar={() => actions.iniciar(t)}
+                onFinParcial={() => actions.finParcial(t, findOpenSessionId(registreByIncidencia.get(t.id_incidencia) ?? []))}
+                onFinTotal={() => actions.finTotal(t, findOpenSessionId(registreByIncidencia.get(t.id_incidencia) ?? []))}
               />
             ))}
           </div>
@@ -484,7 +270,19 @@ function MantenimientoPage() {
         onOpenChange={(o) => {
           if (!o) setAssignTarget(null);
         }}
-        onConfirm={confirmarAsignacion}
+        onConfirm={handleConfirmarAsignacion}
+      />
+
+      <MantenimientoPopover
+        idIncidencia={detailId}
+        onOpenChange={(o) => {
+          if (!o) {
+            setDetailId(null);
+            refetchLists();
+          }
+        }}
+        onSaved={refetchLists}
+        workers={workersQ.data ?? []}
       />
     </AppShell>
   );
@@ -495,6 +293,7 @@ function NuevaCard({
   location,
   reporter,
   editable,
+  onOpenDetail,
   onRechazar,
   onAsignar,
 }: {
@@ -502,11 +301,20 @@ function NuevaCard({
   location: string;
   reporter: string;
   editable: boolean;
+  onOpenDetail: () => void;
   onRechazar: () => void;
   onAsignar: () => void;
 }) {
   return (
-    <Card className="p-3 space-y-2 bg-white">
+    <Card
+      className="p-3 space-y-2 bg-white cursor-pointer hover:shadow-md transition-shadow"
+      role="button"
+      tabIndex={0}
+      onClick={onOpenDetail}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") onOpenDetail();
+      }}
+    >
       <div className="flex items-start justify-between gap-2">
         <div className="font-medium text-sm leading-snug">{inc.titol}</div>
         <PrioridadPill prioridad={inc.prioritat_proposta} />
@@ -518,7 +326,7 @@ function NuevaCard({
       </div>
       <div className="text-xs text-muted-foreground">Reportado por {reporter}</div>
       {editable && (
-        <div className="flex gap-2 pt-1">
+        <div className="flex gap-2 pt-1" onClick={(e) => e.stopPropagation()}>
           <Button
             size="sm"
             variant="outline"
@@ -543,6 +351,7 @@ function TareaRow({
   worker,
   personaById,
   editable,
+  onOpenDetail,
   onIniciar,
   onFinParcial,
   onFinTotal,
@@ -553,6 +362,7 @@ function TareaRow({
   worker: PersonaLite | null | undefined;
   personaById: Map<number, PersonaLite>;
   editable: boolean;
+  onOpenDetail: () => void;
   onIniciar: () => void;
   onFinParcial: () => void;
   onFinTotal: () => void;
@@ -561,23 +371,23 @@ function TareaRow({
   const closedSessions = sesiones.filter((s) => s.fi != null);
   const totalHoras = closedSessions.reduce((sum, s) => sum + (s.hores ?? 0), 0);
   const panel = rightPanelStyle(inc.estat, sesiones.length);
-  const estadoPill = ESTADO_PILL_STYLE[inc.estat];
 
   return (
-    <Card className="p-0 overflow-hidden bg-white">
+    <Card
+      className="p-0 overflow-hidden bg-white cursor-pointer hover:shadow-md transition-shadow"
+      role="button"
+      tabIndex={0}
+      onClick={onOpenDetail}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") onOpenDetail();
+      }}
+    >
       <div className="flex">
         <div className="flex-1 min-w-0 p-3 space-y-1.5">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="font-medium text-sm">{inc.titol}</span>
             <TipoBadge tipus={inc.tipus} />
-            {estadoPill && (
-              <span
-                className="inline-block rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide"
-                style={{ backgroundColor: estadoPill.bg, color: estadoPill.fg }}
-              >
-                {estadoPill.label}
-              </span>
-            )}
+            <EstadoPill estat={inc.estat} />
           </div>
           <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
             <Home className="h-3 w-3 shrink-0" />
@@ -586,7 +396,7 @@ function TareaRow({
             <span>{worker ? fullName(worker) : "Sin asignar"}</span>
           </div>
           {editable && (
-            <div className="flex gap-2 pt-1">
+            <div className="flex gap-2 pt-1" onClick={(e) => e.stopPropagation()}>
               {inc.estat === "validada" && !hasOpenSession && (
                 <Button size="sm" className="bg-[#26215C] hover:bg-[#1e1a48] text-white" onClick={onIniciar}>
                   Iniciar
@@ -640,102 +450,5 @@ function TareaRow({
         </div>
       </div>
     </Card>
-  );
-}
-
-function AsignarDialog({
-  inc,
-  workers,
-  onOpenChange,
-  onConfirm,
-}: {
-  inc: Incidencia | null;
-  workers: PersonaLite[];
-  onOpenChange: (o: boolean) => void;
-  onConfirm: (inc: Incidencia, workerId: number, fecha: string | null, prioridad: Prioridad) => Promise<void>;
-}) {
-  const [workerId, setWorkerId] = useState<number | null>(null);
-  const [fecha, setFecha] = useState("");
-  const [prioridad, setPrioridad] = useState<Prioridad>("normal");
-  const [busy, setBusy] = useState(false);
-
-  const openId = inc?.id_incidencia ?? null;
-  useEffect(() => {
-    setWorkerId(null);
-    setFecha("");
-    setPrioridad(inc?.prioritat_proposta ?? "normal");
-    setBusy(false);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [openId]);
-
-  async function confirmar() {
-    if (!inc || workerId == null) return;
-    setBusy(true);
-    try {
-      await onConfirm(inc, workerId, fecha || null, prioridad);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <Dialog open={!!inc} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-sm">
-        <DialogHeader>
-          <DialogTitle>Asignar incidencia</DialogTitle>
-          <DialogDescription className="sr-only">Asignar trabajador, fecha y prioridad</DialogDescription>
-        </DialogHeader>
-        <div className="space-y-3">
-          <div className="space-y-1.5">
-            <Label className="text-xs">Trabajador</Label>
-            <Select value={workerId != null ? String(workerId) : ""} onValueChange={(v) => setWorkerId(Number(v))}>
-              <SelectTrigger>
-                <SelectValue placeholder="Selecciona un trabajador" />
-              </SelectTrigger>
-              <SelectContent>
-                {workers.map((w) => (
-                  <SelectItem key={w.id_persona} value={String(w.id_persona)}>
-                    {fullName(w)}
-                    {w.codigo ? ` (${w.codigo})` : ""}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-1.5">
-            <Label className="text-xs">Fecha prevista (opcional)</Label>
-            <Input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} />
-          </div>
-          <div className="space-y-1.5">
-            <Label className="text-xs">Prioridad confirmada</Label>
-            <div className="grid grid-cols-3 gap-2">
-              {(["alta", "normal", "baixa"] as Prioridad[]).map((p) => (
-                <button
-                  key={p}
-                  type="button"
-                  onClick={() => setPrioridad(p)}
-                  className={cn(
-                    "h-9 rounded-md border text-sm font-medium transition-colors",
-                    prioridad === p
-                      ? "border-[#26215C] bg-[#26215C]/10 text-[#26215C]"
-                      : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50",
-                  )}
-                >
-                  {PRIORIDAD_STYLE[p].label}
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={busy}>
-            Cancelar
-          </Button>
-          <Button onClick={confirmar} disabled={busy || workerId == null}>
-            {busy ? "Guardando…" : "Confirmar asignación"}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
   );
 }
