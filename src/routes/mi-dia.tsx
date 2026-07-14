@@ -26,7 +26,8 @@ import {
 import { Input } from "@/components/ui/input";
 import { PasswordInput } from "@/components/ui/password-input";
 import { Label } from "@/components/ui/label";
-import { Zap, Sofa, LogOut, Clock, ArrowLeft, Check, X, Play, Menu, UserCircle2, KeyRound, Square, ClipboardList, Plus, LayoutDashboard } from "lucide-react";
+import { Zap, Sofa, LogOut, Clock, ArrowLeft, Check, X, Play, Menu, UserCircle2, KeyRound, Square, ClipboardList, Plus, LayoutDashboard, AlertTriangle, Wrench } from "lucide-react";
+import { ReportarIncidenciaSheet, type ReportarIncidenciaContext } from "@/components/reportar-incidencia";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { TimeBadge } from "@/components/time-badge";
@@ -208,11 +209,22 @@ function MiDiaPage() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("personal")
-        .select("id_persona, nombre, apellidos")
+        .select("id_persona, nombre, apellidos, personal_roles(fecha_hasta, roles(nombre))")
         .eq("id_persona", previewId!)
         .maybeSingle();
       if (error) throw error;
-      return data as { id_persona: number; nombre: string | null; apellidos: string | null } | null;
+      if (!data) return null;
+      const pr = (data as any).personal_roles ?? [];
+      const roles: string[] = pr
+        .filter((r: any) => !r.fecha_hasta)
+        .map((r: any) => r.roles?.nombre)
+        .filter(Boolean);
+      return {
+        id_persona: (data as any).id_persona,
+        nombre: (data as any).nombre,
+        apellidos: (data as any).apellidos,
+        roles,
+      } as { id_persona: number; nombre: string | null; apellidos: string | null; roles: string[] };
     },
   });
 
@@ -234,10 +246,12 @@ function MiDiaPage() {
   const targetName = previewId
     ? ([previewQ.data?.nombre, previewQ.data?.apellidos].filter(Boolean).join(" ") || `#${previewId}`)
     : (persona!.nombre ?? "limpiador/a");
+  const targetRoles = previewId ? (previewQ.data?.roles ?? []) : (persona!.roles ?? []);
   return (
     <WorkerView
       personalId={targetId}
       nombre={targetName}
+      roles={targetRoles}
       previewing={!!previewId ? targetName : null}
       onExitPreview={() => {
         if (typeof window !== "undefined") {
@@ -253,11 +267,13 @@ function MiDiaPage() {
 function WorkerView({
   personalId,
   nombre,
+  roles,
   previewing,
   onExitPreview,
 }: {
   personalId: number;
   nombre: string;
+  roles: string[];
   previewing?: string | null;
   onExitPreview?: () => void;
 }) {
@@ -543,6 +559,31 @@ function WorkerView({
     monthTasksQ.refetch();
   };
 
+  const isMantenimiento = roles.includes("Mantenimiento");
+  const [incidenciaOpen, setIncidenciaOpen] = useState(false);
+  const [incidenciaContext, setIncidenciaContext] = useState<ReportarIncidenciaContext | null>(null);
+
+  function openIncidenciaForTask(t: Limpieza) {
+    const apt = aptsAllQ.data?.find((a) => a.id_apt === t.id_apt);
+    setIncidenciaContext({
+      origen: "neteja",
+      idApt: t.id_apt,
+      idGrupo: apt?.id_grupo ?? null,
+      idLimpieza: t.id_limpieza,
+      aptLabel: aptById.get(t.id_apt)?.nombre ?? `Apt #${t.id_apt}`,
+    });
+    setIncidenciaOpen(true);
+  }
+
+  function openIncidenciaManual() {
+    setIncidenciaContext({
+      origen: "manteniment",
+      grupos: gruposQ.data ?? [],
+      apartamentos: aptsAllQ.data ?? [],
+    });
+    setIncidenciaOpen(true);
+  }
+
   const startGenericInFlightRef = useRef(false);
 
   async function startGeneric(
@@ -732,6 +773,19 @@ function WorkerView({
         </div>
       </header>
 
+      {/* Persistent entry point for Mantenimiento workers — no active cleaning required */}
+      {isMantenimiento && (
+        <div className="px-3 mt-3">
+          <Button
+            className="w-full h-12 bg-amber-600 hover:bg-amber-700 text-white"
+            disabled={disabled}
+            onClick={openIncidenciaManual}
+          >
+            <Wrench className="h-4 w-4" /> Nueva incidencia
+          </Button>
+        </div>
+      )}
+
       {/* Day tabs */}
       {/* Active generic task banner (always shown if active) */}
       {activeGen && (
@@ -804,6 +858,7 @@ function WorkerView({
                 onChanged={refetchAll}
                 onOpenDetail={() => setDetailId(t.id_limpieza)}
                 onFinish={() => finishTask(t)}
+                onReportIncidencia={() => openIncidenciaForTask(t)}
               />
             ))}
           </div>
@@ -911,6 +966,16 @@ function WorkerView({
         </SheetContent>
       </Sheet>
 
+      {/* Reportar incidencia (mantenimiento) */}
+      {incidenciaContext && (
+        <ReportarIncidenciaSheet
+          open={incidenciaOpen}
+          onOpenChange={setIncidenciaOpen}
+          reporterId={personalId}
+          context={incidenciaContext}
+        />
+      )}
+
       {/* Equipo trabajando este día */}
       <div className="px-3 mt-6 mb-6">
         <h2 className="text-sm font-semibold text-slate-800 mb-2">Equipo trabajando este día</h2>
@@ -1007,7 +1072,7 @@ function TimeChip({ time, informed }: { time: string | null; informed: boolean |
 }
 
 function TaskCard({
-  t, apt, resv, onChanged, onOpenDetail, onFinish,
+  t, apt, resv, onChanged, onOpenDetail, onFinish, onReportIncidencia,
 }: {
   t: Limpieza;
   apt: Apartamento | undefined;
@@ -1015,6 +1080,7 @@ function TaskCard({
   onChanged: () => void;
   onOpenDetail: () => void;
   onFinish: () => void;
+  onReportIncidencia: () => void;
 }) {
   const [rejecting, setRejecting] = useState(false);
   const [motivo, setMotivo] = useState("");
@@ -1180,6 +1246,9 @@ function TaskCard({
               </Button>
               <Button size="sm" variant="secondary" className="h-11 px-4" onClick={onOpenDetail}>
                 <Menu className="h-4 w-4" /> Detalle
+              </Button>
+              <Button size="sm" variant="outline" className="h-11 px-4 border-amber-400 text-amber-800 hover:bg-amber-50" onClick={onReportIncidencia}>
+                <AlertTriangle className="h-4 w-4" /> Incidencia
               </Button>
             </>
           )}
