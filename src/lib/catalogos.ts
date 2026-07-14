@@ -25,3 +25,7 @@ export async function fetchAgentes(): Promise<AgCheckIn[]> {
 export async function fetchLimpiadores(): Promise<PersLimp[]> {
   return fetchPersonalByRole("Limpieza");
 }
+
+export async function fetchMantenimiento(): Promise<PersLimp[]> {
+  return fetchPersonalByRole("Mantenimiento");
+}

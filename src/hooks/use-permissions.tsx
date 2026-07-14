@@ -11,6 +11,7 @@ export type MenuKey =
   | "mi_dia"
   | "registre_horari"
   | "importaciones"
+  | "mantenimiento"
   | "config_general"
   | "config_personal"
   | "config_apartamentos";
@@ -24,6 +25,7 @@ export const ALL_MENUS: { key: MenuKey; label: string }[] = [
   { key: "mi_dia", label: "Mi día" },
   { key: "registre_horari", label: "Registro horario" },
   { key: "importaciones", label: "Importaciones" },
+  { key: "mantenimiento", label: "Mantenimiento" },
   { key: "config_general", label: "Configuración · General" },
   { key: "config_personal", label: "Configuración · Personal" },
   { key: "config_apartamentos", label: "Configuración · Apartamentos" },
@@ -41,6 +43,7 @@ export const ROUTE_TO_MENU: { route: string; menu: MenuKey }[] = [
   { route: "/comunicar-tareas", menu: "comunicar_tareas" },
   { route: "/registre-horari", menu: "registre_horari" },
   { route: "/importaciones", menu: "importaciones" },
+  { route: "/mantenimiento", menu: "mantenimiento" },
   { route: "/mi-dia", menu: "mi_dia" },
 ];
 

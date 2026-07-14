@@ -13,6 +13,7 @@ import { Route as ReservasRouteImport } from './routes/reservas'
 import { Route as RegistreHorariRouteImport } from './routes/registre-horari'
 import { Route as ProgramacionLimpiezasRouteImport } from './routes/programacion-limpiezas'
 import { Route as MiDiaRouteImport } from './routes/mi-dia'
+import { Route as MantenimientoRouteImport } from './routes/mantenimiento'
 import { Route as LimpiezasRouteImport } from './routes/limpiezas'
 import { Route as ImportacionesRouteImport } from './routes/importaciones'
 import { Route as ConfiguracionRouteImport } from './routes/configuracion'
@@ -40,6 +41,11 @@ const ProgramacionLimpiezasRoute = ProgramacionLimpiezasRouteImport.update({
 const MiDiaRoute = MiDiaRouteImport.update({
   id: '/mi-dia',
   path: '/mi-dia',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const MantenimientoRoute = MantenimientoRouteImport.update({
+  id: '/mantenimiento',
+  path: '/mantenimiento',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LimpiezasRoute = LimpiezasRouteImport.update({
@@ -90,6 +96,7 @@ export interface FileRoutesByFullPath {
   '/configuracion': typeof ConfiguracionRoute
   '/importaciones': typeof ImportacionesRoute
   '/limpiezas': typeof LimpiezasRoute
+  '/mantenimiento': typeof MantenimientoRoute
   '/mi-dia': typeof MiDiaRoute
   '/programacion-limpiezas': typeof ProgramacionLimpiezasRoute
   '/registre-horari': typeof RegistreHorariRouteWithChildren
@@ -104,6 +111,7 @@ export interface FileRoutesByTo {
   '/configuracion': typeof ConfiguracionRoute
   '/importaciones': typeof ImportacionesRoute
   '/limpiezas': typeof LimpiezasRoute
+  '/mantenimiento': typeof MantenimientoRoute
   '/mi-dia': typeof MiDiaRoute
   '/programacion-limpiezas': typeof ProgramacionLimpiezasRoute
   '/reservas': typeof ReservasRoute
@@ -118,6 +126,7 @@ export interface FileRoutesById {
   '/configuracion': typeof ConfiguracionRoute
   '/importaciones': typeof ImportacionesRoute
   '/limpiezas': typeof LimpiezasRoute
+  '/mantenimiento': typeof MantenimientoRoute
   '/mi-dia': typeof MiDiaRoute
   '/programacion-limpiezas': typeof ProgramacionLimpiezasRoute
   '/registre-horari': typeof RegistreHorariRouteWithChildren
@@ -134,6 +143,7 @@ export interface FileRouteTypes {
     | '/configuracion'
     | '/importaciones'
     | '/limpiezas'
+    | '/mantenimiento'
     | '/mi-dia'
     | '/programacion-limpiezas'
     | '/registre-horari'
@@ -148,6 +158,7 @@ export interface FileRouteTypes {
     | '/configuracion'
     | '/importaciones'
     | '/limpiezas'
+    | '/mantenimiento'
     | '/mi-dia'
     | '/programacion-limpiezas'
     | '/reservas'
@@ -161,6 +172,7 @@ export interface FileRouteTypes {
     | '/configuracion'
     | '/importaciones'
     | '/limpiezas'
+    | '/mantenimiento'
     | '/mi-dia'
     | '/programacion-limpiezas'
     | '/registre-horari'
@@ -176,6 +188,7 @@ export interface RootRouteChildren {
   ConfiguracionRoute: typeof ConfiguracionRoute
   ImportacionesRoute: typeof ImportacionesRoute
   LimpiezasRoute: typeof LimpiezasRoute
+  MantenimientoRoute: typeof MantenimientoRoute
   MiDiaRoute: typeof MiDiaRoute
   ProgramacionLimpiezasRoute: typeof ProgramacionLimpiezasRoute
   RegistreHorariRoute: typeof RegistreHorariRouteWithChildren
@@ -210,6 +223,13 @@ declare module '@tanstack/react-router' {
       path: '/mi-dia'
       fullPath: '/mi-dia'
       preLoaderRoute: typeof MiDiaRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/mantenimiento': {
+      id: '/mantenimiento'
+      path: '/mantenimiento'
+      fullPath: '/mantenimiento'
+      preLoaderRoute: typeof MantenimientoRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/limpiezas': {
@@ -292,6 +312,7 @@ const rootRouteChildren: RootRouteChildren = {
   ConfiguracionRoute: ConfiguracionRoute,
   ImportacionesRoute: ImportacionesRoute,
   LimpiezasRoute: LimpiezasRoute,
+  MantenimientoRoute: MantenimientoRoute,
   MiDiaRoute: MiDiaRoute,
   ProgramacionLimpiezasRoute: ProgramacionLimpiezasRoute,
   RegistreHorariRoute: RegistreHorariRouteWithChildren,
