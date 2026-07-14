@@ -1,11 +1,14 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Select, SelectContent, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { fullName } from "@/lib/types";
+import { getUnavailableWorkerIds } from "@/lib/worker-availability";
+import { WorkerSelectItem, unavailabilityWarningText } from "@/components/worker-select-item";
 import { PRIORIDAD_STYLE, type Incidencia, type PersonaLite, type Prioridad } from "@/lib/mantenimiento";
 
 export function AsignarDialog({
@@ -43,6 +46,20 @@ export function AsignarDialog({
     }
   }
 
+  const candidateIds = useMemo(() => {
+    const ids = new Set(workers.map((w) => w.id_persona));
+    if (workerId != null) ids.add(workerId);
+    return Array.from(ids);
+  }, [workers, workerId]);
+
+  const unavailableQ = useQuery({
+    queryKey: ["worker-unavailability", fecha, candidateIds],
+    enabled: !!inc && !!fecha && candidateIds.length > 0,
+    queryFn: () => getUnavailableWorkerIds(fecha, candidateIds),
+  });
+
+  const workerUnavailableReason = workerId != null ? unavailableQ.data?.get(workerId) : undefined;
+
   return (
     <Dialog open={!!inc} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-sm">
@@ -59,17 +76,30 @@ export function AsignarDialog({
               </SelectTrigger>
               <SelectContent>
                 {workers.map((w) => (
-                  <SelectItem key={w.id_persona} value={String(w.id_persona)}>
-                    {fullName(w)}
-                    {w.codigo ? ` (${w.codigo})` : ""}
-                  </SelectItem>
+                  <WorkerSelectItem
+                    key={w.id_persona}
+                    id_persona={w.id_persona}
+                    label={`${fullName(w)}${w.codigo ? ` (${w.codigo})` : ""}`}
+                    reason={unavailableQ.data?.get(w.id_persona)}
+                  />
                 ))}
               </SelectContent>
             </Select>
+            {workerUnavailableReason && (
+              <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                ⚠ Este trabajador {unavailabilityWarningText(workerUnavailableReason)} en la fecha prevista
+                seleccionada — revisa antes de confirmar.
+              </div>
+            )}
           </div>
           <div className="space-y-1.5">
             <Label className="text-xs">Fecha prevista (opcional)</Label>
             <Input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} />
+            {!fecha && (
+              <div className="text-xs text-muted-foreground">
+                Selecciona una fecha prevista para ver disponibilidad.
+              </div>
+            )}
           </div>
           <div className="space-y-1.5">
             <Label className="text-xs">Prioridad confirmada</Label>
