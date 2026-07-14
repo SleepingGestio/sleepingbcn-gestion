@@ -12,6 +12,7 @@ import { usePermissions } from "@/hooks/use-permissions";
 import { useMantenimientoActions, usePersonalLite, useApartamentosLite, useEspaciosLite } from "@/hooks/use-mantenimiento";
 import { TipoBadge, PrioridadPill, EstadoFullPill } from "@/components/mantenimiento-badges";
 import { AsignarDialog } from "@/components/mantenimiento-asignar-dialog";
+import { OcupacionPopoverTrigger } from "@/components/apartamento-ocupacion-calendario";
 import {
   INCIDENCIA_COLUMNS,
   REGISTRE_COLUMNS,
@@ -210,7 +211,10 @@ export function MantenimientoPopover({
                       {inc.id_assignat != null ? fullName(personaById.get(inc.id_assignat)) : "Sin asignar"}
                       <span className="text-muted-foreground">
                         {" "}
-                        · Prevista: {inc.data_prevista ? fmtDate(inc.data_prevista) : "Sin fecha prevista"}
+                        ·{" "}
+                        <OcupacionPopoverTrigger idApt={inc.id_apt} initialDateISO={inc.data_prevista}>
+                          Prevista: {inc.data_prevista ? fmtDate(inc.data_prevista) : "Sin fecha prevista"}
+                        </OcupacionPopoverTrigger>
                       </span>
                     </div>
                   </section>

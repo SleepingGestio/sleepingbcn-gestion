@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils";
 import { fullName } from "@/lib/types";
 import { getUnavailableWorkerIds } from "@/lib/worker-availability";
 import { WorkerSelectItem, unavailabilityWarningText } from "@/components/worker-select-item";
+import { ApartamentoOcupacionCalendario } from "@/components/apartamento-ocupacion-calendario";
 import { PRIORIDAD_STYLE, type Incidencia, type PersonaLite, type Prioridad } from "@/lib/mantenimiento";
 
 export function AsignarDialog({
@@ -101,6 +102,19 @@ export function AsignarDialog({
               </div>
             )}
           </div>
+          {inc?.id_apt != null && (
+            <div className="space-y-1.5">
+              <Label className="text-xs">Ocupación del apartamento</Label>
+              <div className="rounded-md border p-2">
+                <ApartamentoOcupacionCalendario
+                  key={openId ?? "none"}
+                  idApt={inc.id_apt}
+                  initialDateISO={fecha || null}
+                  onSelectDate={(iso) => setFecha(iso)}
+                />
+              </div>
+            </div>
+          )}
           <div className="space-y-1.5">
             <Label className="text-xs">Prioridad confirmada</Label>
             <div className="grid grid-cols-3 gap-2">

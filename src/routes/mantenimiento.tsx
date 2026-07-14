@@ -20,6 +20,7 @@ import {
 import { TipoBadge, PrioridadPill, EstadoPill } from "@/components/mantenimiento-badges";
 import { AsignarDialog } from "@/components/mantenimiento-asignar-dialog";
 import { MantenimientoPopover } from "@/components/mantenimiento-popover";
+import { OcupacionPopoverTrigger } from "@/components/apartamento-ocupacion-calendario";
 import {
   INCIDENCIA_COLUMNS,
   REGISTRE_COLUMNS,
@@ -429,7 +430,9 @@ function TareaRow({
         >
           <div className="flex items-center justify-between">
             <span className="text-muted-foreground">
-              Prevista: {inc.data_prevista ? fmtDate(inc.data_prevista) : "—"}
+              <OcupacionPopoverTrigger idApt={inc.id_apt} initialDateISO={inc.data_prevista}>
+                Prevista: {inc.data_prevista ? fmtDate(inc.data_prevista) : "—"}
+              </OcupacionPopoverTrigger>
             </span>
             <PrioridadPill prioridad={inc.prioritat_confirmada} />
           </div>
