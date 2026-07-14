@@ -316,16 +316,19 @@ function NuevaCard({
         if (e.key === "Enter" || e.key === " ") onOpenDetail();
       }}
     >
-      <div className="flex items-start justify-between gap-2">
-        <div className="font-medium text-sm leading-snug">{inc.titol}</div>
+      <div className="font-medium text-sm leading-snug">{inc.titol}</div>
+      <div className="flex items-center gap-1.5 flex-wrap">
+        <TipoBadge tipus={inc.tipus} />
         <PrioridadPill prioridad={inc.prioritat_proposta} />
       </div>
-      <TipoBadge tipus={inc.tipus} />
       <div className="text-xs text-muted-foreground flex items-center gap-1">
         <Home className="h-3 w-3 shrink-0" />
         {location}
       </div>
       <div className="text-xs text-muted-foreground">Reportado por {reporter}</div>
+      {inc.descripcio && (
+        <div className="text-xs text-muted-foreground line-clamp-2">{inc.descripcio}</div>
+      )}
       {editable && (
         <div className="flex gap-2 pt-1" onClick={(e) => e.stopPropagation()}>
           <Button
@@ -396,6 +399,9 @@ function TareaRow({
             <span>·</span>
             <span>{worker ? fullName(worker) : "Sin asignar"}</span>
           </div>
+          {inc.descripcio && (
+            <div className="text-xs text-muted-foreground line-clamp-2">{inc.descripcio}</div>
+          )}
           {editable && (
             <div className="flex gap-2 pt-1" onClick={(e) => e.stopPropagation()}>
               {inc.estat === "validada" && !hasOpenSession && (

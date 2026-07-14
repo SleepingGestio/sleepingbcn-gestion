@@ -26,7 +26,7 @@ export function PrioridadPill({ prioridad }: { prioridad: Prioridad | null }) {
   return (
     <span
       title={s.label}
-      className="inline-flex items-center justify-center rounded-full w-5 h-5 text-[10px] font-bold shrink-0"
+      className="inline-block rounded px-1.5 py-0.5 text-[10px] font-semibold shrink-0"
       style={{ backgroundColor: s.bg, color: s.fg }}
     >
       {s.letter}
