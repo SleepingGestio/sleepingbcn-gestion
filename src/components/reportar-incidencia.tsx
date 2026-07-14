@@ -8,13 +8,21 @@ import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { AlertTriangle, Wrench, PackageX, HelpCircle, Camera, Video, Mic, FileText, X } from "lucide-react";
 
-export type IncidenciaTipo = "averia_rotura" | "mantenimiento" | "material_danyat" | "altre";
+export type IncidenciaTipo = "averia_rotura" | "manteniment" | "material_danyat" | "altre";
 
 const TIPO_OPTIONS: { value: IncidenciaTipo; label: string; icon: typeof AlertTriangle }[] = [
   { value: "averia_rotura", label: "Avería / Rotura", icon: AlertTriangle },
-  { value: "mantenimiento", label: "Mantenimiento", icon: Wrench },
+  { value: "manteniment", label: "Mantenimiento", icon: Wrench },
   { value: "material_danyat", label: "Material dañado / reposición", icon: PackageX },
   { value: "altre", label: "Otro", icon: HelpCircle },
+];
+
+type Prioridad = "alta" | "normal" | "baixa";
+
+const PRIORIDAD_OPTIONS: { value: Prioridad; label: string }[] = [
+  { value: "alta", label: "Alta" },
+  { value: "normal", label: "Media" },
+  { value: "baixa", label: "Baja" },
 ];
 
 type AdjuntoTipo = "foto" | "video" | "audio" | "documento";
@@ -64,6 +72,7 @@ export function ReportarIncidenciaSheet({
   const [descripcion, setDescripcion] = useState("");
   const [materialRepuesto, setMaterialRepuesto] = useState(false);
   const [resueltaAlMomento, setResueltaAlMomento] = useState(false);
+  const [prioridad, setPrioridad] = useState<Prioridad>("normal");
   const [adjuntos, setAdjuntos] = useState<{ tipo: AdjuntoTipo; file: File }[]>([]);
   const [idApt, setIdApt] = useState<number | null>(null);
   const [idGrupo, setIdGrupo] = useState<number | null>(null);
@@ -75,6 +84,7 @@ export function ReportarIncidenciaSheet({
     setDescripcion("");
     setMaterialRepuesto(false);
     setResueltaAlMomento(false);
+    setPrioridad("normal");
     setAdjuntos([]);
     setIdApt(null);
     setIdGrupo(null);
@@ -114,24 +124,33 @@ export function ReportarIncidenciaSheet({
     setSaving(true);
     const nowIso = new Date().toISOString();
     const descTrim = descripcion.trim() || null;
+    const tipoLabel = TIPO_OPTIONS.find((o) => o.value === tipo)?.label ?? "";
+    const aptName =
+      context.origen === "neteja"
+        ? context.aptLabel
+        : context.apartamentos.find((a) => a.id_apt === idApt)?.nombre;
+    const titol = aptName ? `${tipoLabel} — ${aptName}` : tipoLabel;
     const payload: Record<string, unknown> = {
       tipus: tipo,
+      titol,
       descripcio: descTrim,
       origen: context.origen,
       id_reporter: reporterId,
       estat: resueltaAlMomento ? "finalitzada" : "pendent_validacio",
+      prioritat_proposta: prioridad,
     };
     if (context.origen === "neteja") {
       payload.id_apt = context.idApt;
-      payload.id_grupo = context.idGrupo;
+      payload.id_grup = context.idGrupo;
       payload.id_limpieza = context.idLimpieza;
     } else {
       payload.id_apt = idApt;
-      payload.id_grupo = idGrupo;
+      payload.id_grup = idGrupo;
     }
     if (resueltaAlMomento) {
-      payload.data_tancament = nowIso;
-      payload.tasca_realitzada = descTrim;
+      payload.iniciat_en = nowIso;
+      payload.finalitzat_en = nowIso;
+      payload.tasca_realitzada = true;
       if (tipo === "material_danyat") payload.material_reposat = materialRepuesto;
     }
     const { error } = await supabase.from("manteniment_incidencies").insert(payload);
@@ -284,6 +303,26 @@ export function ReportarIncidenciaSheet({
                     ))}
                   </div>
                 )}
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-xs">Prioridad</Label>
+                <div className="grid grid-cols-3 gap-2">
+                  {PRIORIDAD_OPTIONS.map((o) => (
+                    <button
+                      key={o.value}
+                      type="button"
+                      onClick={() => setPrioridad(o.value)}
+                      className={`h-9 rounded-md border text-sm font-medium transition-colors ${
+                        prioridad === o.value
+                          ? "border-[#26215C] bg-[#26215C]/10 text-[#26215C]"
+                          : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                      }`}
+                    >
+                      {o.label}
+                    </button>
+                  ))}
+                </div>
               </div>
 
               {tipo === "material_danyat" && (
