@@ -12,6 +12,7 @@ import { PersonalAdmin } from "@/components/personal-admin";
 import { ApartamentosAdmin } from "@/components/apartamentos-admin";
 import { RolesAdmin } from "@/components/roles-admin";
 import { TiposGenericasAdmin } from "@/components/tipos-genericas-admin";
+import { TiposEspacioComunAdmin } from "@/components/tipos-espacio-comun-admin";
 import { usePermissions } from "@/hooks/use-permissions";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -28,6 +29,7 @@ function ConfigPage() {
     { value: "personal", label: "Personal", visible: isAdmin || canView("config_personal") },
     { value: "apartamentos", label: "Apartamentos", visible: isAdmin || canView("config_apartamentos") },
     { value: "tasques", label: "Tareas genéricas", visible: isAdmin || canEdit("config_personal") },
+    { value: "espacios", label: "Espacios comunes", visible: isAdmin || canEdit("config_personal") },
     { value: "roles", label: "Roles", visible: isAdmin },
   ].filter((t) => t.visible);
   const defaultTab = tabs[0]?.value ?? "general";
@@ -85,6 +87,11 @@ function ConfigPage() {
         {(isAdmin || canEdit("config_personal")) && (
           <TabsContent value="tasques">
             <TiposGenericasAdmin />
+          </TabsContent>
+        )}
+        {(isAdmin || canEdit("config_personal")) && (
+          <TabsContent value="espacios">
+            <TiposEspacioComunAdmin />
           </TabsContent>
         )}
         {isAdmin && (

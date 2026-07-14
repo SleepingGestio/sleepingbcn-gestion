@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
@@ -76,7 +77,24 @@ export function ReportarIncidenciaSheet({
   const [adjuntos, setAdjuntos] = useState<{ tipo: AdjuntoTipo; file: File }[]>([]);
   const [idApt, setIdApt] = useState<number | null>(null);
   const [idGrupo, setIdGrupo] = useState<number | null>(null);
+  const [idEspacioComun, setIdEspacioComun] = useState<number | null>(null);
+  const [otroUbicacion, setOtroUbicacion] = useState(false);
   const [saving, setSaving] = useState(false);
+
+  const espaciosComunesQ = useQuery({
+    queryKey: ["espacios-comunes-activos"],
+    enabled: context.origen === "manteniment",
+    queryFn: async (): Promise<{ id_tipo: number; nombre: string }[]> => {
+      const { data, error } = await supabase
+        .from("tipos_espacio_comun")
+        .select("id_tipo,nombre")
+        .eq("activo", true)
+        .order("nombre");
+      if (error) throw error;
+      return (data ?? []) as { id_tipo: number; nombre: string }[];
+    },
+  });
+  const espaciosComunes = espaciosComunesQ.data ?? [];
 
   function reset() {
     setStep(1);
@@ -88,6 +106,8 @@ export function ReportarIncidenciaSheet({
     setAdjuntos([]);
     setIdApt(null);
     setIdGrupo(null);
+    setIdEspacioComun(null);
+    setOtroUbicacion(false);
     setSaving(false);
   }
 
@@ -117,18 +137,22 @@ export function ReportarIncidenciaSheet({
 
   async function submit() {
     if (!tipo) return;
-    if (context.origen === "manteniment" && idApt == null) {
-      toast.error("Selecciona un apartamento");
+    if (context.origen === "manteniment" && idApt == null && idEspacioComun == null && !otroUbicacion) {
+      toast.error("Selecciona una ubicación");
       return;
     }
     setSaving(true);
     const nowIso = new Date().toISOString();
     const descTrim = descripcion.trim() || null;
     const tipoLabel = TIPO_OPTIONS.find((o) => o.value === tipo)?.label ?? "";
+    const espacioComunNombre =
+      idEspacioComun != null ? espaciosComunes.find((e) => e.id_tipo === idEspacioComun)?.nombre : undefined;
     const aptName =
       context.origen === "neteja"
         ? context.aptLabel
-        : context.apartamentos.find((a) => a.id_apt === idApt)?.nombre;
+        : idApt != null
+          ? context.apartamentos.find((a) => a.id_apt === idApt)?.nombre
+          : espacioComunNombre;
     const titol = aptName ? `${tipoLabel} — ${aptName}` : tipoLabel;
     const payload: Record<string, unknown> = {
       tipus: tipo,
@@ -146,6 +170,7 @@ export function ReportarIncidenciaSheet({
     } else {
       payload.id_apt = idApt;
       payload.id_grup = idGrupo;
+      payload.id_tipo_espacio_comun = idEspacioComun;
     }
     if (resueltaAlMomento) {
       payload.iniciat_en = nowIso;
@@ -237,16 +262,41 @@ export function ReportarIncidenciaSheet({
                     </select>
                   </div>
                   <div className="space-y-1">
-                    <Label className="text-xs">Apartamento *</Label>
+                    <Label className="text-xs">Ubicación *</Label>
                     <select
-                      value={idApt ?? ""}
-                      onChange={(e) => setIdApt(e.target.value ? Number(e.target.value) : null)}
+                      value={
+                        idApt != null
+                          ? `apt-${idApt}`
+                          : idEspacioComun != null
+                            ? `esp-${idEspacioComun}`
+                            : otroUbicacion
+                              ? "otro"
+                              : ""
+                      }
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        setIdApt(v.startsWith("apt-") ? Number(v.slice(4)) : null);
+                        setIdEspacioComun(v.startsWith("esp-") ? Number(v.slice(4)) : null);
+                        setOtroUbicacion(v === "otro");
+                      }}
                       className="w-full h-9 rounded-md border border-input bg-transparent px-3 text-sm"
                     >
                       <option value="">— Selecciona —</option>
-                      {filteredApts.map((a) => (
-                        <option key={a.id_apt} value={a.id_apt}>{a.nombre}</option>
-                      ))}
+                      {filteredApts.length > 0 && (
+                        <optgroup label="Apartamentos">
+                          {filteredApts.map((a) => (
+                            <option key={`apt-${a.id_apt}`} value={`apt-${a.id_apt}`}>{a.nombre}</option>
+                          ))}
+                        </optgroup>
+                      )}
+                      {espaciosComunes.length > 0 && (
+                        <optgroup label="Espacios comunes">
+                          {espaciosComunes.map((esp) => (
+                            <option key={`esp-${esp.id_tipo}`} value={`esp-${esp.id_tipo}`}>{esp.nombre}</option>
+                          ))}
+                        </optgroup>
+                      )}
+                      <option value="otro">Otro (especificar en descripción)</option>
                     </select>
                   </div>
                 </div>
@@ -343,7 +393,10 @@ export function ReportarIncidenciaSheet({
                 </Button>
                 <Button
                   className="flex-1 h-12 bg-[#26215C] hover:bg-[#1e1a48] text-white"
-                  disabled={saving || (context.origen === "manteniment" && idApt == null)}
+                  disabled={
+                    saving ||
+                    (context.origen === "manteniment" && idApt == null && idEspacioComun == null && !otroUbicacion)
+                  }
                   onClick={submit}
                 >
                   {saving ? "Enviando…" : "Enviar incidencia"}
