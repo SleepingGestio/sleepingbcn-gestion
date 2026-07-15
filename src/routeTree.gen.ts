@@ -13,6 +13,7 @@ import { Route as ReservasRouteImport } from './routes/reservas'
 import { Route as RegistreHorariRouteImport } from './routes/registre-horari'
 import { Route as ProgramacionLimpiezasRouteImport } from './routes/programacion-limpiezas'
 import { Route as MiDiaRouteImport } from './routes/mi-dia'
+import { Route as McpRouteImport } from './routes/mcp'
 import { Route as MantenimientoRouteImport } from './routes/mantenimiento'
 import { Route as LimpiezasRouteImport } from './routes/limpiezas'
 import { Route as ImportacionesRouteImport } from './routes/importaciones'
@@ -22,6 +23,10 @@ import { Route as CheckinsRouteImport } from './routes/checkins'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as RegistreHorariIndexRouteImport } from './routes/registre-horari.index'
 import { Route as RegistreHorariIdRouteImport } from './routes/registre-horari.$id'
+import { Route as Char91DotwellKnownChar93OauthProtectedResourceRouteImport } from './routes/[.well-known]/oauth-protected-resource'
+import { Route as Char91DotmcpChar93ListToolsRouteImport } from './routes/[.mcp]/list-tools'
+import { Route as Char91DotmcpChar93InvokeToolToolRouteImport } from './routes/[.mcp]/invoke-tool/$tool'
+import { Route as DotlovableOauthConsentRouteImport } from './routes/[.]lovable.oauth.consent'
 
 const ReservasRoute = ReservasRouteImport.update({
   id: '/reservas',
@@ -41,6 +46,11 @@ const ProgramacionLimpiezasRoute = ProgramacionLimpiezasRouteImport.update({
 const MiDiaRoute = MiDiaRouteImport.update({
   id: '/mi-dia',
   path: '/mi-dia',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const McpRoute = McpRouteImport.update({
+  id: '/mcp',
+  path: '/mcp',
   getParentRoute: () => rootRouteImport,
 } as any)
 const MantenimientoRoute = MantenimientoRouteImport.update({
@@ -88,6 +98,29 @@ const RegistreHorariIdRoute = RegistreHorariIdRouteImport.update({
   path: '/$id',
   getParentRoute: () => RegistreHorariRoute,
 } as any)
+const Char91DotwellKnownChar93OauthProtectedResourceRoute =
+  Char91DotwellKnownChar93OauthProtectedResourceRouteImport.update({
+    id: '/.well-known/oauth-protected-resource',
+    path: '/.well-known/oauth-protected-resource',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const Char91DotmcpChar93ListToolsRoute =
+  Char91DotmcpChar93ListToolsRouteImport.update({
+    id: '/.mcp/list-tools',
+    path: '/.mcp/list-tools',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const Char91DotmcpChar93InvokeToolToolRoute =
+  Char91DotmcpChar93InvokeToolToolRouteImport.update({
+    id: '/.mcp/invoke-tool/$tool',
+    path: '/.mcp/invoke-tool/$tool',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const DotlovableOauthConsentRoute = DotlovableOauthConsentRouteImport.update({
+  id: '/.lovable/oauth/consent',
+  path: '/.lovable/oauth/consent',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -97,12 +130,17 @@ export interface FileRoutesByFullPath {
   '/importaciones': typeof ImportacionesRoute
   '/limpiezas': typeof LimpiezasRoute
   '/mantenimiento': typeof MantenimientoRoute
+  '/mcp': typeof McpRoute
   '/mi-dia': typeof MiDiaRoute
   '/programacion-limpiezas': typeof ProgramacionLimpiezasRoute
   '/registre-horari': typeof RegistreHorariRouteWithChildren
   '/reservas': typeof ReservasRoute
+  '/.mcp/list-tools': typeof Char91DotmcpChar93ListToolsRoute
+  '/.well-known/oauth-protected-resource': typeof Char91DotwellKnownChar93OauthProtectedResourceRoute
   '/registre-horari/$id': typeof RegistreHorariIdRoute
   '/registre-horari/': typeof RegistreHorariIndexRoute
+  '/.lovable/oauth/consent': typeof DotlovableOauthConsentRoute
+  '/.mcp/invoke-tool/$tool': typeof Char91DotmcpChar93InvokeToolToolRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -112,11 +150,16 @@ export interface FileRoutesByTo {
   '/importaciones': typeof ImportacionesRoute
   '/limpiezas': typeof LimpiezasRoute
   '/mantenimiento': typeof MantenimientoRoute
+  '/mcp': typeof McpRoute
   '/mi-dia': typeof MiDiaRoute
   '/programacion-limpiezas': typeof ProgramacionLimpiezasRoute
   '/reservas': typeof ReservasRoute
+  '/.mcp/list-tools': typeof Char91DotmcpChar93ListToolsRoute
+  '/.well-known/oauth-protected-resource': typeof Char91DotwellKnownChar93OauthProtectedResourceRoute
   '/registre-horari/$id': typeof RegistreHorariIdRoute
   '/registre-horari': typeof RegistreHorariIndexRoute
+  '/.lovable/oauth/consent': typeof DotlovableOauthConsentRoute
+  '/.mcp/invoke-tool/$tool': typeof Char91DotmcpChar93InvokeToolToolRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -127,12 +170,17 @@ export interface FileRoutesById {
   '/importaciones': typeof ImportacionesRoute
   '/limpiezas': typeof LimpiezasRoute
   '/mantenimiento': typeof MantenimientoRoute
+  '/mcp': typeof McpRoute
   '/mi-dia': typeof MiDiaRoute
   '/programacion-limpiezas': typeof ProgramacionLimpiezasRoute
   '/registre-horari': typeof RegistreHorariRouteWithChildren
   '/reservas': typeof ReservasRoute
+  '/.mcp/list-tools': typeof Char91DotmcpChar93ListToolsRoute
+  '/.well-known/oauth-protected-resource': typeof Char91DotwellKnownChar93OauthProtectedResourceRoute
   '/registre-horari/$id': typeof RegistreHorariIdRoute
   '/registre-horari/': typeof RegistreHorariIndexRoute
+  '/.lovable/oauth/consent': typeof DotlovableOauthConsentRoute
+  '/.mcp/invoke-tool/$tool': typeof Char91DotmcpChar93InvokeToolToolRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -144,12 +192,17 @@ export interface FileRouteTypes {
     | '/importaciones'
     | '/limpiezas'
     | '/mantenimiento'
+    | '/mcp'
     | '/mi-dia'
     | '/programacion-limpiezas'
     | '/registre-horari'
     | '/reservas'
+    | '/.mcp/list-tools'
+    | '/.well-known/oauth-protected-resource'
     | '/registre-horari/$id'
     | '/registre-horari/'
+    | '/.lovable/oauth/consent'
+    | '/.mcp/invoke-tool/$tool'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -159,11 +212,16 @@ export interface FileRouteTypes {
     | '/importaciones'
     | '/limpiezas'
     | '/mantenimiento'
+    | '/mcp'
     | '/mi-dia'
     | '/programacion-limpiezas'
     | '/reservas'
+    | '/.mcp/list-tools'
+    | '/.well-known/oauth-protected-resource'
     | '/registre-horari/$id'
     | '/registre-horari'
+    | '/.lovable/oauth/consent'
+    | '/.mcp/invoke-tool/$tool'
   id:
     | '__root__'
     | '/'
@@ -173,12 +231,17 @@ export interface FileRouteTypes {
     | '/importaciones'
     | '/limpiezas'
     | '/mantenimiento'
+    | '/mcp'
     | '/mi-dia'
     | '/programacion-limpiezas'
     | '/registre-horari'
     | '/reservas'
+    | '/.mcp/list-tools'
+    | '/.well-known/oauth-protected-resource'
     | '/registre-horari/$id'
     | '/registre-horari/'
+    | '/.lovable/oauth/consent'
+    | '/.mcp/invoke-tool/$tool'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -189,10 +252,15 @@ export interface RootRouteChildren {
   ImportacionesRoute: typeof ImportacionesRoute
   LimpiezasRoute: typeof LimpiezasRoute
   MantenimientoRoute: typeof MantenimientoRoute
+  McpRoute: typeof McpRoute
   MiDiaRoute: typeof MiDiaRoute
   ProgramacionLimpiezasRoute: typeof ProgramacionLimpiezasRoute
   RegistreHorariRoute: typeof RegistreHorariRouteWithChildren
   ReservasRoute: typeof ReservasRoute
+  Char91DotmcpChar93ListToolsRoute: typeof Char91DotmcpChar93ListToolsRoute
+  Char91DotwellKnownChar93OauthProtectedResourceRoute: typeof Char91DotwellKnownChar93OauthProtectedResourceRoute
+  DotlovableOauthConsentRoute: typeof DotlovableOauthConsentRoute
+  Char91DotmcpChar93InvokeToolToolRoute: typeof Char91DotmcpChar93InvokeToolToolRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -223,6 +291,13 @@ declare module '@tanstack/react-router' {
       path: '/mi-dia'
       fullPath: '/mi-dia'
       preLoaderRoute: typeof MiDiaRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/mcp': {
+      id: '/mcp'
+      path: '/mcp'
+      fullPath: '/mcp'
+      preLoaderRoute: typeof McpRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/mantenimiento': {
@@ -288,6 +363,34 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof RegistreHorariIdRouteImport
       parentRoute: typeof RegistreHorariRoute
     }
+    '/.well-known/oauth-protected-resource': {
+      id: '/.well-known/oauth-protected-resource'
+      path: '/.well-known/oauth-protected-resource'
+      fullPath: '/.well-known/oauth-protected-resource'
+      preLoaderRoute: typeof Char91DotwellKnownChar93OauthProtectedResourceRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/.mcp/list-tools': {
+      id: '/.mcp/list-tools'
+      path: '/.mcp/list-tools'
+      fullPath: '/.mcp/list-tools'
+      preLoaderRoute: typeof Char91DotmcpChar93ListToolsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/.mcp/invoke-tool/$tool': {
+      id: '/.mcp/invoke-tool/$tool'
+      path: '/.mcp/invoke-tool/$tool'
+      fullPath: '/.mcp/invoke-tool/$tool'
+      preLoaderRoute: typeof Char91DotmcpChar93InvokeToolToolRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/.lovable/oauth/consent': {
+      id: '/.lovable/oauth/consent'
+      path: '/.lovable/oauth/consent'
+      fullPath: '/.lovable/oauth/consent'
+      preLoaderRoute: typeof DotlovableOauthConsentRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -313,10 +416,16 @@ const rootRouteChildren: RootRouteChildren = {
   ImportacionesRoute: ImportacionesRoute,
   LimpiezasRoute: LimpiezasRoute,
   MantenimientoRoute: MantenimientoRoute,
+  McpRoute: McpRoute,
   MiDiaRoute: MiDiaRoute,
   ProgramacionLimpiezasRoute: ProgramacionLimpiezasRoute,
   RegistreHorariRoute: RegistreHorariRouteWithChildren,
   ReservasRoute: ReservasRoute,
+  Char91DotmcpChar93ListToolsRoute: Char91DotmcpChar93ListToolsRoute,
+  Char91DotwellKnownChar93OauthProtectedResourceRoute:
+    Char91DotwellKnownChar93OauthProtectedResourceRoute,
+  DotlovableOauthConsentRoute: DotlovableOauthConsentRoute,
+  Char91DotmcpChar93InvokeToolToolRoute: Char91DotmcpChar93InvokeToolToolRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

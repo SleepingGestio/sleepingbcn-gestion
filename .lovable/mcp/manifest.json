@@ -1,0 +1,64 @@
+{
+  "version": 1,
+  "sdk_version": "0.22.2",
+  "path": "/mcp",
+  "auth": {
+    "type": "oauth",
+    "issuer": "https://oyrjnlmxvgismozbgesa.supabase.co/auth/v1",
+    "accepted_audiences": [
+      "authenticated"
+    ]
+  },
+  "mcp": {
+    "server": {
+      "name": "sleepingbcn-mcp",
+      "version": "0.1.0",
+      "title": "SleepingBCN"
+    },
+    "tools": [
+      {
+        "name": "whoami",
+        "title": "Qui sóc",
+        "description": "Retorna el perfil de l'usuari autenticat (id_persona, nom, codi, rols) tal com està registrat a l'app SleepingBCN.",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "type": "object",
+          "properties": {}
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "list_my_hour_adjustments",
+        "title": "Els meus ajustos d'hores",
+        "description": "Llista els ajustos manuals d'hores (personal_ajustos_hores) de l'usuari autenticat, filtrats opcionalment per rang de dates (YYYY-MM-DD).",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "type": "object",
+          "properties": {
+            "from": {
+              "description": "Data d'inici inclosa, format YYYY-MM-DD.",
+              "type": "string",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+            },
+            "to": {
+              "description": "Data final inclosa, format YYYY-MM-DD.",
+              "type": "string",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+            }
+          }
+        },
+        "outputSchema": null
+      }
+    ]
+  }
+}
