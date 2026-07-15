@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import type { TablesUpdate } from "@/integrations/supabase/types";
 import { toast } from "sonner";
 import { fetchMantenimiento } from "@/lib/catalogos";
 import { useCurrentPersonal } from "@/hooks/use-current-personal";
@@ -99,6 +100,10 @@ export function useMantenimientoActions(onMutated?: () => void) {
   }
 
   async function iniciar(inc: Pick<Incidencia, "id_incidencia" | "id_assignat" | "iniciat_en">) {
+    if (inc.id_assignat == null) {
+      toast.error("La incidencia no tiene un operario asignado");
+      return;
+    }
     const nowIso = new Date().toISOString();
     const { error: e1 } = await supabase.from("manteniment_registre").insert({
       id_incidencia: inc.id_incidencia,
@@ -109,7 +114,7 @@ export function useMantenimientoActions(onMutated?: () => void) {
       toast.error("Error: " + e1.message);
       return;
     }
-    const patch: Record<string, unknown> = { estat: "en_curs" };
+    const patch: TablesUpdate<"manteniment_incidencies"> = { estat: "en_curs" };
     if (!inc.iniciat_en) patch.iniciat_en = nowIso;
     const { error: e2 } = await supabase
       .from("manteniment_incidencies")

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import type { TablesUpdate } from "@/integrations/supabase/types";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -533,16 +534,16 @@ function PersonaDialog({
     if (!nombre.trim()) { toast.error("El nombre es obligatorio"); return null; }
     const newMail = mail.trim() || null;
     const mailChanged = persona ? newMail !== (persona.mail ?? null) : false;
-    const payload: Record<string, unknown> = {
+    const payload = {
       nombre: nombre.trim(),
       apellidos: apellidos.trim() || null,
-      codigo: codigo.trim() || null,
+      codigo: codigo.trim(),
       telefono: telefono.trim() || null,
       mail: newMail,
       tipo_contrato: tipoContrato,
       control_horario: controlHorario,
-    };
-    if (mailChanged) payload.onboarding_completat = false;
+      ...(mailChanged ? { onboarding_completat: false } : {}),
+    } satisfies TablesUpdate<"personal">;
     let id_persona: number;
     if (persona) {
       const { error } = await supabase.from("personal").update(payload).eq("id_persona", persona.id_persona);

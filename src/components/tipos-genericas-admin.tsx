@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import type { TablesInsert } from "@/integrations/supabase/types";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -197,7 +198,7 @@ function CreateTaskModal({
     const n = nombre.toUpperCase().trim();
     if (!n) { toast.error("Indica un nombre"); return; }
     setBusy(true);
-    const payload: Record<string, unknown> = {
+    const payload: TablesInsert<"tipos_tarea_generica"> = {
       nombre: n,
       actiu,
       orden: nextOrden,

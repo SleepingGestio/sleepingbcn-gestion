@@ -376,7 +376,7 @@ function GrupoDialog({
         .from("grupos_apartamentos")
         .update({
           nombre: form.nombre,
-          orden: form.orden,
+          orden: form.orden ?? 0,
           mostrar_por_defecto: !!form.mostrar_por_defecto,
         })
         .eq("id_grupo", grupo.id_grupo);

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import type { TablesInsert } from "@/integrations/supabase/types";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -154,7 +155,7 @@ export function ReportarIncidenciaSheet({
           ? context.apartamentos.find((a) => a.id_apt === idApt)?.nombre
           : espacioComunNombre;
     const titol = aptName ? `${tipoLabel} — ${aptName}` : tipoLabel;
-    const payload: Record<string, unknown> = {
+    const payload: TablesInsert<"manteniment_incidencies"> = {
       tipus: tipo,
       titol,
       descripcio: descTrim,

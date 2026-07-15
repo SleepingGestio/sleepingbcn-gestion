@@ -278,7 +278,7 @@ function ComunicarTareasPage() {
     const { error } = await supabase
       .from("comunicaciones_dia")
       .upsert(
-        { worker: workerId, fecha, observaciones: value || null },
+        { worker: workerId, fecha, observaciones: value },
         { onConflict: "worker,fecha" },
       );
     if (error) toast.error("Error notas: " + error.message);

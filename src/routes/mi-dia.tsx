@@ -2,6 +2,7 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useMemo, useState, useEffect, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import type { TablesInsert } from "@/integrations/supabase/types";
 import { useCurrentPersonal } from "@/hooks/use-current-personal";
 import { usePermissions } from "@/hooks/use-permissions";
 import { useAuth } from "@/hooks/use-auth";
@@ -49,26 +50,26 @@ type Limpieza = {
   numero_reserva: string | null;
   id_apt: number;
   fecha_limpieza: string;
-  tipo: string | null;
+  tipo: string;
   hora_out_time: string | null;
-  hora_out_informed: boolean | null;
+  hora_out_informed: boolean;
   hora_in_time: string | null;
-  hora_in_informed: boolean | null;
+  hora_in_informed: boolean;
   worker: number | null;
   orden_trabajo: number | null;
-  prioritaria: boolean | null;
+  prioritaria: boolean;
   prioritaria_manual: boolean | null;
-  sfc_montar: boolean | null;
-  sfc_desmontar: boolean | null;
-  check_checkin: boolean | null;
-  check_tasas: boolean | null;
-  check_toallas: boolean | null;
-  check_sabanas: boolean | null;
-  check_limpieza_basica: boolean | null;
-  check_limpieza_completa: boolean | null;
+  sfc_montar: boolean;
+  sfc_desmontar: boolean;
+  check_checkin: boolean;
+  check_tasas: boolean;
+  check_toallas: boolean;
+  check_sabanas: boolean;
+  check_limpieza_basica: boolean;
+  check_limpieza_completa: boolean;
   observaciones: string | null;
   incidencias: string | null;
-  estado: string | null;
+  estado: string;
   iniciada_en: string | null;
   finalizada_en: string | null;
   rechazada_en: string | null;
@@ -608,7 +609,7 @@ function WorkerView({
         fichajeId = (f as { id_fichaje: number }).id_fichaje;
       }
       // 2. Insert registre genèric
-      const payload: Record<string, unknown> = {
+      const payload: TablesInsert<"registre_temps_generic"> = {
         id_persona: personalId,
         id_tipus: idTipus,
         inici: nowIso,
