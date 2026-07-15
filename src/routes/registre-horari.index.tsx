@@ -1,10 +1,12 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { AppShell } from "@/components/app-shell";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, GripVertical } from "lucide-react";
+import { usePermissions } from "@/hooks/use-permissions";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/registre-horari/")({
   component: RegistreHorariPage,
@@ -22,6 +24,7 @@ type Persona = {
   tipo_contrato: string | null;
   horas_objetivo_mes: number | null;
   control_horario: boolean | null;
+  orden_dashboard: number | null;
 };
 
 type ActivePeriod = {
@@ -55,6 +58,8 @@ function RegistreHorariPage() {
   const [year, setYear] = useState(today.getFullYear());
   const [month0, setMonth0] = useState(today.getMonth());
   const { start, end } = monthRange(year, month0);
+  const { canEdit } = usePermissions();
+  const canEditDashboard = canEdit("registre_horari");
 
   function prevMonth() {
     const d = new Date(year, month0 - 1, 1);
@@ -71,18 +76,66 @@ function RegistreHorariPage() {
     queryKey: ["reg-horari-workers"],
     queryFn: async (): Promise<Persona[]> => {
       const { data, error } = await supabase
-        .from("personal")
-        .select("id_persona, nombre, apellidos, tipo_contrato, horas_objetivo_mes, control_horario")
+        .from("personal" as never)
+        .select("id_persona, nombre, apellidos, tipo_contrato, horas_objetivo_mes, control_horario, orden_dashboard")
         .eq("activo", true)
         .eq("control_horario", true)
-        .order("nombre");
+        .order("orden_dashboard", { ascending: true, nullsFirst: false })
+        .order("nombre", { ascending: true });
       if (error) throw error;
-      return (data ?? []) as Persona[];
+      return (data ?? []) as unknown as Persona[];
     },
   });
 
   const workers = workersQ.data ?? [];
   const workerIds = useMemo(() => workers.map((w) => w.id_persona), [workers]);
+
+  // Optimistic reorder: while a drag-persist mutation is in flight, show the
+  // dropped order immediately instead of waiting for the refetch round-trip.
+  const [orderOverride, setOrderOverride] = useState<number[] | null>(null);
+  const [dragId, setDragId] = useState<number | null>(null);
+
+  const displayedWorkers = useMemo(() => {
+    if (!orderOverride) return workers;
+    const byId = new Map(workers.map((w) => [w.id_persona, w]));
+    const ordered = orderOverride.map((id) => byId.get(id)).filter((w): w is Persona => !!w);
+    // Any worker not covered by the override (e.g. list changed underneath) is appended.
+    for (const w of workers) if (!orderOverride.includes(w.id_persona)) ordered.push(w);
+    return ordered;
+  }, [workers, orderOverride]);
+
+  const reorderM = useMutation({
+    mutationFn: async (orderedIds: number[]) => {
+      const results = await Promise.all(
+        orderedIds.map((id, idx) =>
+          supabase.from("personal" as never).update({ orden_dashboard: idx + 1 } as never).eq("id_persona", id),
+        ),
+      );
+      const firstError = results.find((r) => r.error)?.error;
+      if (firstError) throw firstError;
+    },
+    onSuccess: () => {
+      setOrderOverride(null);
+      workersQ.refetch();
+    },
+    onError: (e) => {
+      setOrderOverride(null);
+      toast.error("Error al reordenar: " + (e as Error).message);
+    },
+  });
+
+  function handleDrop(targetId: number) {
+    if (!canEditDashboard || dragId == null || dragId === targetId) return;
+    const current = (orderOverride ?? workers.map((w) => w.id_persona)).slice();
+    const fromIdx = current.indexOf(dragId);
+    const toIdx = current.indexOf(targetId);
+    if (fromIdx === -1 || toIdx === -1) return;
+    current.splice(fromIdx, 1);
+    current.splice(toIdx, 0, dragId);
+    setOrderOverride(current);
+    reorderM.mutate(current);
+    setDragId(null);
+  }
 
   const activePeriodsQ = useQuery({
     queryKey: ["reg-horari-active-periods", workerIds.join(",")],
@@ -213,15 +266,24 @@ function RegistreHorariPage() {
         </div>
       ) : (
         <div className="rounded-xl border bg-card p-4 md:p-6">
-          <div className="flex items-end justify-around gap-3 md:gap-6 overflow-x-auto min-h-[320px]">
-            {workers.map((w) => (
-              <WorkerColumn
+          <div className="flex items-end justify-around gap-3 md:gap-6 overflow-x-auto min-h-[340px]">
+            {displayedWorkers.map((w) => (
+              <div
                 key={w.id_persona}
-                worker={w}
-                actual={hoursByWorker.get(w.id_persona) ?? 0}
-                objective={objectiveForWorker(w)}
-                maxScale={maxScale}
-              />
+                draggable={canEditDashboard}
+                onDragStart={() => canEditDashboard && setDragId(w.id_persona)}
+                onDragOver={(e) => canEditDashboard && e.preventDefault()}
+                onDrop={() => handleDrop(w.id_persona)}
+                className={canEditDashboard ? "cursor-grab active:cursor-grabbing" : undefined}
+              >
+                <WorkerColumn
+                  worker={w}
+                  actual={hoursByWorker.get(w.id_persona) ?? 0}
+                  objective={objectiveForWorker(w)}
+                  maxScale={maxScale}
+                  showGrip={canEditDashboard}
+                />
+              </div>
             ))}
           </div>
         </div>
@@ -232,17 +294,20 @@ function RegistreHorariPage() {
 }
 
 const BAR_MAX_PX = 240;
+const LABEL_SPACE_PX = 40;
 
 function WorkerColumn({
   worker,
   actual,
   objective,
   maxScale,
+  showGrip,
 }: {
   worker: Persona;
   actual: number;
   objective: number | null;
   maxScale: number;
+  showGrip: boolean;
 }) {
   const isAutonom = worker.tipo_contrato === "autonomo";
   const hasObjective = !isAutonom && objective != null && objective > 0;
@@ -259,37 +324,65 @@ function WorkerColumn({
   const objPx = hasObjective ? Math.round(((objective as number) / maxScale) * BAR_MAX_PX) : 0;
 
   const saldo = hasObjective ? actual - (objective as number) : 0;
+  const deltaText = `${saldo >= 0 ? "+" : ""}${fmtHours(saldo)}`;
+  const objIsShorter = hasObjective && objPx < actualPx;
+  const actualIsShorter = hasObjective && actualPx < objPx;
   const firstName = (worker.nombre ?? "").split(" ")[0] || "—";
 
   return (
     <div className="flex flex-col items-center min-w-[110px]">
-      <div className="flex items-end gap-1.5 h-[240px]">
+      {showGrip && <GripVertical className="h-3.5 w-3.5 text-muted-foreground/50 mb-1" />}
+      <div className="flex items-end gap-2" style={{ height: `${BAR_MAX_PX + LABEL_SPACE_PX}px`, paddingTop: `${LABEL_SPACE_PX}px` }}>
         {hasObjective && (
-          <div
-            className="w-8 rounded-t bg-slate-300"
-            style={{ height: `${objPx}px` }}
-            title={`Objetivo: ${fmtHours(objective as number)}`}
-          />
+          <div className="relative flex flex-col items-center" style={{ width: 32 }}>
+            <div className="absolute bottom-full mb-1 flex flex-col items-center gap-0.5 whitespace-nowrap">
+              {objIsShorter && (
+                <span
+                  className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full leading-none ${
+                    saldo >= 0 ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-700"
+                  }`}
+                >
+                  {deltaText}
+                </span>
+              )}
+              <span className="text-[12px] font-semibold leading-none text-slate-500">
+                {fmtHours(objective as number)}
+              </span>
+            </div>
+            <div
+              className="w-8 rounded-t bg-slate-300"
+              style={{ height: `${objPx}px` }}
+              title={`Objetivo: ${fmtHours(objective as number)}`}
+            />
+          </div>
         )}
-        <div
-          className="w-8 rounded-t"
-          style={{ height: `${actualPx}px`, backgroundColor: color }}
-          title={`Reales: ${fmtHours(actual)}`}
-        />
+        <div className="relative flex flex-col items-center" style={{ width: 32 }}>
+          <div className="absolute bottom-full mb-1 flex flex-col items-center gap-0.5 whitespace-nowrap">
+            {actualIsShorter && (
+              <span
+                className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full leading-none ${
+                  saldo >= 0 ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-700"
+                }`}
+              >
+                {deltaText}
+              </span>
+            )}
+            {!hasObjective && (
+              <span className="text-[10px] text-muted-foreground leading-none">autónomo</span>
+            )}
+            <span className="text-[12px] font-semibold leading-none" style={{ color }}>
+              {fmtHours(actual)}
+            </span>
+          </div>
+          <div
+            className="w-8 rounded-t"
+            style={{ height: `${actualPx}px`, backgroundColor: color }}
+            title={`Reales: ${fmtHours(actual)}`}
+          />
+        </div>
       </div>
       <div className="mt-3 text-center">
         <div className="text-[14px] font-semibold truncate max-w-[110px]">{firstName}</div>
-        <div className="text-[13px] text-muted-foreground">
-          {fmtHours(actual)} / {hasObjective ? fmtHours(objective as number) : "autónomo"}
-        </div>
-        {hasObjective && (
-          <div
-            className={`text-[15px] font-bold tabular-nums ${saldo >= 0 ? "text-emerald-600" : "text-red-600"}`}
-          >
-            {saldo >= 0 ? "+" : ""}
-            {fmtHours(saldo)}
-          </div>
-        )}
         <Button asChild variant="outline" size="sm" className="mt-2">
           <Link to="/registre-horari/$id" params={{ id: String(worker.id_persona) }}>
             Detalle
