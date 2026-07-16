@@ -26,6 +26,15 @@ export async function fetchLimpiadores(): Promise<PersLimp[]> {
   return fetchPersonalByRole("Limpieza");
 }
 
-export async function fetchMantenimiento(): Promise<PersLimp[]> {
-  return fetchPersonalByRole("Mantenimiento");
+// Any active worker can be assigned a maintenance incidencia — not just
+// personal with the "Mantenimiento" role (e.g. a cleaner occasionally
+// assigned a task, see mi-dia.tsx's non-Mantenimiento task card support).
+export async function fetchActivePersonal(): Promise<PersLimp[]> {
+  const { data, error } = await supabase
+    .from("personal")
+    .select("id_persona, nombre, apellidos, codigo")
+    .eq("activo", true)
+    .order("nombre");
+  if (error) throw error;
+  return (data ?? []) as PersLimp[];
 }

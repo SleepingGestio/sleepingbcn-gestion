@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import type { TablesUpdate } from "@/integrations/supabase/types";
 import { toast } from "sonner";
-import { fetchMantenimiento } from "@/lib/catalogos";
+import { fetchActivePersonal } from "@/lib/catalogos";
 import { useCurrentPersonal } from "@/hooks/use-current-personal";
 import { findOpenSession, type AptLite, type EspacioLite, type GrupoLite, type Incidencia, type PersonaLite, type Prioridad, type Registre } from "@/lib/mantenimiento";
 
@@ -58,8 +58,10 @@ export function useGruposLite() {
   });
 }
 
+// Any active worker is assignable to a maintenance incidencia, not just
+// those with the "Mantenimiento" role — see fetchActivePersonal.
 export function useMantenimientoWorkers() {
-  return useQuery({ queryKey: ["mantenimiento-workers"], queryFn: fetchMantenimiento });
+  return useQuery({ queryKey: ["mantenimiento-assignable-workers"], queryFn: fetchActivePersonal });
 }
 
 /**
