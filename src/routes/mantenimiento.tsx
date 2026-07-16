@@ -508,12 +508,12 @@ function TareaRow({
           <div className="flex items-center gap-2 flex-wrap">
             <TipoBadge tipus={inc.tipus} />
             <EstadoPill estat={inc.estat} />
-          </div>
-          <div className="flex items-center gap-1.5 text-xs text-foreground">
-            <Home className="h-3 w-3 shrink-0" />
-            <span>{location}</span>
-            <span>·</span>
-            <span>{worker ? fullName(worker) : "Sin asignar"}</span>
+            <div className="flex items-center gap-1.5 text-xs text-foreground">
+              <Home className="h-3 w-3 shrink-0" />
+              <span>{location}</span>
+              <span>·</span>
+              <span>{worker ? fullName(worker) : "Sin asignar"}</span>
+            </div>
           </div>
           {inc.descripcio && (
             <div className="text-sm text-foreground font-medium line-clamp-2">{inc.descripcio}</div>
@@ -544,7 +544,7 @@ function TareaRow({
           )}
         </div>
         <div
-          className="shrink-0 flex flex-col justify-center gap-1 px-3 py-2 text-xs leading-tight min-w-[210px] max-w-[340px] md:w-60 md:min-w-60 md:max-w-60"
+          className="shrink-0 flex flex-col justify-center gap-1 px-3 py-2 text-xs leading-tight min-w-[210px] max-w-[340px] md:w-[360px] md:min-w-[360px] md:max-w-[360px]"
           style={{
             backgroundColor: panel.bg,
             borderLeft: panel.borderColor ? `3px solid ${panel.borderColor}` : undefined,
