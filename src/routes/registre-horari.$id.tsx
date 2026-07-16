@@ -31,6 +31,8 @@ import { toast } from "sonner";
 import { LimpiezaPopover, type Limpieza } from "@/components/limpieza-popover";
 import { useCurrentPersonal } from "@/hooks/use-current-personal";
 import { HHMMInput } from "@/components/hhmm-input";
+import { useApartamentosLite, useEspaciosLite, useGruposLite } from "@/hooks/use-mantenimiento";
+import { resolveLocation, TIPO_STYLE, type IncidenciaTipo } from "@/lib/mantenimiento";
 
 export const Route = createFileRoute("/registre-horari/$id")({
   component: DetallPage,
@@ -93,7 +95,7 @@ function dateOnly(v: string | null): string {
   return v.length >= 10 ? v.slice(0, 10) : v;
 }
 
-type RowKind = "checkout" | "extra_cr" | "generica" | "ajust";
+type RowKind = "checkout" | "extra_cr" | "generica" | "manteniment" | "ajust";
 type Row = {
   key: string;
   kind: RowKind;
@@ -220,6 +222,38 @@ function DetallPage() {
     },
   });
 
+  const mantenimentQ = useQuery({
+    queryKey: ["reg-horari-det-manteniment", idPersona, start, end],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("manteniment_registre")
+        .select(
+          "id_registre, id_incidencia, id_persona, inici, fi, hores, notas, manteniment_incidencies(titol, tipus, id_apt, id_grup, id_tipo_espacio_comun)",
+        )
+        .eq("id_persona", idPersona)
+        .not("fi", "is", null)
+        .not("hores", "is", null)
+        .gte("inici", `${start}T00:00:00`)
+        .lte("inici", `${end}T23:59:59`);
+      if (error) throw error;
+      return (data ?? []) as unknown as Array<{
+        id_registre: number; id_incidencia: number; id_persona: number;
+        inici: string; fi: string | null; hores: number | null; notas: string | null;
+        manteniment_incidencies: {
+          titol: string; tipus: string | null;
+          id_apt: number | null; id_grup: number | null; id_tipo_espacio_comun: number | null;
+        } | null;
+      }>;
+    },
+  });
+
+  const mantAptsQ = useApartamentosLite();
+  const mantEspaciosQ = useEspaciosLite();
+  const mantGruposQ = useGruposLite();
+  const mantAptById = useMemo(() => new Map((mantAptsQ.data ?? []).map((a) => [a.id_apt, a])), [mantAptsQ.data]);
+  const mantEspacioById = useMemo(() => new Map((mantEspaciosQ.data ?? []).map((e) => [e.id_tipo, e])), [mantEspaciosQ.data]);
+  const mantGrupoById = useMemo(() => new Map((mantGruposQ.data ?? []).map((g) => [g.id_grupo, g])), [mantGruposQ.data]);
+
   const ajustosQ = useQuery({
     queryKey: ["reg-horari-det-ajustos", idPersona, start, end],
     queryFn: async () => {
@@ -316,6 +350,29 @@ function DetallPage() {
         raw: r as unknown as Record<string, unknown>,
       });
     }
+    for (const m of mantenimentQ.data ?? []) {
+      const inc = m.manteniment_incidencies;
+      const propietat = inc
+        ? resolveLocation(
+            { id_apt: inc.id_apt, id_tipo_espacio_comun: inc.id_tipo_espacio_comun, id_grup: inc.id_grup },
+            mantAptById,
+            mantEspacioById,
+            mantGrupoById,
+          )
+        : "—";
+      const tipoLabel = inc?.tipus ? TIPO_STYLE[inc.tipus as IncidenciaTipo]?.label : undefined;
+      out.push({
+        key: `mant-${m.id_registre}`,
+        kind: "manteniment",
+        fecha: dateOnly(m.inici),
+        inici: m.inici,
+        fi: m.fi,
+        propietat,
+        tipus: tipoLabel ?? "Mantenimiento",
+        hores: Number(m.hores ?? 0),
+        raw: m as unknown as Record<string, unknown>,
+      });
+    }
     for (const a of ajustosQ.data ?? []) {
       out.push({
         key: `aj-${a.id_ajuste}`,
@@ -331,7 +388,7 @@ function DetallPage() {
       });
     }
     return out;
-  }, [limpiezasQ.data, genericQ.data, ajustosQ.data, aptName]);
+  }, [limpiezasQ.data, genericQ.data, mantenimentQ.data, ajustosQ.data, aptName, mantAptById, mantEspacioById, mantGrupoById]);
 
   const filteredRows = useMemo(() => {
     let list = rows;
@@ -358,6 +415,7 @@ function DetallPage() {
     let reductionTipo: string | null = null;
     for (const l of limpiezasQ.data ?? []) worked += diffHours(l.iniciada_en, l.finalizada_en);
     for (const r of genericQ.data ?? []) worked += diffHours(r.inici, r.fi);
+    for (const m of mantenimentQ.data ?? []) worked += Number(m.hores ?? 0);
     for (const a of ajustosQ.data ?? []) {
       const h = Number(a.horas ?? 0);
       const tc = a.tipus_computa ?? "ajust";
@@ -376,7 +434,7 @@ function DetallPage() {
     const effectiveObjective = baseObjective != null ? Math.max(0, baseObjective - reductions) : null;
     const saldo = !isAutonom && effectiveObjective != null ? worked - effectiveObjective + otherAdjustments : 0;
     return { worked, adjustments: otherAdjustments, reductions, reductionTipo, objective: baseObjective, effectiveObjective, isAutonom, saldo };
-  }, [limpiezasQ.data, genericQ.data, ajustosQ.data, personaQ.data, activePeriodQ.data]);
+  }, [limpiezasQ.data, genericQ.data, mantenimentQ.data, ajustosQ.data, personaQ.data, activePeriodQ.data]);
 
   function toggleSort(k: SortKey) {
     if (sortKey === k) setSortDir(sortDir === "asc" ? "desc" : "asc");
@@ -464,6 +522,7 @@ function DetallPage() {
               <SelectItem value="checkout">Check-out</SelectItem>
               <SelectItem value="extra_cr">Extra-CR</SelectItem>
               <SelectItem value="generica">Tarea genérica</SelectItem>
+              <SelectItem value="manteniment">Mantenimiento</SelectItem>
               <SelectItem value="ajust">Ajuste manual</SelectItem>
             </SelectContent>
           </Select>
@@ -614,6 +673,7 @@ function RowTypeBadge({ kind, label }: { kind: RowKind; label: string }) {
     kind === "checkout" ? "bg-blue-100 text-blue-800" :
     kind === "extra_cr" ? "bg-purple-100 text-purple-800" :
     kind === "generica" ? "bg-amber-100 text-amber-800" :
+    kind === "manteniment" ? "bg-rose-100 text-rose-800" :
     "bg-emerald-100 text-emerald-800";
   return <span className={`inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium ${cls}`}>{label}</span>;
 }
