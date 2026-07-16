@@ -608,7 +608,6 @@ function WorkerView({
 
   const mantIncidenciasQ = useQuery({
     queryKey: ["mi-dia-mant-incidencias", mantFiltro, personalId],
-    enabled: isMantenimiento,
     queryFn: async (): Promise<Incidencia[]> => {
       let q = supabase.from("manteniment_incidencies").select(INCIDENCIA_COLUMNS).in("estat", ["validada", "en_curs"]);
       if (mantFiltro === "mias") q = q.eq("id_assignat", personalId);
@@ -626,7 +625,7 @@ function WorkerView({
   // overall estat or on who it's officially assigned to.
   const mantMisSesionesQ = useQuery({
     queryKey: ["mi-dia-mant-mis-sesiones", personalId, mantIncIdsKey],
-    enabled: isMantenimiento && mantIncIds.length > 0,
+    enabled: mantIncIds.length > 0,
     queryFn: async (): Promise<Registre[]> => {
       const { data, error } = await supabase
         .from("manteniment_registre")
@@ -1036,6 +1035,31 @@ function WorkerView({
             </div>
           )}
         </>
+      )}
+
+      {/* Maintenance task(s) assigned to a non-Mantenimiento worker (e.g. a
+          cleaner occasionally assigned a task) — shown plainly at the end of
+          the list, no section title, no "mías/todas" toggle: mantFiltro
+          stays at its default "mias" since these workers never see the
+          toggle UI, so mantIncidenciasQ is already scoped to just their own. */}
+      {!isMantenimiento && (mantIncidenciasQ.data ?? []).length > 0 && (
+        <div className="px-3 mt-3 flex flex-col gap-3">
+          {(mantIncidenciasQ.data ?? []).map((inc) => (
+            <MantenimientoTaskCard
+              key={inc.id_incidencia}
+              inc={inc}
+              location={resolveLocation(inc, mantAptById, mantEspacioById, mantGrupoById)}
+              asignadoCodigo={workerCode(inc.id_assignat, mantAssignatCodigosQ.data ?? [])}
+              misSesiones={mantMisSesionesByIncidencia.get(inc.id_incidencia) ?? []}
+              disabled={disabled}
+              onIniciar={() => mantActions.iniciar(inc, personalId)}
+              onFinParcial={() =>
+                mantActions.finParcial(inc, personalId, mantMisSesionesByIncidencia.get(inc.id_incidencia) ?? [])
+              }
+              onFinTotal={() => mantActions.finTotal(inc)}
+            />
+          ))}
+        </div>
       )}
 
       {/* Detail overlay */}
