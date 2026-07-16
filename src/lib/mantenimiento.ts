@@ -61,10 +61,10 @@ export const TIPO_STYLE: Record<IncidenciaTipo, { bg: string; fg: string; label:
   altre: { bg: "#6B7280", fg: "#FFFFFF", label: "Otro" },
 };
 
-export const PRIORIDAD_STYLE: Record<Prioridad, { bg: string; fg: string; letter: string; label: string }> = {
-  alta: { bg: "#DC2626", fg: "#FFFFFF", letter: "A", label: "Alta" },
-  normal: { bg: "#D97706", fg: "#FFFFFF", letter: "M", label: "Media" },
-  baixa: { bg: "#9CA3AF", fg: "#FFFFFF", letter: "B", label: "Baja" },
+export const PRIORIDAD_STYLE: Record<Prioridad, { bg: string; fg: string; label: string }> = {
+  alta: { bg: "#DC2626", fg: "#FFFFFF", label: "Alta" },
+  normal: { bg: "#D97706", fg: "#FFFFFF", label: "Media" },
+  baixa: { bg: "#9CA3AF", fg: "#FFFFFF", label: "Baja" },
 };
 
 // Used by the compact list row, which only ever shows a pill for these two

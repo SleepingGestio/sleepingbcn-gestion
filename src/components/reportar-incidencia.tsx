@@ -154,7 +154,7 @@ export function ReportarIncidenciaSheet({
         : idApt != null
           ? context.apartamentos.find((a) => a.id_apt === idApt)?.nombre
           : espacioComunNombre;
-    const titol = aptName ? `${tipoLabel} — ${aptName}` : tipoLabel;
+    const titol = aptName ?? tipoLabel;
     const payload: TablesInsert<"manteniment_incidencies"> = {
       tipus: tipo,
       titol,

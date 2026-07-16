@@ -321,14 +321,14 @@ function NuevaCard({
         <TipoBadge tipus={inc.tipus} />
         <PrioridadPill prioridad={inc.prioritat_proposta} />
       </div>
+      {inc.descripcio && (
+        <div className="text-sm text-foreground font-medium line-clamp-2">{inc.descripcio}</div>
+      )}
       <div className="text-xs text-muted-foreground flex items-center gap-1">
         <Home className="h-3 w-3 shrink-0" />
         {location}
       </div>
       <div className="text-xs text-muted-foreground">Reportado por {reporter}</div>
-      {inc.descripcio && (
-        <div className="text-xs text-muted-foreground line-clamp-2">{inc.descripcio}</div>
-      )}
       {editable && (
         <div className="flex gap-2 pt-1" onClick={(e) => e.stopPropagation()}>
           <Button
@@ -393,15 +393,15 @@ function TareaRow({
             <TipoBadge tipus={inc.tipus} />
             <EstadoPill estat={inc.estat} />
           </div>
+          {inc.descripcio && (
+            <div className="text-sm text-foreground font-medium line-clamp-2">{inc.descripcio}</div>
+          )}
           <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
             <Home className="h-3 w-3 shrink-0" />
             <span>{location}</span>
             <span>·</span>
             <span>{worker ? fullName(worker) : "Sin asignar"}</span>
           </div>
-          {inc.descripcio && (
-            <div className="text-xs text-muted-foreground line-clamp-2">{inc.descripcio}</div>
-          )}
           {editable && (
             <div className="flex gap-2 pt-1" onClick={(e) => e.stopPropagation()}>
               {inc.estat === "validada" && !hasOpenSession && (
@@ -428,8 +428,10 @@ function TareaRow({
           )}
         </div>
         <div
-          className="w-[210px] shrink-0 flex flex-col justify-center gap-1 px-3 py-2 text-xs leading-tight"
+          className="shrink-0 flex flex-col justify-center gap-1 px-3 py-2 text-xs leading-tight"
           style={{
+            minWidth: 210,
+            maxWidth: 340,
             backgroundColor: panel.bg,
             borderLeft: panel.borderColor ? `3px solid ${panel.borderColor}` : undefined,
           }}
