@@ -503,7 +503,7 @@ function TareaRow({
         if (e.key === "Enter" || e.key === " ") onOpenDetail();
       }}
     >
-      <div className="flex">
+      <div className="flex flex-col md:flex-row">
         <div className="flex-1 min-w-0 p-3 space-y-1.5">
           <div className="flex items-center gap-2 flex-wrap">
             <TipoBadge tipus={inc.tipus} />
@@ -544,7 +544,7 @@ function TareaRow({
           )}
         </div>
         <div
-          className="shrink-0 flex flex-col justify-center gap-1 px-3 py-2 text-xs leading-tight min-w-[210px] max-w-[340px] md:w-[360px] md:min-w-[360px] md:max-w-[360px]"
+          className="shrink-0 flex flex-col justify-center gap-1 px-3 py-2 text-xs leading-tight w-full md:w-[360px] md:min-w-[360px] md:max-w-[360px]"
           style={{
             backgroundColor: panel.bg,
             borderLeft: panel.borderColor ? `3px solid ${panel.borderColor}` : undefined,
