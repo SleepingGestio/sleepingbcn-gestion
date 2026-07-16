@@ -18,6 +18,7 @@ import { fmtDate, fmtDateTime } from "@/lib/format";
 import { formatHHMM } from "@/lib/utils";
 import { fullName } from "@/lib/types";
 import { usePermissions } from "@/hooks/use-permissions";
+import { useCurrentPersonal } from "@/hooks/use-current-personal";
 import {
   usePersonalLite,
   useApartamentosLite,
@@ -30,6 +31,7 @@ import { TipoBadge, PrioridadPill, EstadoPill } from "@/components/mantenimiento
 import { AsignarDialog } from "@/components/mantenimiento-asignar-dialog";
 import { MantenimientoPopover } from "@/components/mantenimiento-popover";
 import { OcupacionPopoverTrigger } from "@/components/apartamento-ocupacion-calendario";
+import { ReportarIncidenciaSheet, type ReportarIncidenciaContext } from "@/components/reportar-incidencia";
 import {
   INCIDENCIA_COLUMNS,
   REGISTRE_COLUMNS,
@@ -40,7 +42,7 @@ import {
   type Registre,
   type PersonaLite,
 } from "@/lib/mantenimiento";
-import { Home } from "lucide-react";
+import { Home, Plus } from "lucide-react";
 
 export const Route = createFileRoute("/mantenimiento")({
   component: MantenimientoPage,
@@ -53,6 +55,7 @@ type UbicacionFilter = "todos" | `apt-${number}` | `esp-${number}`;
 function MantenimientoPage() {
   const { canEdit } = usePermissions();
   const editable = canEdit("mantenimiento");
+  const { persona } = useCurrentPersonal();
 
   const [assignTarget, setAssignTarget] = useState<Incidencia | null>(null);
   const [detailId, setDetailId] = useState<number | null>(null);
@@ -60,6 +63,7 @@ function MantenimientoPage() {
   const [sortKey, setSortKey] = useState<SortKey>("prioridad");
   const [grupoFilter, setGrupoFilter] = useState<number | "todos">("todos");
   const [ubicacionFilter, setUbicacionFilter] = useState<UbicacionFilter>("todos");
+  const [incidenciaOpen, setIncidenciaOpen] = useState(false);
 
   const pendientesQ = useQuery({
     queryKey: ["mantenimiento-pendientes"],
@@ -142,6 +146,15 @@ function MantenimientoPage() {
 
   const workersQ = useMantenimientoWorkers();
 
+  const incidenciaContext: ReportarIncidenciaContext = useMemo(
+    () => ({
+      origen: "gestor",
+      grupos: gruposQ.data ?? [],
+      apartamentos: aptQ.data ?? [],
+    }),
+    [gruposQ.data, aptQ.data],
+  );
+
   function refetchLists() {
     pendientesQ.refetch();
     tareasQ.refetch();
@@ -222,6 +235,16 @@ function MantenimientoPage() {
   return (
     <AppShell title="Mantenimiento">
       <div className="space-y-6">
+        {editable && (
+          <div className="flex justify-end">
+            <Button
+              className="bg-[#26215C] hover:bg-[#1e1a48] text-white"
+              onClick={() => setIncidenciaOpen(true)}
+            >
+              <Plus className="h-4 w-4" /> Nueva incidencia
+            </Button>
+          </div>
+        )}
         <section>
           <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground mb-2">
             Nuevas {pendientes.length > 0 ? `(${pendientes.length})` : ""}
@@ -370,6 +393,16 @@ function MantenimientoPage() {
         onSaved={refetchLists}
         workers={workersQ.data ?? []}
       />
+
+      {persona && (
+        <ReportarIncidenciaSheet
+          open={incidenciaOpen}
+          onOpenChange={setIncidenciaOpen}
+          reporterId={persona.id_persona}
+          context={incidenciaContext}
+          onSaved={refetchLists}
+        />
+      )}
     </AppShell>
   );
 }

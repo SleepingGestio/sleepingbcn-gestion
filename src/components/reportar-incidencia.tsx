@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import type { TablesInsert } from "@/integrations/supabase/types";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
@@ -39,8 +40,11 @@ const ADJUNTO_OPTIONS: { tipo: AdjuntoTipo; label: string; icon: typeof Camera; 
 /**
  * Context the sheet is opened from. "neteja" = launched from an active
  * cleaning (apt/group/cleaning are fixed, shown read-only). "manteniment"
- * = launched standalone (e.g. mi-dia's persistent entry for Mantenimiento
- * workers, or the future /mantenimiento panel) — apartment must be picked.
+ * = launched standalone from mi-dia's persistent entry for Mantenimiento
+ * workers — apartment must be picked. "gestor" = launched from the
+ * /mantenimiento console (a gestor reporting on someone else's behalf,
+ * possibly after the fact) — same manual location picker as "manteniment",
+ * plus an editable "fecha del incidente" field.
  */
 export type ReportarIncidenciaContext =
   | {
@@ -54,7 +58,19 @@ export type ReportarIncidenciaContext =
       origen: "manteniment";
       grupos: { id_grupo: number; nombre: string }[];
       apartamentos: { id_apt: number; nombre: string; id_grupo: number | null }[];
+    }
+  | {
+      origen: "gestor";
+      grupos: { id_grupo: number; nombre: string }[];
+      apartamentos: { id_apt: number; nombre: string; id_grupo: number | null }[];
     };
+
+function toLocalDatetimeInput(iso: string): string {
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return "";
+  const off = d.getTimezoneOffset() * 60000;
+  return new Date(d.getTime() - off).toISOString().slice(0, 16);
+}
 
 export function ReportarIncidenciaSheet({
   open,
@@ -80,11 +96,17 @@ export function ReportarIncidenciaSheet({
   const [idGrupo, setIdGrupo] = useState<number | null>(null);
   const [idEspacioComun, setIdEspacioComun] = useState<number | null>(null);
   const [otroUbicacion, setOtroUbicacion] = useState(false);
+  const [dataIncident, setDataIncident] = useState(() => new Date().toISOString());
   const [saving, setSaving] = useState(false);
+
+  // "manteniment" (mi-dia's standalone entry) and "gestor" (the console's
+  // entry point) both need the manual grupo/apartamento/espacio-común picker
+  // — only "neteja" has a fixed apartment already known from the cleaning.
+  const manualLocation = context.origen === "manteniment" || context.origen === "gestor";
 
   const espaciosComunesQ = useQuery({
     queryKey: ["espacios-comunes-activos"],
-    enabled: context.origen === "manteniment",
+    enabled: manualLocation,
     queryFn: async (): Promise<{ id_tipo: number; nombre: string }[]> => {
       const { data, error } = await supabase
         .from("tipos_espacio_comun")
@@ -109,6 +131,7 @@ export function ReportarIncidenciaSheet({
     setIdGrupo(null);
     setIdEspacioComun(null);
     setOtroUbicacion(false);
+    setDataIncident(new Date().toISOString());
     setSaving(false);
   }
 
@@ -129,16 +152,15 @@ export function ReportarIncidenciaSheet({
     setAdjuntos((prev) => [...prev, { tipo: tipoAdj, file }]);
   }
 
-  const filteredApts =
-    context.origen === "manteniment"
-      ? idGrupo == null
-        ? context.apartamentos
-        : context.apartamentos.filter((a) => a.id_grupo === idGrupo)
-      : [];
+  const filteredApts = manualLocation
+    ? idGrupo == null
+      ? context.apartamentos
+      : context.apartamentos.filter((a) => a.id_grupo === idGrupo)
+    : [];
 
   async function submit() {
     if (!tipo) return;
-    if (context.origen === "manteniment" && idApt == null && idEspacioComun == null && !otroUbicacion) {
+    if (manualLocation && idApt == null && idEspacioComun == null && !otroUbicacion) {
       toast.error("Selecciona una ubicación");
       return;
     }
@@ -178,6 +200,9 @@ export function ReportarIncidenciaSheet({
       payload.finalitzat_en = nowIso;
       payload.tasca_realitzada = true;
       if (tipo === "material_danyat") payload.material_reposat = materialRepuesto;
+    }
+    if (context.origen === "gestor") {
+      payload.data_incident = dataIncident;
     }
     const { error } = await supabase.from("manteniment_incidencies").insert(payload);
     setSaving(false);
@@ -249,7 +274,7 @@ export function ReportarIncidenciaSheet({
                       onChange={(e) => {
                         const v = e.target.value ? Number(e.target.value) : null;
                         setIdGrupo(v);
-                        if (idApt != null && context.origen === "manteniment") {
+                        if (idApt != null && manualLocation) {
                           const apt = context.apartamentos.find((a) => a.id_apt === idApt);
                           if (v != null && apt && apt.id_grupo !== v) setIdApt(null);
                         }
@@ -300,6 +325,21 @@ export function ReportarIncidenciaSheet({
                       <option value="otro">Otro (especificar en descripción)</option>
                     </select>
                   </div>
+                </div>
+              )}
+
+              {context.origen === "gestor" && (
+                <div className="space-y-1">
+                  <Label htmlFor="incidencia-fecha" className="text-xs">Fecha del incidente</Label>
+                  <Input
+                    id="incidencia-fecha"
+                    type="datetime-local"
+                    value={toLocalDatetimeInput(dataIncident)}
+                    onChange={(e) =>
+                      setDataIncident(e.target.value ? new Date(e.target.value).toISOString() : new Date().toISOString())
+                    }
+                    className="text-sm"
+                  />
                 </div>
               )}
 
@@ -394,10 +434,7 @@ export function ReportarIncidenciaSheet({
                 </Button>
                 <Button
                   className="flex-1 h-12 bg-[#26215C] hover:bg-[#1e1a48] text-white"
-                  disabled={
-                    saving ||
-                    (context.origen === "manteniment" && idApt == null && idEspacioComun == null && !otroUbicacion)
-                  }
+                  disabled={saving || (manualLocation && idApt == null && idEspacioComun == null && !otroUbicacion)}
                   onClick={submit}
                 >
                   {saving ? "Enviando…" : "Enviar incidencia"}

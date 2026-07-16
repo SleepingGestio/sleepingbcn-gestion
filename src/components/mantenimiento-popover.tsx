@@ -199,6 +199,11 @@ export function MantenimientoPopover({
                     {inc.id_reporter != null ? fullName(personaById.get(inc.id_reporter)) : "—"}
                     <span className="text-muted-foreground"> · {fmtDateTime(inc.creado_en)}</span>
                   </div>
+                  {inc.data_incident && (
+                    <div className="text-xs text-muted-foreground mt-0.5">
+                      Ocurrió: {fmtDateTime(inc.data_incident)}
+                    </div>
+                  )}
                 </section>
 
                 {inc.validat_per != null && (

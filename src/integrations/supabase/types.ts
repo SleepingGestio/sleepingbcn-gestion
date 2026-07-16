@@ -629,9 +629,14 @@ export type Database = {
           },
         ]
       }
+      // data_incident below was manually added — types.ts was stale after
+      // adding this column via SQL Editor; if regenerating this file from
+      // the Supabase dashboard, confirm this field is included in the
+      // fresh export.
       manteniment_incidencies: {
         Row: {
           creado_en: string | null
+          data_incident: string | null
           data_prevista: string | null
           descripcio: string | null
           estat: string
@@ -658,6 +663,7 @@ export type Database = {
         }
         Insert: {
           creado_en?: string | null
+          data_incident?: string | null
           data_prevista?: string | null
           descripcio?: string | null
           estat?: string
@@ -684,6 +690,7 @@ export type Database = {
         }
         Update: {
           creado_en?: string | null
+          data_incident?: string | null
           data_prevista?: string | null
           descripcio?: string | null
           estat?: string
