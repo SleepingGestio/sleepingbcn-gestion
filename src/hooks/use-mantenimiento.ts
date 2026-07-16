@@ -242,5 +242,18 @@ export function useMantenimientoActions(onMutated?: () => void) {
     onMutated?.();
   }
 
-  return { rechazar, confirmarAsignacion, iniciar, finParcial, finTotal, guardarNota };
+  async function guardarDescripcio(inc: Pick<Incidencia, "id_incidencia">, descripcio: string) {
+    const { error } = await supabase
+      .from("manteniment_incidencies")
+      .update({ descripcio: descripcio.trim() || null })
+      .eq("id_incidencia", inc.id_incidencia);
+    if (error) {
+      toast.error("Error: " + error.message);
+      return;
+    }
+    toast.success("Descripción guardada");
+    onMutated?.();
+  }
+
+  return { rechazar, confirmarAsignacion, iniciar, finParcial, finTotal, guardarNota, guardarDescripcio };
 }

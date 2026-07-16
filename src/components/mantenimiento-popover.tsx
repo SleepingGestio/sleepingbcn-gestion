@@ -49,6 +49,8 @@ export function MantenimientoPopover({
   const [assignOpen, setAssignOpen] = useState(false);
   const [nota, setNota] = useState("");
   const [notaLoadedFor, setNotaLoadedFor] = useState<number | null>(null);
+  const [descripcio, setDescripcio] = useState("");
+  const [descripcioLoadedFor, setDescripcioLoadedFor] = useState<number | null>(null);
 
   const detailQ = useQuery({
     queryKey: ["mantenimiento-detail", idIncidencia],
@@ -119,11 +121,19 @@ export function MantenimientoPopover({
     }
   }, [inc, notaLoadedFor]);
 
+  useEffect(() => {
+    if (inc && descripcioLoadedFor !== inc.id_incidencia) {
+      setDescripcio(inc.descripcio ?? "");
+      setDescripcioLoadedFor(inc.id_incidencia);
+    }
+  }, [inc, descripcioLoadedFor]);
+
   const open = idIncidencia != null;
   const closedSessions = sesiones.filter((s) => s.fi != null);
   const totalHoras = closedSessions.reduce((sum, s) => sum + (s.hores ?? 0), 0);
   const hasOpenSession = inc != null && sesiones.some((s) => s.fi == null && s.id_persona === inc.id_assignat);
   const notaDirty = inc != null && nota !== (inc.notas_gestor ?? "");
+  const descripcioDirty = inc != null && descripcio !== (inc.descripcio ?? "");
 
   return (
     <>
@@ -157,12 +167,29 @@ export function MantenimientoPopover({
                   </div>
                 </section>
 
-                {inc.descripcio && (
-                  <section>
-                    <Label className="text-xs uppercase tracking-wide text-muted-foreground">Descripción</Label>
-                    <p className="mt-1 text-sm whitespace-pre-wrap">{inc.descripcio}</p>
-                  </section>
-                )}
+                <section>
+                  <Label className="text-xs uppercase tracking-wide text-muted-foreground">Descripción</Label>
+                  <Textarea
+                    rows={3}
+                    className="mt-1.5"
+                    placeholder="Describe la incidencia…"
+                    value={descripcio}
+                    onChange={(e) => setDescripcio(e.target.value)}
+                    disabled={!editable}
+                  />
+                  {editable && (
+                    <div className="mt-1.5 flex justify-end">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={!descripcioDirty}
+                        onClick={() => actions.guardarDescripcio(inc, descripcio)}
+                      >
+                        Guardar descripción
+                      </Button>
+                    </div>
+                  )}
+                </section>
 
                 <section>
                   <Label className="text-xs uppercase tracking-wide text-muted-foreground">Prioridad</Label>
