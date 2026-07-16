@@ -24,7 +24,6 @@ import {
   REGISTRE_COLUMNS,
   ORIGEN_LABEL,
   resolveLocation,
-  findOpenSession,
   type Incidencia,
   type Registre,
   type PersonaLite,
@@ -123,8 +122,7 @@ export function MantenimientoPopover({
   const open = idIncidencia != null;
   const closedSessions = sesiones.filter((s) => s.fi != null);
   const totalHoras = closedSessions.reduce((sum, s) => sum + (s.hores ?? 0), 0);
-  const openSession = findOpenSession(sesiones);
-  const hasOpenSession = openSession != null;
+  const hasOpenSession = inc != null && sesiones.some((s) => s.fi == null && s.id_persona === inc.id_assignat);
   const notaDirty = inc != null && nota !== (inc.notas_gestor ?? "");
 
   return (
@@ -350,7 +348,10 @@ export function MantenimientoPopover({
                 </>
               )}
               {inc.estat === "validada" && !hasOpenSession && (
-                <Button className="bg-[#26215C] hover:bg-[#1e1a48] text-white" onClick={() => actions.iniciar(inc)}>
+                <Button
+                  className="bg-[#26215C] hover:bg-[#1e1a48] text-white"
+                  onClick={() => actions.iniciar(inc, inc.id_assignat)}
+                >
                   Iniciar
                 </Button>
               )}
@@ -359,13 +360,13 @@ export function MantenimientoPopover({
                   <Button
                     variant="outline"
                     className="border-amber-400 text-amber-700 hover:bg-amber-50"
-                    onClick={() => actions.finParcial(inc, openSession)}
+                    onClick={() => actions.finParcial(inc, inc.id_assignat, sesiones)}
                   >
                     Fin parcial
                   </Button>
                   <Button
                     className="bg-emerald-600 hover:bg-emerald-700 text-white"
-                    onClick={() => actions.finTotal(inc, openSession)}
+                    onClick={() => actions.finTotal(inc)}
                   >
                     Fin total
                   </Button>

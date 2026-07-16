@@ -4,7 +4,7 @@ import type { TablesUpdate } from "@/integrations/supabase/types";
 import { toast } from "sonner";
 import { fetchMantenimiento } from "@/lib/catalogos";
 import { useCurrentPersonal } from "@/hooks/use-current-personal";
-import type { AptLite, EspacioLite, GrupoLite, Incidencia, PersonaLite, Prioridad, Registre } from "@/lib/mantenimiento";
+import { findOpenSession, type AptLite, type EspacioLite, type GrupoLite, type Incidencia, type PersonaLite, type Prioridad, type Registre } from "@/lib/mantenimiento";
 
 function diffHours(a: string, b: string): number {
   return Math.max(0, (new Date(b).getTime() - new Date(a).getTime()) / 3_600_000);
@@ -114,15 +114,21 @@ export function useMantenimientoActions(onMutated?: () => void) {
     onMutated?.();
   }
 
-  async function iniciar(inc: Pick<Incidencia, "id_incidencia" | "id_assignat" | "iniciat_en">) {
-    if (inc.id_assignat == null) {
+  /**
+   * `idPersona` is whose session this is — the console passes `inc.id_assignat`
+   * (the officially assigned worker), Mi Día passes the logged-in worker's own
+   * id_persona. Any worker with role Mantenimiento may start their own session
+   * on any open incidencia, independent of who else is already on it.
+   */
+  async function iniciar(inc: Pick<Incidencia, "id_incidencia" | "iniciat_en">, idPersona: number | null) {
+    if (idPersona == null) {
       toast.error("La incidencia no tiene un operario asignado");
       return;
     }
     const nowIso = new Date().toISOString();
     const { error: e1 } = await supabase.from("manteniment_registre").insert({
       id_incidencia: inc.id_incidencia,
-      id_persona: inc.id_assignat,
+      id_persona: idPersona,
       inici: nowIso,
     });
     if (e1) {
@@ -145,9 +151,11 @@ export function useMantenimientoActions(onMutated?: () => void) {
 
   async function finParcial(
     inc: Pick<Incidencia, "id_incidencia">,
-    openSession: Pick<Registre, "id_registre" | "inici"> | null,
+    idPersona: number | null,
+    sesiones: Registre[],
   ) {
     const nowIso = new Date().toISOString();
+    const openSession = findOpenSession(sesiones.filter((s) => s.id_persona === idPersona));
     if (openSession != null) {
       const { error: e1 } = await supabase
         .from("manteniment_registre")
@@ -158,30 +166,54 @@ export function useMantenimientoActions(onMutated?: () => void) {
         return;
       }
     }
-    const { error: e2 } = await supabase
-      .from("manteniment_incidencies")
-      .update({ estat: "validada" })
-      .eq("id_incidencia", inc.id_incidencia);
-    if (e2) {
-      toast.error("Error: " + e2.message);
+    // Only revert the incidencia to "validada" if no other worker still has an
+    // open session on it — otherwise pausing my own session would incorrectly
+    // flip a task someone else is still actively working on back to "not started".
+    const { data: stillOpen, error: eOpen } = await supabase
+      .from("manteniment_registre")
+      .select("id_registre")
+      .eq("id_incidencia", inc.id_incidencia)
+      .is("fi", null);
+    if (eOpen) {
+      toast.error("Error: " + eOpen.message);
       return;
+    }
+    if (!stillOpen || stillOpen.length === 0) {
+      const { error: e2 } = await supabase
+        .from("manteniment_incidencies")
+        .update({ estat: "validada" })
+        .eq("id_incidencia", inc.id_incidencia);
+      if (e2) {
+        toast.error("Error: " + e2.message);
+        return;
+      }
     }
     toast.success("Sesión pausada");
     onMutated?.();
   }
 
-  async function finTotal(
-    inc: Pick<Incidencia, "id_incidencia">,
-    openSession: Pick<Registre, "id_registre" | "inici"> | null,
-  ) {
+  // Finalizing definitively closes the incidencia — it must not leave another
+  // worker's still-open session dangling forever, so this closes every open
+  // session on the incidencia (not just the acting worker's own), unlike
+  // finParcial which only ever touches the acting worker's own session.
+  async function finTotal(inc: Pick<Incidencia, "id_incidencia">) {
     const nowIso = new Date().toISOString();
-    if (openSession != null) {
-      const { error: e1 } = await supabase
+    const { data: openSessions, error: eSel } = await supabase
+      .from("manteniment_registre")
+      .select("id_registre, inici")
+      .eq("id_incidencia", inc.id_incidencia)
+      .is("fi", null);
+    if (eSel) {
+      toast.error("Error: " + eSel.message);
+      return;
+    }
+    for (const s of openSessions ?? []) {
+      const { error: eUpd } = await supabase
         .from("manteniment_registre")
-        .update({ fi: nowIso, hores: diffHours(openSession.inici, nowIso) })
-        .eq("id_registre", openSession.id_registre);
-      if (e1) {
-        toast.error("Error: " + e1.message);
+        .update({ fi: nowIso, hores: diffHours(s.inici, nowIso) })
+        .eq("id_registre", s.id_registre);
+      if (eUpd) {
+        toast.error("Error: " + eUpd.message);
         return;
       }
     }

@@ -36,7 +36,6 @@ import {
   PRIORIDAD_RANK,
   resolveLocation,
   rightPanelStyle,
-  findOpenSession,
   type Incidencia,
   type Registre,
   type PersonaLite,
@@ -342,9 +341,9 @@ function MantenimientoPage() {
                 personaById={personaById}
                 editable={editable}
                 onOpenDetail={() => setDetailId(t.id_incidencia)}
-                onIniciar={() => actions.iniciar(t)}
-                onFinParcial={() => actions.finParcial(t, findOpenSession(registreByIncidencia.get(t.id_incidencia) ?? []))}
-                onFinTotal={() => actions.finTotal(t, findOpenSession(registreByIncidencia.get(t.id_incidencia) ?? []))}
+                onIniciar={() => actions.iniciar(t, t.id_assignat)}
+                onFinParcial={() => actions.finParcial(t, t.id_assignat, registreByIncidencia.get(t.id_incidencia) ?? [])}
+                onFinTotal={() => actions.finTotal(t)}
               />
             ))}
           </div>
@@ -456,7 +455,7 @@ function TareaRow({
   onFinParcial: () => void;
   onFinTotal: () => void;
 }) {
-  const hasOpenSession = sesiones.some((s) => s.fi == null);
+  const hasOpenSession = sesiones.some((s) => s.fi == null && s.id_persona === inc.id_assignat);
   const closedSessions = sesiones.filter((s) => s.fi != null);
   const totalHoras = closedSessions.reduce((sum, s) => sum + (s.hores ?? 0), 0);
   const panel = rightPanelStyle(inc.estat, sesiones.length);

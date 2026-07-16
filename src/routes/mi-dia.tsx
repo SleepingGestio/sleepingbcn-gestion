@@ -27,13 +27,24 @@ import {
 import { Input } from "@/components/ui/input";
 import { PasswordInput } from "@/components/ui/password-input";
 import { Label } from "@/components/ui/label";
-import { Zap, Sofa, LogOut, Clock, ArrowLeft, Check, X, Play, Menu, UserCircle2, KeyRound, Square, ClipboardList, Plus, LayoutDashboard, AlertTriangle, Wrench } from "lucide-react";
+import { Zap, Sofa, LogOut, Clock, ArrowLeft, Check, X, Play, Menu, UserCircle2, KeyRound, Square, ClipboardList, Plus, LayoutDashboard, AlertTriangle, Wrench, Home } from "lucide-react";
 import { ReportarIncidenciaSheet, type ReportarIncidenciaContext } from "@/components/reportar-incidencia";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { TimeBadge } from "@/components/time-badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ESTADO_LIMPIEZA_STYLE } from "@/components/estado-limpieza-badge";
+import { fmtDate } from "@/lib/format";
+import { TipoBadge, PrioridadPill } from "@/components/mantenimiento-badges";
+import { useApartamentosLite, useEspaciosLite, useGruposLite, useMantenimientoActions } from "@/hooks/use-mantenimiento";
+import {
+  INCIDENCIA_COLUMNS,
+  REGISTRE_COLUMNS,
+  resolveLocation,
+  findOpenSession,
+  type Incidencia,
+  type Registre,
+} from "@/lib/mantenimiento";
 
 export const Route = createFileRoute("/mi-dia")({
   component: MiDiaPage,
@@ -585,6 +596,86 @@ function WorkerView({
     setIncidenciaOpen(true);
   }
 
+  // ---- Tareas de mantenimiento (role Mantenimiento only) ----
+  const [mantFiltro, setMantFiltro] = useState<"mias" | "todas">("mias");
+
+  const mantAptQ = useApartamentosLite();
+  const mantAptById = useMemo(() => new Map((mantAptQ.data ?? []).map((a) => [a.id_apt, a])), [mantAptQ.data]);
+  const mantEspaciosQ = useEspaciosLite();
+  const mantEspacioById = useMemo(() => new Map((mantEspaciosQ.data ?? []).map((e) => [e.id_tipo, e])), [mantEspaciosQ.data]);
+  const mantGruposQ = useGruposLite();
+  const mantGrupoById = useMemo(() => new Map((mantGruposQ.data ?? []).map((g) => [g.id_grupo, g])), [mantGruposQ.data]);
+
+  const mantIncidenciasQ = useQuery({
+    queryKey: ["mi-dia-mant-incidencias", mantFiltro, personalId],
+    enabled: isMantenimiento,
+    queryFn: async (): Promise<Incidencia[]> => {
+      let q = supabase.from("manteniment_incidencies").select(INCIDENCIA_COLUMNS).in("estat", ["validada", "en_curs"]);
+      if (mantFiltro === "mias") q = q.eq("id_assignat", personalId);
+      const { data, error } = await q.order("data_prevista", { ascending: true, nullsFirst: false });
+      if (error) throw error;
+      return (data ?? []) as unknown as Incidencia[];
+    },
+  });
+
+  const mantIncIds = useMemo(() => (mantIncidenciasQ.data ?? []).map((i) => i.id_incidencia), [mantIncidenciasQ.data]);
+  const mantIncIdsKey = useMemo(() => mantIncIds.slice().sort((a, b) => a - b).join(","), [mantIncIds]);
+
+  // Only this worker's own sessions — the maintenance card's action button
+  // depends on whether THEY have an open session, not on the incidencia's
+  // overall estat or on who it's officially assigned to.
+  const mantMisSesionesQ = useQuery({
+    queryKey: ["mi-dia-mant-mis-sesiones", personalId, mantIncIdsKey],
+    enabled: isMantenimiento && mantIncIds.length > 0,
+    queryFn: async (): Promise<Registre[]> => {
+      const { data, error } = await supabase
+        .from("manteniment_registre")
+        .select(REGISTRE_COLUMNS)
+        .eq("id_persona", personalId)
+        .in("id_incidencia", mantIncIds);
+      if (error) throw error;
+      return (data ?? []) as Registre[];
+    },
+  });
+
+  const mantMisSesionesByIncidencia = useMemo(() => {
+    const m = new Map<number, Registre[]>();
+    for (const r of mantMisSesionesQ.data ?? []) {
+      const arr = m.get(r.id_incidencia) ?? [];
+      arr.push(r);
+      m.set(r.id_incidencia, arr);
+    }
+    return m;
+  }, [mantMisSesionesQ.data]);
+
+  // Names aren't broadly readable via RLS (same reason "Equipo trabajando este
+  // día" below uses a codigo-only RPC instead of a direct personal select) —
+  // "Asignado a" shows the worker's código for the same reason.
+  const mantAssignatIds = useMemo(
+    () =>
+      Array.from(
+        new Set((mantIncidenciasQ.data ?? []).map((i) => i.id_assignat).filter((x): x is number => x != null)),
+      ),
+    [mantIncidenciasQ.data],
+  );
+
+  const mantAssignatCodigosQ = useQuery({
+    queryKey: ["mi-dia-mant-assignat-codigos", mantAssignatIds.slice().sort().join(",")],
+    enabled: mantAssignatIds.length > 0,
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc("personal_codigos_by_ids", { p_ids: mantAssignatIds });
+      if (error) throw error;
+      return (data ?? []) as { id_persona: number; codigo: string | null }[];
+    },
+  });
+
+  function refetchMant() {
+    mantIncidenciasQ.refetch();
+    mantMisSesionesQ.refetch();
+  }
+
+  const mantActions = useMantenimientoActions(refetchMant);
+
   const startGenericInFlightRef = useRef(false);
 
   async function startGeneric(
@@ -784,6 +875,66 @@ function WorkerView({
           >
             <Wrench className="h-4 w-4" /> Nueva incidencia
           </Button>
+        </div>
+      )}
+
+      {/* Tareas de mantenimiento (role Mantenimiento only) */}
+      {isMantenimiento && (
+        <div className="px-3 mt-4">
+          <div className="flex items-center justify-between mb-2">
+            <h2 className="text-sm font-semibold text-slate-800">Tareas de mantenimiento</h2>
+            <div className="flex rounded-full bg-slate-200 p-0.5 text-xs font-medium">
+              <button
+                type="button"
+                onClick={() => setMantFiltro("mias")}
+                className={cn(
+                  "rounded-full px-3 py-1 transition-colors",
+                  mantFiltro === "mias" ? "bg-white shadow-sm text-slate-900" : "text-slate-600",
+                )}
+              >
+                Asignadas a mí
+              </button>
+              <button
+                type="button"
+                onClick={() => setMantFiltro("todas")}
+                className={cn(
+                  "rounded-full px-3 py-1 transition-colors",
+                  mantFiltro === "todas" ? "bg-white shadow-sm text-slate-900" : "text-slate-600",
+                )}
+              >
+                Todas
+              </button>
+            </div>
+          </div>
+          {mantIncidenciasQ.isLoading ? (
+            <div className="text-xs text-muted-foreground py-4 text-center">Cargando…</div>
+          ) : (mantIncidenciasQ.data ?? []).length === 0 ? (
+            <div className="rounded-lg border border-dashed border-slate-300 px-4 py-6 text-center">
+              <p className="text-sm font-medium text-slate-600">
+                {mantFiltro === "mias"
+                  ? "No tienes tareas de mantenimiento asignadas."
+                  : "No hay tareas de mantenimiento abiertas."}
+              </p>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-3">
+              {(mantIncidenciasQ.data ?? []).map((inc) => (
+                <MantenimientoTaskCard
+                  key={inc.id_incidencia}
+                  inc={inc}
+                  location={resolveLocation(inc, mantAptById, mantEspacioById, mantGrupoById)}
+                  asignadoCodigo={workerCode(inc.id_assignat, mantAssignatCodigosQ.data ?? [])}
+                  misSesiones={mantMisSesionesByIncidencia.get(inc.id_incidencia) ?? []}
+                  disabled={disabled}
+                  onIniciar={() => mantActions.iniciar(inc, personalId)}
+                  onFinParcial={() =>
+                    mantActions.finParcial(inc, personalId, mantMisSesionesByIncidencia.get(inc.id_incidencia) ?? [])
+                  }
+                  onFinTotal={() => mantActions.finTotal(inc)}
+                />
+              ))}
+            </div>
+          )}
         </div>
       )}
 
@@ -1257,6 +1408,91 @@ function TaskCard({
             <Button size="sm" variant="secondary" className="h-11 px-4" onClick={onOpenDetail}>
               <Menu className="h-4 w-4" /> Detalle
             </Button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function MantenimientoTaskCard({
+  inc,
+  location,
+  asignadoCodigo,
+  misSesiones,
+  disabled,
+  onIniciar,
+  onFinParcial,
+  onFinTotal,
+}: {
+  inc: Incidencia;
+  location: string;
+  asignadoCodigo: string;
+  misSesiones: Registre[];
+  disabled: boolean;
+  onIniciar: () => Promise<void> | void;
+  onFinParcial: () => Promise<void> | void;
+  onFinTotal: () => Promise<void> | void;
+}) {
+  const [submitting, setSubmitting] = useState(false);
+  const misOpenSession = findOpenSession(misSesiones);
+
+  async function guarded(action: () => Promise<void> | void) {
+    if (submitting) return;
+    setSubmitting(true);
+    try {
+      await action();
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <div className="rounded-xl bg-white shadow-sm overflow-hidden flex">
+      <div className={cn("w-1.5 shrink-0", misOpenSession ? "bg-[#378ADD]" : "bg-slate-300")} />
+      <div className="flex-1 p-3 space-y-1.5">
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <TipoBadge tipus={inc.tipus} />
+          <PrioridadPill prioridad={inc.prioritat_confirmada ?? inc.prioritat_proposta} />
+        </div>
+        {inc.descripcio && (
+          <div className="text-sm text-foreground font-medium line-clamp-2">{inc.descripcio}</div>
+        )}
+        <div className="text-xs text-slate-600 flex items-center gap-1">
+          <Home className="h-3 w-3 shrink-0" /> {location}
+        </div>
+        <div className="text-xs text-slate-600">Asignado a: {asignadoCodigo}</div>
+        {inc.data_prevista && <div className="text-xs text-slate-600">Prevista: {fmtDate(inc.data_prevista)}</div>}
+        <div className="mt-2 flex flex-wrap gap-2">
+          {!misOpenSession ? (
+            <Button
+              size="sm"
+              className="h-11 px-4 bg-[#26215C] hover:bg-[#1e1a48] text-white"
+              disabled={disabled || submitting}
+              onClick={() => guarded(onIniciar)}
+            >
+              <Play className="h-4 w-4" /> {submitting ? "Iniciando…" : "Iniciar"}
+            </Button>
+          ) : (
+            <>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-11 px-4 border-amber-400 text-amber-800 hover:bg-amber-50"
+                disabled={disabled || submitting}
+                onClick={() => guarded(onFinParcial)}
+              >
+                {submitting ? "Guardando…" : "Fin parcial"}
+              </Button>
+              <Button
+                size="sm"
+                className="h-11 px-4 bg-emerald-600 hover:bg-emerald-700 text-white"
+                disabled={disabled || submitting}
+                onClick={() => guarded(onFinTotal)}
+              >
+                <Check className="h-4 w-4" /> {submitting ? "Finalizando…" : "Fin total"}
+              </Button>
+            </>
           )}
         </div>
       </div>
