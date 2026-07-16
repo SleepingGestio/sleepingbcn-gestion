@@ -252,10 +252,12 @@ function OcupacionBar({ r, dayISOs }: { r: ReservaLite; dayISOs: string[] }) {
 export function OcupacionPopoverTrigger({
   idApt,
   initialDateISO,
+  underline = true,
   children,
 }: {
   idApt: number | null;
   initialDateISO?: string | null;
+  underline?: boolean;
   children: ReactNode;
 }) {
   if (idApt == null) return <>{children}</>;
@@ -265,7 +267,10 @@ export function OcupacionPopoverTrigger({
         <button
           type="button"
           onClick={(e) => e.stopPropagation()}
-          className="underline decoration-dotted underline-offset-2 hover:text-foreground"
+          className={cn(
+            underline && "underline decoration-dotted underline-offset-2",
+            "hover:text-foreground",
+          )}
         >
           {children}
         </button>

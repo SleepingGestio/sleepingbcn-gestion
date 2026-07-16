@@ -512,14 +512,17 @@ function TareaRow({
               <Home className="h-3 w-3 shrink-0" />
               <span>{location}</span>
               <span>·</span>
-              <span>{worker ? fullName(worker) : "Sin asignar"}</span>
+              <span>{worker ? (worker.codigo ?? fullName(worker)) : "Sin asignar"}</span>
             </div>
           </div>
           {inc.descripcio && (
             <div className="text-sm text-foreground font-medium line-clamp-2">{inc.descripcio}</div>
           )}
           {editable && (
-            <div className="flex gap-2 pt-1" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center gap-2 pt-1" onClick={(e) => e.stopPropagation()}>
+              {worker && (
+                <span className="text-xs text-muted-foreground mr-1">{fullName(worker)}</span>
+              )}
               {inc.estat === "validada" && !hasOpenSession && (
                 <Button size="sm" className="bg-[#26215C] hover:bg-[#1e1a48] text-white" onClick={onIniciar}>
                   Iniciar
@@ -552,7 +555,7 @@ function TareaRow({
         >
           <div className="flex items-center justify-between">
             <span className="text-muted-foreground">
-              <OcupacionPopoverTrigger idApt={inc.id_apt} initialDateISO={inc.data_prevista}>
+              <OcupacionPopoverTrigger idApt={inc.id_apt} initialDateISO={inc.data_prevista} underline={false}>
                 Prevista: {inc.data_prevista ? fmtDate(inc.data_prevista) : "—"}
               </OcupacionPopoverTrigger>
             </span>
