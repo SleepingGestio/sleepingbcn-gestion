@@ -10,8 +10,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { AlertTriangle, Wrench, PackageX, HelpCircle, Camera, Video, Mic, FileText, X } from "lucide-react";
-
-export type IncidenciaTipo = "averia_rotura" | "manteniment" | "material_danyat" | "altre";
+import { TIPO_STYLE, PRIORIDAD_STYLE, type IncidenciaTipo, type Prioridad } from "@/lib/mantenimiento";
 
 const TIPO_OPTIONS: { value: IncidenciaTipo; label: string; icon: typeof AlertTriangle }[] = [
   { value: "averia_rotura", label: "Avería / Rotura", icon: AlertTriangle },
@@ -20,13 +19,7 @@ const TIPO_OPTIONS: { value: IncidenciaTipo; label: string; icon: typeof AlertTr
   { value: "altre", label: "Otro", icon: HelpCircle },
 ];
 
-type Prioridad = "alta" | "normal" | "baixa";
-
-const PRIORIDAD_OPTIONS: { value: Prioridad; label: string }[] = [
-  { value: "alta", label: "Alta" },
-  { value: "normal", label: "Media" },
-  { value: "baixa", label: "Baja" },
-];
+const PRIORIDAD_OPTIONS: Prioridad[] = ["alta", "normal", "baixa"];
 
 type AdjuntoTipo = "foto" | "video" | "audio" | "documento";
 
@@ -217,7 +210,10 @@ export function ReportarIncidenciaSheet({
 
   return (
     <Sheet open={open} onOpenChange={handleClose}>
-      <SheetContent side="bottom" className="rounded-t-2xl max-h-[90vh] overflow-y-auto">
+      <SheetContent
+        side="bottom"
+        className="rounded-t-2xl max-h-[90vh] overflow-y-auto sm:inset-0 sm:m-auto sm:h-fit sm:max-h-[85vh] sm:w-full sm:max-w-[440px] sm:rounded-2xl sm:border"
+      >
         <div className="pt-2 pb-6 space-y-4">
           {step === 1 && (
             <>
@@ -226,20 +222,24 @@ export function ReportarIncidenciaSheet({
                 <div className="text-xs text-muted-foreground">¿Qué tipo de incidencia quieres reportar?</div>
               </div>
               <div className="grid grid-cols-2 gap-2">
-                {TIPO_OPTIONS.map((o) => (
-                  <button
-                    key={o.value}
-                    type="button"
-                    onClick={() => {
-                      setTipo(o.value);
-                      setStep(2);
-                    }}
-                    className="flex flex-col items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-5 text-sm font-medium text-slate-800 hover:bg-slate-50 hover:border-slate-300 transition-colors"
-                  >
-                    <o.icon className="h-6 w-6" />
-                    {o.label}
-                  </button>
-                ))}
+                {TIPO_OPTIONS.map((o) => {
+                  const s = TIPO_STYLE[o.value];
+                  return (
+                    <button
+                      key={o.value}
+                      type="button"
+                      onClick={() => {
+                        setTipo(o.value);
+                        setStep(2);
+                      }}
+                      style={{ borderColor: s.bg, backgroundColor: `${s.bg}1A`, color: s.bg }}
+                      className="flex flex-col items-center gap-2 rounded-lg border px-3 py-5 text-sm font-medium transition-colors hover:opacity-80"
+                    >
+                      <o.icon className="h-6 w-6" />
+                      {o.label}
+                    </button>
+                  );
+                })}
               </div>
               <Button variant="outline" className="w-full h-11" onClick={() => handleClose(false)}>
                 Cancelar
@@ -399,20 +399,23 @@ export function ReportarIncidenciaSheet({
               <div className="space-y-1.5">
                 <Label className="text-xs">Prioridad</Label>
                 <div className="grid grid-cols-3 gap-2">
-                  {PRIORIDAD_OPTIONS.map((o) => (
-                    <button
-                      key={o.value}
-                      type="button"
-                      onClick={() => setPrioridad(o.value)}
-                      className={`h-9 rounded-md border text-sm font-medium transition-colors ${
-                        prioridad === o.value
-                          ? "border-[#26215C] bg-[#26215C]/10 text-[#26215C]"
-                          : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
-                      }`}
-                    >
-                      {o.label}
-                    </button>
-                  ))}
+                  {PRIORIDAD_OPTIONS.map((p) => {
+                    const s = PRIORIDAD_STYLE[p];
+                    const selected = prioridad === p;
+                    return (
+                      <button
+                        key={p}
+                        type="button"
+                        onClick={() => setPrioridad(p)}
+                        style={selected ? { borderColor: s.bg, backgroundColor: `${s.bg}1A`, color: s.bg } : undefined}
+                        className={`h-9 rounded-md border text-sm font-medium transition-colors ${
+                          selected ? "" : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                        }`}
+                      >
+                        {s.label}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
 
