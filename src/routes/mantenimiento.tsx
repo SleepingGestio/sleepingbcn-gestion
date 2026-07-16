@@ -5,7 +5,15 @@ import { supabase } from "@/integrations/supabase/client";
 import { AppShell } from "@/components/app-shell";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectLabel,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { fmtDate, fmtDateTime } from "@/lib/format";
 import { formatHHMM } from "@/lib/utils";
 import { fullName } from "@/lib/types";
@@ -14,6 +22,7 @@ import {
   usePersonalLite,
   useApartamentosLite,
   useEspaciosLite,
+  useGruposLite,
   useMantenimientoWorkers,
   useMantenimientoActions,
 } from "@/hooks/use-mantenimiento";
@@ -27,7 +36,7 @@ import {
   PRIORIDAD_RANK,
   resolveLocation,
   rightPanelStyle,
-  findOpenSessionId,
+  findOpenSession,
   type Incidencia,
   type Registre,
   type PersonaLite,
@@ -40,6 +49,7 @@ export const Route = createFileRoute("/mantenimiento")({
 
 type TareasFilter = "asignadas_curso" | "en_curso" | "finalizadas" | "rechazadas" | "todas";
 type SortKey = "prioridad" | "fecha_prevista" | "fecha_inicio" | "fecha_fin" | "titulo" | "ubicacion" | "operario";
+type UbicacionFilter = "todos" | `apt-${number}` | `esp-${number}`;
 
 function MantenimientoPage() {
   const { canEdit } = usePermissions();
@@ -49,6 +59,8 @@ function MantenimientoPage() {
   const [detailId, setDetailId] = useState<number | null>(null);
   const [filtro, setFiltro] = useState<TareasFilter>("asignadas_curso");
   const [sortKey, setSortKey] = useState<SortKey>("prioridad");
+  const [grupoFilter, setGrupoFilter] = useState<number | "todos">("todos");
+  const [ubicacionFilter, setUbicacionFilter] = useState<UbicacionFilter>("todos");
 
   const pendientesQ = useQuery({
     queryKey: ["mantenimiento-pendientes"],
@@ -116,6 +128,19 @@ function MantenimientoPage() {
   const espaciosQ = useEspaciosLite();
   const espacioById = useMemo(() => new Map((espaciosQ.data ?? []).map((e) => [e.id_tipo, e])), [espaciosQ.data]);
 
+  const gruposQ = useGruposLite();
+  const grupoById = useMemo(() => new Map((gruposQ.data ?? []).map((g) => [g.id_grupo, g])), [gruposQ.data]);
+
+  const aptOptionsForFilter = useMemo(() => {
+    const list = (aptQ.data ?? []).filter((a) => grupoFilter === "todos" || a.id_grupo === grupoFilter);
+    return list.slice().sort((a, b) => a.nombre.localeCompare(b.nombre));
+  }, [aptQ.data, grupoFilter]);
+
+  const espacioOptionsForFilter = useMemo(
+    () => (espaciosQ.data ?? []).slice().sort((a, b) => a.nombre.localeCompare(b.nombre)),
+    [espaciosQ.data],
+  );
+
   const workersQ = useMantenimientoWorkers();
 
   function refetchLists() {
@@ -126,9 +151,23 @@ function MantenimientoPage() {
 
   const actions = useMantenimientoActions(refetchLists);
 
+  const filteredTareas = useMemo(() => {
+    return (tareasQ.data ?? []).filter((t) => {
+      if (grupoFilter !== "todos" && t.id_grup !== grupoFilter) return false;
+      if (ubicacionFilter !== "todos") {
+        if (ubicacionFilter.startsWith("apt-")) {
+          if (t.id_apt !== Number(ubicacionFilter.slice(4))) return false;
+        } else if (ubicacionFilter.startsWith("esp-")) {
+          if (t.id_tipo_espacio_comun !== Number(ubicacionFilter.slice(4))) return false;
+        }
+      }
+      return true;
+    });
+  }, [tareasQ.data, grupoFilter, ubicacionFilter]);
+
   const sortedTareas = useMemo(() => {
-    const arr = [...(tareasQ.data ?? [])];
-    const locName = (t: Incidencia) => resolveLocation(t, aptById, espacioById);
+    const arr = [...filteredTareas];
+    const locName = (t: Incidencia) => resolveLocation(t, aptById, espacioById, grupoById);
     const workerName = (t: Incidencia) =>
       t.id_assignat != null ? fullName(personaById.get(t.id_assignat)) : "";
     arr.sort((a, b) => {
@@ -167,7 +206,7 @@ function MantenimientoPage() {
       }
     });
     return arr;
-  }, [tareasQ.data, sortKey, aptById, espacioById, personaById]);
+  }, [filteredTareas, sortKey, aptById, espacioById, grupoById, personaById]);
 
   async function handleConfirmarAsignacion(
     inc: Incidencia,
@@ -197,7 +236,7 @@ function MantenimientoPage() {
               <NuevaCard
                 key={inc.id_incidencia}
                 inc={inc}
-                location={resolveLocation(inc, aptById, espacioById)}
+                location={resolveLocation(inc, aptById, espacioById, grupoById)}
                 reporter={inc.id_reporter != null ? fullName(personaById.get(inc.id_reporter)) : "—"}
                 editable={editable}
                 onOpenDetail={() => setDetailId(inc.id_incidencia)}
@@ -211,7 +250,7 @@ function MantenimientoPage() {
         <section>
           <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
             <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Tareas</h2>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <Select value={filtro} onValueChange={(v) => setFiltro(v as TareasFilter)}>
                 <SelectTrigger className="h-8 w-[190px] text-xs">
                   <SelectValue />
@@ -222,6 +261,53 @@ function MantenimientoPage() {
                   <SelectItem value="finalizadas">Finalizadas</SelectItem>
                   <SelectItem value="rechazadas">Rechazadas</SelectItem>
                   <SelectItem value="todas">Todas</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select
+                value={grupoFilter === "todos" ? "todos" : String(grupoFilter)}
+                onValueChange={(v) => {
+                  setGrupoFilter(v === "todos" ? "todos" : Number(v));
+                  setUbicacionFilter("todos");
+                }}
+              >
+                <SelectTrigger className="h-8 w-[160px] text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="todos">Todos los grupos</SelectItem>
+                  {(gruposQ.data ?? []).map((g) => (
+                    <SelectItem key={g.id_grupo} value={String(g.id_grupo)}>
+                      {g.nombre}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select value={ubicacionFilter} onValueChange={(v) => setUbicacionFilter(v as UbicacionFilter)}>
+                <SelectTrigger className="h-8 w-[190px] text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="todos">Todos los apt./espacios</SelectItem>
+                  {aptOptionsForFilter.length > 0 && (
+                    <SelectGroup>
+                      <SelectLabel>Apartamentos</SelectLabel>
+                      {aptOptionsForFilter.map((a) => (
+                        <SelectItem key={`apt-${a.id_apt}`} value={`apt-${a.id_apt}`}>
+                          {a.nombre}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  )}
+                  {espacioOptionsForFilter.length > 0 && (
+                    <SelectGroup>
+                      <SelectLabel>Espacios comunes</SelectLabel>
+                      {espacioOptionsForFilter.map((e) => (
+                        <SelectItem key={`esp-${e.id_tipo}`} value={`esp-${e.id_tipo}`}>
+                          {e.nombre}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  )}
                 </SelectContent>
               </Select>
               <Select value={sortKey} onValueChange={(v) => setSortKey(v as SortKey)}>
@@ -251,14 +337,14 @@ function MantenimientoPage() {
                 key={t.id_incidencia}
                 inc={t}
                 sesiones={registreByIncidencia.get(t.id_incidencia) ?? []}
-                location={resolveLocation(t, aptById, espacioById)}
+                location={resolveLocation(t, aptById, espacioById, grupoById)}
                 worker={t.id_assignat != null ? personaById.get(t.id_assignat) : null}
                 personaById={personaById}
                 editable={editable}
                 onOpenDetail={() => setDetailId(t.id_incidencia)}
                 onIniciar={() => actions.iniciar(t)}
-                onFinParcial={() => actions.finParcial(t, findOpenSessionId(registreByIncidencia.get(t.id_incidencia) ?? []))}
-                onFinTotal={() => actions.finTotal(t, findOpenSessionId(registreByIncidencia.get(t.id_incidencia) ?? []))}
+                onFinParcial={() => actions.finParcial(t, findOpenSession(registreByIncidencia.get(t.id_incidencia) ?? []))}
+                onFinTotal={() => actions.finTotal(t, findOpenSession(registreByIncidencia.get(t.id_incidencia) ?? []))}
               />
             ))}
           </div>
@@ -316,7 +402,6 @@ function NuevaCard({
         if (e.key === "Enter" || e.key === " ") onOpenDetail();
       }}
     >
-      <div className="font-medium text-sm leading-snug">{inc.titol}</div>
       <div className="flex items-center gap-1.5 flex-wrap">
         <TipoBadge tipus={inc.tipus} />
         <PrioridadPill prioridad={inc.prioritat_proposta} />
@@ -389,7 +474,6 @@ function TareaRow({
       <div className="flex">
         <div className="flex-1 min-w-0 p-3 space-y-1.5">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="font-medium text-sm">{inc.titol}</span>
             <TipoBadge tipus={inc.tipus} />
             <EstadoPill estat={inc.estat} />
           </div>
@@ -451,8 +535,12 @@ function TareaRow({
               const codigo = personaById.get(s.id_persona)?.codigo ?? "";
               return (
                 <div key={s.id_registre}>
-                  {codigo} {fmtDateTime(s.inici)} →{" "}
+                  <span className="inline-block rounded bg-muted px-1 py-0.5 font-medium">{codigo}</span>{" "}
+                  {fmtDateTime(s.inici)} →{" "}
                   {s.fi ? fmtDateTime(s.fi) : <span className="text-[#378ADD] font-medium">en curso</span>}
+                  {s.fi && s.hores != null && (
+                    <span className="text-muted-foreground"> · {formatHHMM(s.hores)}</span>
+                  )}
                 </div>
               );
             })

@@ -42,8 +42,9 @@ export type Registre = {
 };
 
 export type PersonaLite = { id_persona: number; nombre: string | null; apellidos: string | null; codigo?: string | null };
-export type AptLite = { id_apt: number; nombre: string };
+export type AptLite = { id_apt: number; nombre: string; id_grupo: number | null };
 export type EspacioLite = { id_tipo: number; nombre: string };
+export type GrupoLite = { id_grupo: number; nombre: string };
 
 // Full column sets — shared by the list page and the detail popover so
 // both always work from the same shape of row (no separate "lite" vs
@@ -92,16 +93,21 @@ export const ORIGEN_LABEL: Record<string, string> = {
 };
 
 export function resolveLocation(
-  inc: Pick<Incidencia, "id_apt" | "id_tipo_espacio_comun">,
+  inc: Pick<Incidencia, "id_apt" | "id_tipo_espacio_comun" | "id_grup">,
   aptById: Map<number, AptLite>,
   espacioById: Map<number, EspacioLite>,
+  grupoById: Map<number, GrupoLite>,
 ): string {
-  if (inc.id_apt != null) return aptById.get(inc.id_apt)?.nombre ?? `#${inc.id_apt}`;
-  if (inc.id_tipo_espacio_comun != null) {
+  let base: string;
+  if (inc.id_apt != null) base = aptById.get(inc.id_apt)?.nombre ?? `#${inc.id_apt}`;
+  else if (inc.id_tipo_espacio_comun != null) {
     const nombre = espacioById.get(inc.id_tipo_espacio_comun)?.nombre ?? "?";
-    return `${nombre} (zona común)`;
+    base = `${nombre} (zona común)`;
+  } else {
+    base = "Otro";
   }
-  return "Otro";
+  const grupoNombre = inc.id_grup != null ? grupoById.get(inc.id_grup)?.nombre : undefined;
+  return grupoNombre ? `${base} · ${grupoNombre}` : base;
 }
 
 export function rightPanelStyle(estat: Estat, sessionCount: number): { bg: string; borderColor: string | null } {
@@ -111,7 +117,7 @@ export function rightPanelStyle(estat: Estat, sessionCount: number): { bg: strin
   return { bg: "transparent", borderColor: null };
 }
 
-/** id_registre of the currently open (fi IS NULL) session, if any. */
-export function findOpenSessionId(sesiones: Registre[]): number | null {
-  return sesiones.find((s) => s.fi == null)?.id_registre ?? null;
+/** The currently open (fi IS NULL) session, if any. */
+export function findOpenSession(sesiones: Registre[]): Registre | null {
+  return sesiones.find((s) => s.fi == null) ?? null;
 }

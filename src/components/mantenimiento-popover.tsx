@@ -9,7 +9,13 @@ import { fmtDate, fmtDateTime } from "@/lib/format";
 import { formatHHMM } from "@/lib/utils";
 import { fullName } from "@/lib/types";
 import { usePermissions } from "@/hooks/use-permissions";
-import { useMantenimientoActions, usePersonalLite, useApartamentosLite, useEspaciosLite } from "@/hooks/use-mantenimiento";
+import {
+  useMantenimientoActions,
+  usePersonalLite,
+  useApartamentosLite,
+  useEspaciosLite,
+  useGruposLite,
+} from "@/hooks/use-mantenimiento";
 import { TipoBadge, PrioridadPill, EstadoFullPill } from "@/components/mantenimiento-badges";
 import { AsignarDialog } from "@/components/mantenimiento-asignar-dialog";
 import { OcupacionPopoverTrigger } from "@/components/apartamento-ocupacion-calendario";
@@ -18,7 +24,7 @@ import {
   REGISTRE_COLUMNS,
   ORIGEN_LABEL,
   resolveLocation,
-  findOpenSessionId,
+  findOpenSession,
   type Incidencia,
   type Registre,
   type PersonaLite,
@@ -92,6 +98,8 @@ export function MantenimientoPopover({
   const aptById = new Map((aptQ.data ?? []).map((a) => [a.id_apt, a]));
   const espaciosQ = useEspaciosLite();
   const espacioById = new Map((espaciosQ.data ?? []).map((e) => [e.id_tipo, e]));
+  const gruposQ = useGruposLite();
+  const grupoById = new Map((gruposQ.data ?? []).map((g) => [g.id_grupo, g]));
 
   function refetchAll() {
     detailQ.refetch();
@@ -115,7 +123,8 @@ export function MantenimientoPopover({
   const open = idIncidencia != null;
   const closedSessions = sesiones.filter((s) => s.fi != null);
   const totalHoras = closedSessions.reduce((sum, s) => sum + (s.hores ?? 0), 0);
-  const hasOpenSession = findOpenSessionId(sesiones) != null;
+  const openSession = findOpenSession(sesiones);
+  const hasOpenSession = openSession != null;
   const notaDirty = inc != null && nota !== (inc.notas_gestor ?? "");
 
   return (
@@ -146,7 +155,7 @@ export function MantenimientoPopover({
                   <Label className="text-xs uppercase tracking-wide text-muted-foreground">Ubicación</Label>
                   <div className="mt-1 flex items-center gap-1.5 text-sm">
                     <Home className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                    {resolveLocation(inc, aptById, espacioById)}
+                    {resolveLocation(inc, aptById, espacioById, grupoById)}
                   </div>
                 </section>
 
@@ -350,13 +359,13 @@ export function MantenimientoPopover({
                   <Button
                     variant="outline"
                     className="border-amber-400 text-amber-700 hover:bg-amber-50"
-                    onClick={() => actions.finParcial(inc, findOpenSessionId(sesiones))}
+                    onClick={() => actions.finParcial(inc, openSession)}
                   >
                     Fin parcial
                   </Button>
                   <Button
                     className="bg-emerald-600 hover:bg-emerald-700 text-white"
-                    onClick={() => actions.finTotal(inc, findOpenSessionId(sesiones))}
+                    onClick={() => actions.finTotal(inc, openSession)}
                   >
                     Fin total
                   </Button>

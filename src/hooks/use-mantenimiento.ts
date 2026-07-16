@@ -4,7 +4,11 @@ import type { TablesUpdate } from "@/integrations/supabase/types";
 import { toast } from "sonner";
 import { fetchMantenimiento } from "@/lib/catalogos";
 import { useCurrentPersonal } from "@/hooks/use-current-personal";
-import type { AptLite, EspacioLite, Incidencia, PersonaLite, Prioridad } from "@/lib/mantenimiento";
+import type { AptLite, EspacioLite, GrupoLite, Incidencia, PersonaLite, Prioridad, Registre } from "@/lib/mantenimiento";
+
+function diffHours(a: string, b: string): number {
+  return Math.max(0, (new Date(b).getTime() - new Date(a).getTime()) / 3_600_000);
+}
 
 // Small reference-data queries shared by the list page and the detail
 // popover. Both use the same queryKey, so react-query dedupes/caches them —
@@ -25,7 +29,7 @@ export function useApartamentosLite() {
   return useQuery({
     queryKey: ["mantenimiento-apts"],
     queryFn: async (): Promise<AptLite[]> => {
-      const { data, error } = await supabase.from("apartamentos").select("id_apt,nombre");
+      const { data, error } = await supabase.from("apartamentos").select("id_apt,nombre,id_grupo");
       if (error) throw error;
       return (data ?? []) as AptLite[];
     },
@@ -39,6 +43,17 @@ export function useEspaciosLite() {
       const { data, error } = await supabase.from("tipos_espacio_comun").select("id_tipo,nombre");
       if (error) throw error;
       return (data ?? []) as EspacioLite[];
+    },
+  });
+}
+
+export function useGruposLite() {
+  return useQuery({
+    queryKey: ["mantenimiento-grupos"],
+    queryFn: async (): Promise<GrupoLite[]> => {
+      const { data, error } = await supabase.from("grupos_apartamentos").select("id_grupo,nombre").order("nombre");
+      if (error) throw error;
+      return (data ?? []) as GrupoLite[];
     },
   });
 }
@@ -128,13 +143,16 @@ export function useMantenimientoActions(onMutated?: () => void) {
     onMutated?.();
   }
 
-  async function finParcial(inc: Pick<Incidencia, "id_incidencia">, openSessionId: number | null) {
+  async function finParcial(
+    inc: Pick<Incidencia, "id_incidencia">,
+    openSession: Pick<Registre, "id_registre" | "inici"> | null,
+  ) {
     const nowIso = new Date().toISOString();
-    if (openSessionId != null) {
+    if (openSession != null) {
       const { error: e1 } = await supabase
         .from("manteniment_registre")
-        .update({ fi: nowIso })
-        .eq("id_registre", openSessionId);
+        .update({ fi: nowIso, hores: diffHours(openSession.inici, nowIso) })
+        .eq("id_registre", openSession.id_registre);
       if (e1) {
         toast.error("Error: " + e1.message);
         return;
@@ -152,13 +170,16 @@ export function useMantenimientoActions(onMutated?: () => void) {
     onMutated?.();
   }
 
-  async function finTotal(inc: Pick<Incidencia, "id_incidencia">, openSessionId: number | null) {
+  async function finTotal(
+    inc: Pick<Incidencia, "id_incidencia">,
+    openSession: Pick<Registre, "id_registre" | "inici"> | null,
+  ) {
     const nowIso = new Date().toISOString();
-    if (openSessionId != null) {
+    if (openSession != null) {
       const { error: e1 } = await supabase
         .from("manteniment_registre")
-        .update({ fi: nowIso })
-        .eq("id_registre", openSessionId);
+        .update({ fi: nowIso, hores: diffHours(openSession.inici, nowIso) })
+        .eq("id_registre", openSession.id_registre);
       if (e1) {
         toast.error("Error: " + e1.message);
         return;
