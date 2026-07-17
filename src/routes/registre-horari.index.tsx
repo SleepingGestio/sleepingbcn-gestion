@@ -198,6 +198,39 @@ function RegistreHorariPage() {
     },
   });
 
+  const mantenimentQ = useQuery({
+    queryKey: ["reg-horari-manteniment", start, end, workerIds.join(",")],
+    enabled: workerIds.length > 0,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("manteniment_registre")
+        .select("id_persona, hores")
+        .in("id_persona", workerIds)
+        .not("fi", "is", null)
+        .not("hores", "is", null)
+        .gte("inici", `${start}T00:00:00`)
+        .lte("inici", `${end}T23:59:59`);
+      if (error) throw error;
+      return (data ?? []) as { id_persona: number; hores: number | null }[];
+    },
+  });
+
+  const reduccionesQ = useQuery({
+    queryKey: ["reg-horari-reducciones", start, end, workerIds.join(",")],
+    enabled: workerIds.length > 0,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("personal_ajustos_hores")
+        .select("id_persona, horas")
+        .in("id_persona", workerIds)
+        .eq("tipus_computa", "objectiu")
+        .gte("fecha", start)
+        .lte("fecha", end);
+      if (error) throw error;
+      return (data ?? []) as { id_persona: number; horas: number | null }[];
+    },
+  });
+
   const hoursByWorker = useMemo(() => {
     const map = new Map<number, number>();
     for (const l of limpiezasQ.data ?? []) {
@@ -210,8 +243,19 @@ function RegistreHorariPage() {
     for (const a of ajustosQ.data ?? []) {
       map.set(a.id_persona, (map.get(a.id_persona) ?? 0) + Number(a.horas ?? 0));
     }
+    for (const m of mantenimentQ.data ?? []) {
+      map.set(m.id_persona, (map.get(m.id_persona) ?? 0) + Number(m.hores ?? 0));
+    }
     return map;
-  }, [limpiezasQ.data, genericQ.data, ajustosQ.data]);
+  }, [limpiezasQ.data, genericQ.data, ajustosQ.data, mantenimentQ.data]);
+
+  const reductionsByWorker = useMemo(() => {
+    const map = new Map<number, number>();
+    for (const r of reduccionesQ.data ?? []) {
+      map.set(r.id_persona, (map.get(r.id_persona) ?? 0) + Number(r.horas ?? 0));
+    }
+    return map;
+  }, [reduccionesQ.data]);
 
   const activeObjectiveByWorker = useMemo(() => {
     const map = new Map<number, number | null>();
@@ -237,7 +281,7 @@ function RegistreHorariPage() {
     return m || 1;
   }, [workers, hoursByWorker, activeObjectiveByWorker]);
 
-  const loading = workersQ.isLoading || limpiezasQ.isLoading || genericQ.isLoading || ajustosQ.isLoading || activePeriodsQ.isLoading;
+  const loading = workersQ.isLoading || limpiezasQ.isLoading || genericQ.isLoading || ajustosQ.isLoading || mantenimentQ.isLoading || reduccionesQ.isLoading || activePeriodsQ.isLoading;
 
   return (
     <AppShell title="Registro horario">
@@ -280,6 +324,7 @@ function RegistreHorariPage() {
                   worker={w}
                   actual={hoursByWorker.get(w.id_persona) ?? 0}
                   objective={objectiveForWorker(w)}
+                  reduction={reductionsByWorker.get(w.id_persona) ?? 0}
                   maxScale={maxScale}
                   showGrip={canEditDashboard}
                 />
@@ -300,12 +345,14 @@ function WorkerColumn({
   worker,
   actual,
   objective,
+  reduction,
   maxScale,
   showGrip,
 }: {
   worker: Persona;
   actual: number;
   objective: number | null;
+  reduction: number;
   maxScale: number;
   showGrip: boolean;
 }) {
@@ -323,6 +370,12 @@ function WorkerColumn({
   const actualPx = Math.round((actual / maxScale) * BAR_MAX_PX);
   const objPx = hasObjective ? Math.round(((objective as number) / maxScale) * BAR_MAX_PX) : 0;
 
+  const effectiveObjective = hasObjective ? Math.max(0, (objective as number) + reduction) : null;
+  const effPx =
+    hasObjective && reduction !== 0 && effectiveObjective != null
+      ? Math.round((effectiveObjective / maxScale) * BAR_MAX_PX)
+      : null;
+
   const saldo = hasObjective ? actual - (objective as number) : 0;
   const deltaText = `${saldo >= 0 ? "+" : ""}${fmtHours(saldo)}`;
   const firstName = (worker.nombre ?? "").split(" ")[0] || "—";
@@ -333,30 +386,45 @@ function WorkerColumn({
       <div className="flex items-end gap-2" style={{ height: `${BAR_MAX_PX + LABEL_SPACE_PX}px`, paddingTop: `${LABEL_SPACE_PX}px` }}>
         {hasObjective && (
           <div className="relative flex flex-col items-center" style={{ width: 32 }}>
-            <div className="absolute bottom-full mb-1 flex flex-col items-center whitespace-nowrap">
-              <span className="text-[12px] font-semibold leading-none text-slate-500">
-                {fmtHours(objective as number)}
-              </span>
-            </div>
-            <div
-              className="w-8 rounded-t bg-slate-300"
-              style={{ height: `${objPx}px` }}
-              title={`Objetivo: ${fmtHours(objective as number)}`}
-            />
-          </div>
-        )}
-        <div className="relative flex flex-col items-center" style={{ width: 32 }}>
-          {hasObjective && (
-            <div className="absolute inset-x-0 bottom-0 flex flex-col items-center" style={{ height: `${objPx}px` }}>
+            <div className="absolute bottom-full mb-1 flex items-center gap-1 whitespace-nowrap">
               <span
-                className={`absolute bottom-full mb-1 text-[10px] font-bold px-1.5 py-0.5 rounded-full leading-none whitespace-nowrap ${
+                className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full leading-none ${
                   saldo >= 0 ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-700"
                 }`}
               >
                 {deltaText}
               </span>
+              <span className="text-[12px] font-semibold leading-none text-slate-500">
+                {fmtHours(objective as number)}
+              </span>
             </div>
-          )}
+            <div
+              className="relative w-8 rounded-t bg-slate-300"
+              style={{ height: `${objPx}px` }}
+              title={
+                reduction !== 0 && effectiveObjective != null
+                  ? `Objetivo: ${fmtHours(objective as number)} (${fmtHours(reduction)} → ${fmtHours(effectiveObjective)} efectivo)`
+                  : `Objetivo: ${fmtHours(objective as number)}`
+              }
+            >
+              {reduction !== 0 && effPx !== null && effectiveObjective != null && (
+                <>
+                  <div
+                    className="absolute left-0 right-0 border-t-2 border-dashed border-slate-500"
+                    style={{ top: `${objPx - effPx}px` }}
+                  />
+                  <span
+                    className="absolute text-[9px] font-semibold leading-none text-slate-600 whitespace-nowrap"
+                    style={{ top: `${objPx - effPx - 5}px`, right: "calc(100% + 4px)" }}
+                  >
+                    {fmtHours(effectiveObjective)}
+                  </span>
+                </>
+              )}
+            </div>
+          </div>
+        )}
+        <div className="relative flex flex-col items-center" style={{ width: 32 }}>
           <div className="absolute bottom-full mb-1 flex flex-col items-center gap-0.5 whitespace-nowrap">
             <span className="text-[12px] font-semibold leading-none" style={{ color }}>
               {fmtHours(actual)}
