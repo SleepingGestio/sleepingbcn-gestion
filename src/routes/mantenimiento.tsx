@@ -555,7 +555,7 @@ function TareaRow({
           )}
         </div>
         <div
-          className="shrink-0 flex flex-col justify-center gap-1 px-3 py-2 text-xs leading-tight w-full md:w-[360px] md:min-w-[360px] md:max-w-[360px]"
+          className="shrink-0 flex flex-col justify-center gap-1 px-3 py-2 text-xs leading-tight w-full md:w-[288px] md:min-w-[288px] md:max-w-[288px]"
           style={{
             backgroundColor: panel.bg,
             borderLeft: panel.borderColor ? `3px solid ${panel.borderColor}` : undefined,
