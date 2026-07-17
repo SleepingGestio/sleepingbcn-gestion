@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { Link } from "@tanstack/react-router";
 import { supabase } from "@/integrations/supabase/client";
 import type { TablesUpdate } from "@/integrations/supabase/types";
 import { Card } from "@/components/ui/card";
@@ -19,7 +20,7 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Pencil, Plus, Mail, Eye } from "lucide-react";
+import { Pencil, Plus, Mail, Eye, Clock } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { usePermissions } from "@/hooks/use-permissions";
@@ -327,6 +328,11 @@ export function PersonalAdmin() {
                   </TableCell>
                   <TableCell>
                     <div className="flex items-center justify-end gap-1">
+                      <Button size="icon" variant="ghost" title="Ver registro horario" asChild>
+                        <Link to="/registre-horari/$id" params={{ id: String(p.id_persona) }}>
+                          <Clock className="h-4 w-4" />
+                        </Link>
+                      </Button>
                       {canEdit && hasMail && (
                         <Button
                           size="icon"
