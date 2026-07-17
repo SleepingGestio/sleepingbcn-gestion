@@ -404,6 +404,11 @@ export function MantenimientoPopover({
                   </Button>
                 </>
               )}
+              {(inc.estat === "validada" || inc.estat === "en_curs") && (
+                <Button variant="outline" onClick={() => setAssignOpen(true)}>
+                  Reasignar
+                </Button>
+              )}
             </DialogFooter>
           )}
         </DialogContent>

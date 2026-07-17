@@ -65,7 +65,7 @@ export function AsignarDialog({
     <Dialog open={!!inc} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-sm">
         <DialogHeader>
-          <DialogTitle>Asignar incidencia</DialogTitle>
+          <DialogTitle>{inc?.id_assignat != null ? "Reasignar incidencia" : "Asignar incidencia"}</DialogTitle>
           <DialogDescription className="sr-only">Asignar trabajador, fecha y prioridad</DialogDescription>
         </DialogHeader>
         <div className="space-y-3">

@@ -367,6 +367,7 @@ function MantenimientoPage() {
                 onIniciar={() => actions.iniciar(t, t.id_assignat)}
                 onFinParcial={() => actions.finParcial(t, t.id_assignat, registreByIncidencia.get(t.id_incidencia) ?? [])}
                 onFinTotal={() => actions.finTotal(t)}
+                onReasignar={() => setAssignTarget(t)}
               />
             ))}
           </div>
@@ -476,6 +477,7 @@ function TareaRow({
   onIniciar,
   onFinParcial,
   onFinTotal,
+  onReasignar,
 }: {
   inc: Incidencia;
   sesiones: Registre[];
@@ -487,6 +489,7 @@ function TareaRow({
   onIniciar: () => void;
   onFinParcial: () => void;
   onFinTotal: () => void;
+  onReasignar: () => void;
 }) {
   const hasOpenSession = sesiones.some((s) => s.fi == null && s.id_persona === inc.id_assignat);
   const closedSessions = sesiones.filter((s) => s.fi != null);
@@ -542,6 +545,11 @@ function TareaRow({
                     Fin total
                   </Button>
                 </>
+              )}
+              {(inc.estat === "validada" || inc.estat === "en_curs") && (
+                <Button size="sm" variant="outline" onClick={onReasignar}>
+                  Reasignar
+                </Button>
               )}
             </div>
           )}
