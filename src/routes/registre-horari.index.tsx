@@ -310,7 +310,7 @@ function RegistreHorariPage() {
         </div>
       ) : (
         <div className="rounded-xl border bg-card p-4 md:p-6">
-          <div className="flex items-end justify-around gap-3 md:gap-6 overflow-x-auto min-h-[340px]">
+          <div className="flex items-end justify-around gap-3 md:gap-6 overflow-x-auto min-h-[340px] pl-10">
             {displayedWorkers.map((w) => (
               <div
                 key={w.id_persona}
