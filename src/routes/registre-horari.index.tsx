@@ -333,7 +333,7 @@ function WorkerColumn({
       <div className="flex items-end gap-2" style={{ height: `${BAR_MAX_PX + LABEL_SPACE_PX}px`, paddingTop: `${LABEL_SPACE_PX}px` }}>
         {hasObjective && (
           <div className="relative flex flex-col items-center" style={{ width: 32 }}>
-            <div className="absolute bottom-full mb-1 flex flex-col items-center gap-0.5 whitespace-nowrap">
+            <div className="absolute bottom-full mb-1 flex items-center gap-1 whitespace-nowrap">
               <span
                 className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full leading-none ${
                   saldo >= 0 ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-700"
