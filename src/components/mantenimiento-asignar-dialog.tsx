@@ -118,21 +118,24 @@ export function AsignarDialog({
           <div className="space-y-1.5">
             <Label className="text-xs">Prioridad confirmada</Label>
             <div className="grid grid-cols-3 gap-2">
-              {(["alta", "normal", "baixa"] as Prioridad[]).map((p) => (
-                <button
-                  key={p}
-                  type="button"
-                  onClick={() => setPrioridad(p)}
-                  className={cn(
-                    "h-9 rounded-md border text-sm font-medium transition-colors",
-                    prioridad === p
-                      ? "border-[#26215C] bg-[#26215C]/10 text-[#26215C]"
-                      : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50",
-                  )}
-                >
-                  {PRIORIDAD_STYLE[p].label}
-                </button>
-              ))}
+              {(["alta", "normal", "baixa"] as Prioridad[]).map((p) => {
+                const s = PRIORIDAD_STYLE[p];
+                const selected = prioridad === p;
+                return (
+                  <button
+                    key={p}
+                    type="button"
+                    onClick={() => setPrioridad(p)}
+                    style={selected ? { borderColor: s.bg, backgroundColor: `${s.bg}1A`, color: s.bg } : undefined}
+                    className={cn(
+                      "h-9 rounded-md border text-sm font-medium transition-colors",
+                      !selected && "border-slate-200 bg-white text-slate-700 hover:bg-slate-50",
+                    )}
+                  >
+                    {s.label}
+                  </button>
+                );
+              })}
             </div>
           </div>
         </div>
@@ -140,7 +143,12 @@ export function AsignarDialog({
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={busy}>
             Cancelar
           </Button>
-          <Button onClick={confirmar} disabled={busy || workerId == null}>
+          <Button
+            onClick={confirmar}
+            disabled={busy || workerId == null}
+            style={{ backgroundColor: PRIORIDAD_STYLE[prioridad].bg, color: PRIORIDAD_STYLE[prioridad].fg }}
+            className="hover:opacity-90"
+          >
             {busy ? "Guardando…" : "Confirmar asignación"}
           </Button>
         </DialogFooter>
