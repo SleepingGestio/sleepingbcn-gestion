@@ -252,7 +252,7 @@ function RegistreHorariPage() {
   const reductionsByWorker = useMemo(() => {
     const map = new Map<number, number>();
     for (const r of reduccionesQ.data ?? []) {
-      map.set(r.id_persona, (map.get(r.id_persona) ?? 0) + Number(r.horas ?? 0));
+      map.set(r.id_persona, (map.get(r.id_persona) ?? 0) + Math.abs(Number(r.horas ?? 0)));
     }
     return map;
   }, [reduccionesQ.data]);
@@ -359,24 +359,32 @@ function WorkerColumn({
   const isAutonom = worker.tipo_contrato === "autonomo";
   const hasObjective = !isAutonom && objective != null && objective > 0;
 
+  const effectiveObjective = hasObjective ? Math.max(0, (objective as number) - reduction) : null;
+
   let color = "#378ADD"; // blue for autonomo / no objective
   if (hasObjective) {
-    const deficit = (objective as number) - actual;
-    if (actual >= (objective as number)) color = "#1D9E75";
-    else if (deficit / (objective as number) < 0.1) color = "#EF9F27";
+    const target = effectiveObjective as number;
+    const deficit = target - actual;
+    if (actual >= target) color = "#1D9E75";
+    else if (target > 0 && deficit / target < 0.1) color = "#EF9F27";
     else color = "#E24B4A";
   }
 
   const actualPx = Math.round((actual / maxScale) * BAR_MAX_PX);
   const objPx = hasObjective ? Math.round(((objective as number) / maxScale) * BAR_MAX_PX) : 0;
-
-  const effectiveObjective = hasObjective ? Math.max(0, (objective as number) + reduction) : null;
   const effPx =
     hasObjective && reduction !== 0 && effectiveObjective != null
       ? Math.round((effectiveObjective / maxScale) * BAR_MAX_PX)
       : null;
 
-  const saldo = hasObjective ? actual - (objective as number) : 0;
+  // Both top labels share this height so they stay aligned with each other
+  // and always clear the actual-hours number, even when the red bar grows
+  // past the gray one.
+  const topLabelBottomPx = Math.max(objPx + 8, actualPx + 22);
+
+  const saldo = hasObjective
+    ? actual - (reduction !== 0 && effectiveObjective != null ? effectiveObjective : (objective as number))
+    : 0;
   const deltaText = `${saldo >= 0 ? "+" : ""}${fmtHours(saldo)}`;
   const firstName = (worker.nombre ?? "").split(" ")[0] || "—";
 
@@ -386,14 +394,7 @@ function WorkerColumn({
       <div className="flex items-end gap-2" style={{ height: `${BAR_MAX_PX + LABEL_SPACE_PX}px`, paddingTop: `${LABEL_SPACE_PX}px` }}>
         {hasObjective && (
           <div className="relative flex flex-col items-center" style={{ width: 32 }}>
-            <div className="absolute bottom-full mb-1 flex items-center gap-1 whitespace-nowrap">
-              <span
-                className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full leading-none ${
-                  saldo >= 0 ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-700"
-                }`}
-              >
-                {deltaText}
-              </span>
+            <div className="absolute whitespace-nowrap" style={{ bottom: `${topLabelBottomPx}px` }}>
               <span className="text-[12px] font-semibold leading-none text-slate-500">
                 {fmtHours(objective as number)}
               </span>
@@ -403,19 +404,29 @@ function WorkerColumn({
               style={{ height: `${objPx}px` }}
               title={
                 reduction !== 0 && effectiveObjective != null
-                  ? `Objetivo: ${fmtHours(objective as number)} (${fmtHours(reduction)} → ${fmtHours(effectiveObjective)} efectivo)`
+                  ? `Objetivo: ${fmtHours(objective as number)} (−${fmtHours(reduction)} → ${fmtHours(effectiveObjective)} efectivo)`
                   : `Objetivo: ${fmtHours(objective as number)}`
               }
             >
               {reduction !== 0 && effPx !== null && effectiveObjective != null && (
                 <>
                   <div
-                    className="absolute left-0 right-0 border-t-2 border-dashed border-slate-500"
-                    style={{ top: `${objPx - effPx}px` }}
+                    className="absolute left-0 right-0"
+                    style={{ top: `${objPx - effPx}px`, height: 2, backgroundColor: "#26215C" }}
                   />
                   <span
-                    className="absolute text-[9px] font-semibold leading-none text-slate-600 whitespace-nowrap"
-                    style={{ top: `${objPx - effPx - 5}px`, right: "calc(100% + 4px)" }}
+                    className="absolute whitespace-nowrap"
+                    style={{
+                      top: `${objPx - effPx - 12}px`,
+                      right: "calc(100% + 4px)",
+                      fontSize: 11,
+                      fontWeight: 700,
+                      color: "#26215C",
+                      background: "#fff",
+                      padding: "1px 5px",
+                      borderRadius: 4,
+                      border: "1px solid #26215C",
+                    }}
                   >
                     {fmtHours(effectiveObjective)}
                   </span>
@@ -425,7 +436,18 @@ function WorkerColumn({
           </div>
         )}
         <div className="relative flex flex-col items-center" style={{ width: 32 }}>
-          <div className="absolute bottom-full mb-1 flex flex-col items-center gap-0.5 whitespace-nowrap">
+          {hasObjective && (
+            <div className="absolute whitespace-nowrap" style={{ bottom: `${topLabelBottomPx}px` }}>
+              <span
+                className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full leading-none ${
+                  saldo >= 0 ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-700"
+                }`}
+              >
+                {deltaText}
+              </span>
+            </div>
+          )}
+          <div className="absolute bottom-full mb-1 whitespace-nowrap">
             <span className="text-[12px] font-semibold leading-none" style={{ color }}>
               {fmtHours(actual)}
             </span>
