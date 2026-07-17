@@ -325,8 +325,6 @@ function WorkerColumn({
 
   const saldo = hasObjective ? actual - (objective as number) : 0;
   const deltaText = `${saldo >= 0 ? "+" : ""}${fmtHours(saldo)}`;
-  const objIsShorter = hasObjective && objPx < actualPx;
-  const actualIsShorter = hasObjective && actualPx < objPx;
   const firstName = (worker.nombre ?? "").split(" ")[0] || "—";
 
   return (
@@ -336,15 +334,13 @@ function WorkerColumn({
         {hasObjective && (
           <div className="relative flex flex-col items-center" style={{ width: 32 }}>
             <div className="absolute bottom-full mb-1 flex flex-col items-center gap-0.5 whitespace-nowrap">
-              {objIsShorter && (
-                <span
-                  className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full leading-none ${
-                    saldo >= 0 ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-700"
-                  }`}
-                >
-                  {deltaText}
-                </span>
-              )}
+              <span
+                className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full leading-none ${
+                  saldo >= 0 ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-700"
+                }`}
+              >
+                {deltaText}
+              </span>
               <span className="text-[12px] font-semibold leading-none text-slate-500">
                 {fmtHours(objective as number)}
               </span>
@@ -358,18 +354,6 @@ function WorkerColumn({
         )}
         <div className="relative flex flex-col items-center" style={{ width: 32 }}>
           <div className="absolute bottom-full mb-1 flex flex-col items-center gap-0.5 whitespace-nowrap">
-            {actualIsShorter && (
-              <span
-                className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full leading-none ${
-                  saldo >= 0 ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-700"
-                }`}
-              >
-                {deltaText}
-              </span>
-            )}
-            {!hasObjective && (
-              <span className="text-[10px] text-muted-foreground leading-none">autónomo</span>
-            )}
             <span className="text-[12px] font-semibold leading-none" style={{ color }}>
               {fmtHours(actual)}
             </span>
