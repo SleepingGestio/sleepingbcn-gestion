@@ -1,5 +1,7 @@
 import { Link, useRouterState } from "@tanstack/react-router";
+import { useQuery } from "@tanstack/react-query";
 import { Calendar, LogIn, Sparkles, CalendarRange, Megaphone, Settings, LogOut, Smartphone, Clock, History, Wrench } from "lucide-react";
+import { getAppEnv } from "@/lib/api/app-env.functions";
 import {
   Sidebar,
   SidebarContent,
@@ -34,6 +36,12 @@ export function AppSidebar() {
   const path = useRouterState({ select: (s) => s.location.pathname });
   const { user, signOut } = useAuth();
   const { canView, isAdmin } = usePermissions();
+  const appEnvQ = useQuery({
+    queryKey: ["app-env"],
+    queryFn: () => getAppEnv(),
+    staleTime: Infinity,
+  });
+  const isStaging = appEnvQ.data?.env === "staging";
   const items = NAV_ITEMS.filter((it) => {
     if (isAdmin) return true;
     if (it.url === "/configuracion") {
@@ -43,7 +51,7 @@ export function AppSidebar() {
   });
 
   return (
-    <Sidebar collapsible="icon">
+    <Sidebar collapsible="icon" className={isStaging ? "border-r-4 border-rose-800" : undefined}>
       <SidebarHeader className="border-b">
         <div className="px-2 py-3">
           <div className="text-lg font-semibold tracking-tight">SleepingBCN</div>
