@@ -341,10 +341,8 @@ export function MantenimientoPopover({
                       <ul className="space-y-1">
                         {adjuntos.map((a, i) => {
                           const label =
-                            (a.nombre as string | undefined) ??
-                            (a.nombre_archivo as string | undefined) ??
-                            (a.url as string | undefined) ??
-                            (a.tipo as string | undefined) ??
+                            (a.nom_fitxer as string | undefined) ??
+                            (a.tipus as string | undefined) ??
                             `Adjunto ${i + 1}`;
                           return (
                             <li key={(a.id_adjunt as number | undefined) ?? i} className="text-sm">

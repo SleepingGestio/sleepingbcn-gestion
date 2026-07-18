@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { AlertTriangle, Wrench, PackageX, HelpCircle, Camera, Video, Mic, FileText, X } from "lucide-react";
 import { TIPO_STYLE, PRIORIDAD_STYLE, type IncidenciaTipo, type Prioridad } from "@/lib/mantenimiento";
+import { uploadAdjunto } from "@/lib/api/manteniment-adjuntos.functions";
 
 const TIPO_OPTIONS: { value: IncidenciaTipo; label: string; icon: typeof AlertTriangle }[] = [
   { value: "averia_rotura", label: "Avería / Rotura", icon: AlertTriangle },
@@ -135,13 +136,8 @@ export function ReportarIncidenciaSheet({
 
   function addAdjunto(tipoAdj: AdjuntoTipo, file: File | null) {
     if (!file) return;
-    // TODO: no storage/upload integration exists yet in this codebase (no
-    // R2 binding, Supabase Edge Function, or signed-URL pattern found in a
-    // repo-wide search). Once the upload path is designed, upload the file
-    // here and insert a row into manteniment_adjunts referencing the new
-    // incidencia's id. For now the file is only tracked client-side so the
-    // form doesn't feel broken — nothing is persisted for attachments yet.
-    console.warn("[ReportarIncidenciaSheet] TODO: attachment upload not implemented", tipoAdj, file.name);
+    // Files are held in memory here and actually uploaded on submit(),
+    // once we have the incidencia's id.
     setAdjuntos((prev) => [...prev, { tipo: tipoAdj, file }]);
   }
 
@@ -197,12 +193,37 @@ export function ReportarIncidenciaSheet({
     if (context.origen === "gestor") {
       payload.data_incident = dataIncident;
     }
-    const { error } = await supabase.from("manteniment_incidencies").insert(payload);
-    setSaving(false);
+    const { data: inserted, error } = await supabase
+      .from("manteniment_incidencies")
+      .insert(payload)
+      .select("id_incidencia")
+      .single();
     if (error) {
+      setSaving(false);
       toast.error("Error: " + error.message);
       return;
     }
+    if (adjuntos.length > 0) {
+      for (const a of adjuntos) {
+        try {
+          const fd = new FormData();
+          fd.set("file", a.file);
+          fd.set("id_incidencia", String(inserted.id_incidencia));
+          const result = await uploadAdjunto({ data: fd });
+          await supabase.from("manteniment_adjunts").insert({
+            id_incidencia: inserted.id_incidencia,
+            tipus: a.tipo,
+            nom_fitxer: result.nombreOriginal,
+            url: result.key,
+            creado_per: reporterId,
+          });
+        } catch (e) {
+          console.error("[ReportarIncidenciaSheet] adjunto upload failed:", e);
+          toast.error(`No se pudo subir el adjunto "${a.file.name}", la incidencia se guardó igualmente`);
+        }
+      }
+    }
+    setSaving(false);
     toast.success("Incidencia registrada");
     handleClose(false);
     onSaved?.();
