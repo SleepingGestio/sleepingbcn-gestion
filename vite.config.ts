@@ -65,7 +65,14 @@ export default defineConfig(({ mode }) => ({
     }),
     nitro({
       preset: "cloudflare-module",
-      cloudflare: { nodeCompat: true },
+      cloudflare: {
+        nodeCompat: true,
+        wrangler: {
+          r2_buckets: [
+            { binding: "MANTENIMIENTO_BUCKET", bucket_name: "sleepingbcn-manteniment" },
+          ],
+        },
+      },
     }),
     viteReact(),
   ],
