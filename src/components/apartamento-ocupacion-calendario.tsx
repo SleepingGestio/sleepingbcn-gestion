@@ -267,7 +267,7 @@ function OcupacionBar({ r, dayISOs }: { r: ReservaLite; dayISOs: string[] }) {
           <button
             type="button"
             onClick={(e) => e.stopPropagation()}
-            className="absolute rounded bg-[#378ADD] hover:brightness-110"
+            className="absolute rounded bg-[#378ADD] hover:brightness-110 border-2 border-white"
             style={barStyle}
             title={`${fmtDate(ciISO)} → ${fmtDate(coISO)}`}
           />
@@ -290,19 +290,19 @@ function OcupacionBar({ r, dayISOs }: { r: ReservaLite; dayISOs: string[] }) {
 
   return (
     <div
-      className="absolute rounded bg-[#378ADD] flex items-center justify-between gap-0.5 px-0.5 overflow-hidden"
+      className="absolute rounded bg-[#378ADD] flex items-center justify-between gap-0.5 px-0.5 overflow-hidden border-2 border-white"
       style={barStyle}
       title={`${fmtDate(ciISO)} → ${fmtDate(coISO)}`}
     >
       {ciVisible ? (
         <TimeBadge value={leftTime.value.slice(0, 5)} informed={leftTime.informed} size="xs" />
       ) : (
-        ciIdx < 0 && <span className="text-white text-[9px] font-bold pl-0.5">‹</span>
+        ciIdx < 0 && <span className="text-white text-xs font-black pl-0.5 leading-none">‹‹</span>
       )}
       {coVisible ? (
         <TimeBadge value={rightTime.value.slice(0, 5)} informed={rightTime.informed} size="xs" />
       ) : (
-        coIdx > 6 && <span className="text-white text-[9px] font-bold pr-0.5">›</span>
+        coIdx > 6 && <span className="text-white text-xs font-black pr-0.5 leading-none">››</span>
       )}
     </div>
   );
