@@ -204,11 +204,14 @@ export function MantenimientoPopover({
         <DialogContent className="max-w-lg p-0 gap-0 max-h-[90vh] overflow-hidden flex flex-col">
           {inc && (
             <DialogHeader className="px-4 py-3 border-b">
-              <DialogTitle className="text-base flex items-center gap-2 flex-wrap">
-                <span>{inc.titol}</span>
-                <TipoBadge tipus={inc.tipus} />
-                <EstadoFullPill estat={inc.estat} />
-              </DialogTitle>
+              <DialogTitle className="sr-only">{inc.titol}</DialogTitle>
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <TipoBadge tipus={inc.tipus} />
+                  <EstadoFullPill estat={inc.estat} />
+                </div>
+                <PrioridadPill prioridad={inc.prioritat_confirmada ?? inc.prioritat_proposta} />
+              </div>
               <DialogDescription className="sr-only">Detalle de la incidencia de mantenimiento</DialogDescription>
             </DialogHeader>
           )}
@@ -222,13 +225,10 @@ export function MantenimientoPopover({
               <div className="py-8 text-center text-sm text-muted-foreground">Cargando…</div>
             ) : (
               <>
-                <section>
-                  <Label className="text-xs uppercase tracking-wide text-muted-foreground">Ubicación</Label>
-                  <div className="mt-1 flex items-center gap-1.5 text-sm">
-                    <Home className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                    {resolveLocation(inc, aptById, espacioById, grupoById)}
-                  </div>
-                </section>
+                <div className="flex items-center gap-1.5 text-sm">
+                  <Home className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                  {resolveLocation(inc, aptById, espacioById, grupoById)}
+                </div>
 
                 <section>
                   <Label className="text-xs uppercase tracking-wide text-muted-foreground">Descripción</Label>
@@ -255,45 +255,30 @@ export function MantenimientoPopover({
                 </section>
 
                 <section>
-                  <Label className="text-xs uppercase tracking-wide text-muted-foreground">Prioridad</Label>
-                  <div className="mt-1 flex items-center gap-4 text-sm">
-                    <div className="flex items-center gap-1.5">
-                      <PrioridadPill prioridad={inc.prioritat_proposta} />
-                      <span className="text-muted-foreground">Reportada</span>
-                    </div>
-                    {inc.prioritat_confirmada && inc.prioritat_confirmada !== inc.prioritat_proposta && (
-                      <div className="flex items-center gap-1.5">
-                        <PrioridadPill prioridad={inc.prioritat_confirmada} />
-                        <span className="text-muted-foreground">Confirmada</span>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <Label className="text-xs uppercase tracking-wide text-muted-foreground">Origen</Label>
+                      <div className="mt-1 text-sm space-y-0.5">
+                        <div>{ORIGEN_LABEL[inc.origen] ?? inc.origen}</div>
+                        {inc.origen === "neteja" && inc.id_limpieza != null && (
+                          <div className="text-xs text-muted-foreground">Limpieza asociada: #{inc.id_limpieza}</div>
+                        )}
+                        {inc.numero_reserva && (
+                          <div className="text-xs text-muted-foreground">Reserva: {inc.numero_reserva}</div>
+                        )}
                       </div>
-                    )}
-                  </div>
-                </section>
-
-                <section>
-                  <Label className="text-xs uppercase tracking-wide text-muted-foreground">Origen</Label>
-                  <div className="mt-1 text-sm space-y-0.5">
-                    <div>{ORIGEN_LABEL[inc.origen] ?? inc.origen}</div>
-                    {inc.origen === "neteja" && inc.id_limpieza != null && (
-                      <div className="text-xs text-muted-foreground">Limpieza asociada: #{inc.id_limpieza}</div>
-                    )}
-                    {inc.numero_reserva && (
-                      <div className="text-xs text-muted-foreground">Reserva: {inc.numero_reserva}</div>
-                    )}
-                  </div>
-                </section>
-
-                <section>
-                  <Label className="text-xs uppercase tracking-wide text-muted-foreground">Reportado por</Label>
-                  <div className="mt-1 text-sm">
-                    {inc.id_reporter != null ? fullName(personaById.get(inc.id_reporter)) : "—"}
-                    <span className="text-muted-foreground"> · {fmtDateTime(inc.creado_en)}</span>
-                  </div>
-                  {inc.data_incident && (
-                    <div className="text-xs text-muted-foreground mt-0.5">
-                      Ocurrió: {fmtDateTime(inc.data_incident)}
                     </div>
-                  )}
+                    <div>
+                      <Label className="text-xs uppercase tracking-wide text-muted-foreground">Reportado por</Label>
+                      <div className="mt-1 text-sm">
+                        {inc.id_reporter != null ? fullName(personaById.get(inc.id_reporter)) : "—"}
+                        <div className="text-xs text-muted-foreground">{fmtDateTime(inc.creado_en)}</div>
+                        {inc.data_incident && (
+                          <div className="text-xs text-muted-foreground">Ocurrió: {fmtDateTime(inc.data_incident)}</div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
                 </section>
 
                 {inc.validat_per != null && (
@@ -321,6 +306,40 @@ export function MantenimientoPopover({
                     </div>
                   </section>
                 )}
+
+                {inc.finalitzat_en && (
+                  <section>
+                    <Label className="text-xs uppercase tracking-wide text-muted-foreground">Cierre</Label>
+                    <div className="mt-1 text-sm space-y-0.5">
+                      <div>{fmtDateTime(inc.finalitzat_en)}</div>
+                      <div className="text-xs text-muted-foreground">
+                        Tarea realizada: {inc.tasca_realitzada ? "Sí" : "No"}
+                        {inc.tipus === "material_danyat" && (
+                          <> · Material repuesto: {inc.material_reposat ? "Sí" : "No"}</>
+                        )}
+                      </div>
+                    </div>
+                  </section>
+                )}
+
+                <section>
+                  <Label className="text-xs uppercase tracking-wide text-muted-foreground">Notas del gestor</Label>
+                  <Textarea
+                    rows={3}
+                    className="mt-1.5"
+                    placeholder="Añade notas internas…"
+                    value={nota}
+                    onChange={(e) => setNota(e.target.value)}
+                    disabled={!editable}
+                  />
+                  {editable && (
+                    <div className="mt-1.5 flex justify-end">
+                      <Button size="sm" variant="outline" disabled={!notaDirty} onClick={() => actions.guardarNota(inc, nota)}>
+                        Guardar nota
+                      </Button>
+                    </div>
+                  )}
+                </section>
 
                 <section>
                   <Label className="text-xs uppercase tracking-wide text-muted-foreground">Sesiones de trabajo</Label>
@@ -359,40 +378,6 @@ export function MantenimientoPopover({
                       <div className="text-sm font-medium">Total: {formatHHMM(totalHoras)} hrs.</div>
                     )}
                   </div>
-                </section>
-
-                {inc.finalitzat_en && (
-                  <section>
-                    <Label className="text-xs uppercase tracking-wide text-muted-foreground">Cierre</Label>
-                    <div className="mt-1 text-sm space-y-0.5">
-                      <div>{fmtDateTime(inc.finalitzat_en)}</div>
-                      <div className="text-xs text-muted-foreground">
-                        Tarea realizada: {inc.tasca_realitzada ? "Sí" : "No"}
-                        {inc.tipus === "material_danyat" && (
-                          <> · Material repuesto: {inc.material_reposat ? "Sí" : "No"}</>
-                        )}
-                      </div>
-                    </div>
-                  </section>
-                )}
-
-                <section>
-                  <Label className="text-xs uppercase tracking-wide text-muted-foreground">Notas del gestor</Label>
-                  <Textarea
-                    rows={3}
-                    className="mt-1.5"
-                    placeholder="Añade notas internas…"
-                    value={nota}
-                    onChange={(e) => setNota(e.target.value)}
-                    disabled={!editable}
-                  />
-                  {editable && (
-                    <div className="mt-1.5 flex justify-end">
-                      <Button size="sm" variant="outline" disabled={!notaDirty} onClick={() => actions.guardarNota(inc, nota)}>
-                        Guardar nota
-                      </Button>
-                    </div>
-                  )}
                 </section>
 
                 <section>
