@@ -24,11 +24,11 @@ const PRIORIDAD_OPTIONS: Prioridad[] = ["alta", "normal", "baixa"];
 
 type AdjuntoTipo = "foto" | "video" | "audio" | "documento";
 
-const ADJUNTO_OPTIONS: { tipo: AdjuntoTipo; label: string; icon: typeof Camera; accept: string }[] = [
-  { tipo: "foto", label: "Foto", icon: Camera, accept: "image/*" },
-  { tipo: "video", label: "Vídeo", icon: Video, accept: "video/*" },
-  { tipo: "audio", label: "Nota de voz", icon: Mic, accept: "audio/*" },
-  { tipo: "documento", label: "Documento", icon: FileText, accept: ".pdf,.doc,.docx,image/*" },
+const ADJUNTO_OPTIONS: { tipo: AdjuntoTipo; label: string; icon: typeof Camera; accept: string; capture?: "environment" | "user" }[] = [
+  { tipo: "foto", label: "Foto", icon: Camera, accept: "image/*", capture: "environment" },
+  { tipo: "video", label: "Vídeo", icon: Video, accept: "video/*", capture: "environment" },
+  { tipo: "audio", label: "Nota de voz", icon: Mic, accept: "audio/*", capture: "user" },
+  { tipo: "documento", label: "Documento", icon: FileText, accept: ".pdf,.doc,.docx,image/*,video/*" },
 ];
 
 /**
@@ -388,6 +388,7 @@ export function ReportarIncidenciaSheet({
                       <input
                         type="file"
                         accept={o.accept}
+                        capture={o.capture}
                         className="hidden"
                         onChange={(e) => {
                           addAdjunto(o.tipo, e.target.files?.[0] ?? null);
