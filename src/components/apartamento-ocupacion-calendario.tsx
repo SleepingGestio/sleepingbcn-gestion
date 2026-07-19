@@ -17,7 +17,7 @@ type ReservaLite = {
   "Estado": string | null;
 };
 
-const DOW = ["D", "L", "M", "X", "J", "V", "S"];
+const DOW = ["L", "M", "X", "J", "V", "S", "D"];
 const MONTH_ES = [
   "enero", "febrero", "marzo", "abril", "mayo", "junio",
   "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre",
@@ -36,10 +36,12 @@ function addDays(d: Date, n: number): Date {
 }
 
 function startOfWeek(d: Date): Date {
-  return addDays(d, -d.getDay());
+  const dow = d.getDay(); // 0=Sun..6=Sat
+  const mondayOffset = dow === 0 ? -6 : 1 - dow;
+  return addDays(d, mondayOffset);
 }
 
-/** Rolling 3-week window (Sun–Sat rows) starting at the given anchor date's week. */
+/** Rolling 3-week window (Mon–Sun rows) starting at the given anchor date's week. */
 function threeWeekGrid(anchorWeekStart: Date): Date[][] {
   return Array.from({ length: 3 }, (_, i) =>
     Array.from({ length: 7 }, (_, j) => addDays(anchorWeekStart, i * 7 + j)),
@@ -139,7 +141,7 @@ export function ApartamentoOcupacionCalendario({
           <button
             type="button"
             onClick={goToday}
-            className="text-[10px] text-muted-foreground underline hover:text-foreground"
+            className="text-[10px] font-medium text-white bg-[#26215C] hover:bg-[#1e1a48] rounded-full px-2 py-0.5"
           >
             hoy
           </button>
@@ -158,7 +160,7 @@ export function ApartamentoOcupacionCalendario({
       {reservasQ.isLoading ? (
         <div className="text-center text-xs text-muted-foreground py-6">Cargando…</div>
       ) : (
-        <div className="space-y-px">
+        <div className="space-y-1">
           {rows.map((week, ri) => (
             <CalendarWeekRow
               key={ri}
@@ -211,7 +213,7 @@ function CalendarWeekRow({
               onClick={() => onSelectDate?.(iso)}
               className={cn(
                 "text-left px-1 pt-0.5 text-[10px] leading-none font-semibold text-foreground",
-                tinted && "bg-slate-50",
+                tinted && "bg-blue-50",
                 onSelectDate ? "hover:bg-muted/50 cursor-pointer" : "cursor-default",
               )}
             >
@@ -265,8 +267,16 @@ function OcupacionBar({ r, dayISOs }: { r: ReservaLite; dayISOs: string[] }) {
       }}
       title={`${fmtDate(ciISO)} → ${fmtDate(coISO)}`}
     >
-      {ciVisible && <TimeBadge value={leftTime.value.slice(0, 5)} informed={leftTime.informed} size="xs" />}
-      {coVisible && <TimeBadge value={rightTime.value.slice(0, 5)} informed={rightTime.informed} size="xs" />}
+      {ciVisible ? (
+        <TimeBadge value={leftTime.value.slice(0, 5)} informed={leftTime.informed} size="xs" />
+      ) : (
+        ciIdx < 0 && <span className="text-white text-[9px] font-bold pl-0.5">‹</span>
+      )}
+      {coVisible ? (
+        <TimeBadge value={rightTime.value.slice(0, 5)} informed={rightTime.informed} size="xs" />
+      ) : (
+        coIdx > 6 && <span className="text-white text-[9px] font-bold pr-0.5">›</span>
+      )}
     </div>
   );
 }
