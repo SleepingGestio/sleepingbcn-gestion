@@ -29,6 +29,7 @@ import { PasswordInput } from "@/components/ui/password-input";
 import { Label } from "@/components/ui/label";
 import { Zap, Sofa, LogOut, Clock, ArrowLeft, Check, X, Play, Menu, UserCircle2, KeyRound, Square, ClipboardList, Plus, LayoutDashboard, AlertTriangle, Wrench, Home } from "lucide-react";
 import { ReportarIncidenciaSheet, type ReportarIncidenciaContext } from "@/components/reportar-incidencia";
+import { MantenimientoPopover } from "@/components/mantenimiento-popover";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { TimeBadge } from "@/components/time-badge";
@@ -36,7 +37,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { ESTADO_LIMPIEZA_STYLE } from "@/components/estado-limpieza-badge";
 import { fmtDate } from "@/lib/format";
 import { TipoBadge, PrioridadPill } from "@/components/mantenimiento-badges";
-import { useApartamentosLite, useEspaciosLite, useGruposLite, useMantenimientoActions } from "@/hooks/use-mantenimiento";
+import { useApartamentosLite, useEspaciosLite, useGruposLite, useMantenimientoActions, usePersonalLite } from "@/hooks/use-mantenimiento";
 import {
   INCIDENCIA_COLUMNS,
   REGISTRE_COLUMNS,
@@ -315,6 +316,7 @@ function WorkerView({
   const [pwOpen, setPwOpen] = useState(false);
   const [startSheetOpen, setStartSheetOpen] = useState(false);
   const [endSheetOpen, setEndSheetOpen] = useState(false);
+  const [mantDetailId, setMantDetailId] = useState<number | null>(null);
   const disabled = !!previewing;
 
   // Upcoming tasks (today + future)
@@ -605,6 +607,7 @@ function WorkerView({
   const mantEspacioById = useMemo(() => new Map((mantEspaciosQ.data ?? []).map((e) => [e.id_tipo, e])), [mantEspaciosQ.data]);
   const mantGruposQ = useGruposLite();
   const mantGrupoById = useMemo(() => new Map((mantGruposQ.data ?? []).map((g) => [g.id_grupo, g])), [mantGruposQ.data]);
+  const personalQ = usePersonalLite();
 
   const mantIncidenciasQ = useQuery({
     queryKey: ["mi-dia-mant-incidencias", mantFiltro, personalId],
@@ -930,6 +933,7 @@ function WorkerView({
                     mantActions.finParcial(inc, personalId, mantMisSesionesByIncidencia.get(inc.id_incidencia) ?? [])
                   }
                   onFinTotal={() => mantActions.finTotal(inc)}
+                  onOpenDetail={() => setMantDetailId(inc.id_incidencia)}
                 />
               ))}
             </div>
@@ -1057,6 +1061,7 @@ function WorkerView({
                 mantActions.finParcial(inc, personalId, mantMisSesionesByIncidencia.get(inc.id_incidencia) ?? [])
               }
               onFinTotal={() => mantActions.finTotal(inc)}
+              onOpenDetail={() => setMantDetailId(inc.id_incidencia)}
             />
           ))}
         </div>
@@ -1151,6 +1156,15 @@ function WorkerView({
           context={incidenciaContext}
         />
       )}
+
+      <MantenimientoPopover
+        idIncidencia={mantDetailId}
+        onOpenChange={(o) => {
+          if (!o) setMantDetailId(null);
+        }}
+        onSaved={() => mantIncidenciasQ.refetch()}
+        workers={personalQ.data ?? []}
+      />
 
       {/* Equipo trabajando este día */}
       <div className="px-3 mt-6 mb-6">
@@ -1448,6 +1462,7 @@ function MantenimientoTaskCard({
   onIniciar,
   onFinParcial,
   onFinTotal,
+  onOpenDetail,
 }: {
   inc: Incidencia;
   location: string;
@@ -1457,6 +1472,7 @@ function MantenimientoTaskCard({
   onIniciar: () => Promise<void> | void;
   onFinParcial: () => Promise<void> | void;
   onFinTotal: () => Promise<void> | void;
+  onOpenDetail: () => void;
 }) {
   const [submitting, setSubmitting] = useState(false);
   const misOpenSession = findOpenSession(misSesiones);
@@ -1474,7 +1490,7 @@ function MantenimientoTaskCard({
   return (
     <div className="rounded-xl bg-white shadow-sm overflow-hidden flex">
       <div className={cn("w-1.5 shrink-0", misOpenSession ? "bg-[#378ADD]" : "bg-slate-300")} />
-      <div className="flex-1 p-3 space-y-1.5">
+      <div className="flex-1 p-3 space-y-1.5 cursor-pointer" onClick={onOpenDetail}>
         <div className="flex items-center gap-1.5 flex-wrap">
           <TipoBadge tipus={inc.tipus} />
           <PrioridadPill prioridad={inc.prioritat_confirmada ?? inc.prioritat_proposta} />
@@ -1487,7 +1503,7 @@ function MantenimientoTaskCard({
         </div>
         <div className="text-xs text-slate-600">Asignado a: {asignadoCodigo}</div>
         {inc.data_prevista && <div className="text-xs text-slate-600">Prevista: {fmtDate(inc.data_prevista)}</div>}
-        <div className="mt-2 flex flex-wrap gap-2">
+        <div className="mt-2 flex flex-wrap gap-2" onClick={(e) => e.stopPropagation()}>
           {!misOpenSession ? (
             <Button
               size="sm"
