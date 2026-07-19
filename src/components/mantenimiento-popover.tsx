@@ -47,6 +47,34 @@ function dataUrlToBlobUrl(dataUrl: string): string {
   return URL.createObjectURL(blob);
 }
 
+function AdjuntoThumbnail({ idAdjunto, url, label }: { idAdjunto: number; url: string; label: string }) {
+  const thumbQ = useQuery({
+    queryKey: ["adjunto-thumb", idAdjunto],
+    queryFn: async () => {
+      const result = await getAdjunto({ data: { key: url } });
+      return dataUrlToBlobUrl(result.dataUrl);
+    },
+    staleTime: Infinity,
+  });
+
+  if (thumbQ.isPending) {
+    return <div className="h-14 w-14 rounded bg-slate-200 animate-pulse" />;
+  }
+
+  if (thumbQ.isError || !thumbQ.data) {
+    return <span className="text-sm">{label}</span>;
+  }
+
+  const blobUrl = thumbQ.data;
+  return (
+    <img
+      src={blobUrl}
+      className="h-14 w-14 rounded object-cover cursor-pointer border border-slate-200"
+      onClick={() => window.open(blobUrl, "_blank")}
+    />
+  );
+}
+
 export function MantenimientoPopover({
   idIncidencia,
   onOpenChange,
@@ -381,6 +409,13 @@ export function MantenimientoPopover({
                             `Adjunto ${i + 1}`;
                           const idAdjunto = (a.id_adjunt as number | undefined) ?? i;
                           const url = a.url as string | undefined;
+                          if (a.tipus === "foto" && url) {
+                            return (
+                              <li key={idAdjunto} className="text-sm">
+                                <AdjuntoThumbnail idAdjunto={idAdjunto} url={url} label={label} />
+                              </li>
+                            );
+                          }
                           return (
                             <li key={idAdjunto} className="text-sm">
                               <button
