@@ -205,7 +205,7 @@ export function MantenimientoPopover({
           {inc && (
             <DialogHeader className="px-4 py-3 border-b">
               <DialogTitle className="sr-only">{inc.titol}</DialogTitle>
-              <div className="flex items-center justify-between gap-2 flex-wrap">
+              <div className="flex items-center justify-between gap-2 flex-wrap pr-6">
                 <div className="flex items-center gap-2 flex-wrap">
                   <TipoBadge tipus={inc.tipus} />
                   <EstadoFullPill estat={inc.estat} />
@@ -281,28 +281,31 @@ export function MantenimientoPopover({
                   </div>
                 </section>
 
-                {inc.validat_per != null && (
+                {(inc.validat_per != null || inc.estat !== "pendent_validacio") && (
                   <section>
-                    <Label className="text-xs uppercase tracking-wide text-muted-foreground">Validación</Label>
-                    <div className="mt-1 text-sm">
-                      {fullName(personaById.get(inc.validat_per))}
-                      <span className="text-muted-foreground"> · {fmtDateTime(inc.validat_en)}</span>
-                    </div>
-                  </section>
-                )}
-
-                {inc.estat !== "pendent_validacio" && (
-                  <section>
-                    <Label className="text-xs uppercase tracking-wide text-muted-foreground">Asignación</Label>
-                    <div className="mt-1 text-sm">
-                      {inc.id_assignat != null ? fullName(personaById.get(inc.id_assignat)) : "Sin asignar"}
-                      <span className="text-muted-foreground">
-                        {" "}
-                        ·{" "}
-                        <OcupacionPopoverTrigger idApt={inc.id_apt} initialDateISO={inc.data_prevista}>
-                          Prevista: {inc.data_prevista ? fmtDate(inc.data_prevista) : "Sin fecha prevista"}
-                        </OcupacionPopoverTrigger>
-                      </span>
+                    <div className="grid grid-cols-2 gap-3">
+                      {inc.validat_per != null && (
+                        <div>
+                          <Label className="text-xs uppercase tracking-wide text-muted-foreground">Validación</Label>
+                          <div className="mt-1 text-sm">
+                            {fullName(personaById.get(inc.validat_per))}
+                            <div className="text-xs text-muted-foreground">{fmtDateTime(inc.validat_en)}</div>
+                          </div>
+                        </div>
+                      )}
+                      {inc.estat !== "pendent_validacio" && (
+                        <div>
+                          <Label className="text-xs uppercase tracking-wide text-muted-foreground">Asignación</Label>
+                          <div className="mt-1 text-sm">
+                            {inc.id_assignat != null ? fullName(personaById.get(inc.id_assignat)) : "Sin asignar"}
+                            <div className="text-xs text-muted-foreground">
+                              <OcupacionPopoverTrigger idApt={inc.id_apt} initialDateISO={inc.data_prevista}>
+                                Prevista: {inc.data_prevista ? fmtDate(inc.data_prevista) : "Sin fecha prevista"}
+                              </OcupacionPopoverTrigger>
+                            </div>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </section>
                 )}
@@ -342,45 +345,6 @@ export function MantenimientoPopover({
                 </section>
 
                 <section>
-                  <Label className="text-xs uppercase tracking-wide text-muted-foreground">Sesiones de trabajo</Label>
-                  <div className="mt-1.5 space-y-1.5">
-                    {sesiones.length === 0 ? (
-                      <div className="text-sm text-muted-foreground italic">Sin sesiones aún</div>
-                    ) : (
-                      sesiones.map((s) => {
-                        const codigo = personaById.get(s.id_persona)?.codigo ?? "";
-                        return (
-                          <div key={s.id_registre} className="text-sm rounded-md border bg-muted/30 px-2.5 py-1.5">
-                            <div>
-                              <span className="font-medium">{codigo}</span> {fmtDateTime(s.inici)} →{" "}
-                              {s.fi ? (
-                                fmtDateTime(s.fi)
-                              ) : (
-                                <span className="text-[#378ADD] font-medium">en curso</span>
-                              )}
-                              {s.fi && s.hores != null && (
-                                <span className="text-muted-foreground"> ({formatHHMM(s.hores)} h)</span>
-                              )}
-                            </div>
-                            {(s.cost_materials != null || s.desc_materials) && (
-                              <div className="text-xs text-muted-foreground mt-0.5">
-                                Materiales
-                                {s.cost_materials != null ? `: ${s.cost_materials.toFixed(2)} €` : ""}
-                                {s.desc_materials ? ` — ${s.desc_materials}` : ""}
-                              </div>
-                            )}
-                            {s.notas && <div className="text-xs text-muted-foreground mt-0.5">{s.notas}</div>}
-                          </div>
-                        );
-                      })
-                    )}
-                    {closedSessions.length > 0 && (
-                      <div className="text-sm font-medium">Total: {formatHHMM(totalHoras)} hrs.</div>
-                    )}
-                  </div>
-                </section>
-
-                <section>
                   <Label className="text-xs uppercase tracking-wide text-muted-foreground">Adjuntos</Label>
                   <div className="mt-1.5">
                     {adjuntos.length === 0 ? (
@@ -416,6 +380,45 @@ export function MantenimientoPopover({
                           );
                         })}
                       </ul>
+                    )}
+                  </div>
+                </section>
+
+                <section>
+                  <Label className="text-xs uppercase tracking-wide text-muted-foreground">Sesiones de trabajo</Label>
+                  <div className="mt-1.5 space-y-1.5">
+                    {sesiones.length === 0 ? (
+                      <div className="text-sm text-muted-foreground italic">Sin sesiones aún</div>
+                    ) : (
+                      sesiones.map((s) => {
+                        const codigo = personaById.get(s.id_persona)?.codigo ?? "";
+                        return (
+                          <div key={s.id_registre} className="text-sm rounded-md border bg-muted/30 px-2.5 py-1.5">
+                            <div>
+                              <span className="font-medium">{codigo}</span> {fmtDateTime(s.inici)} →{" "}
+                              {s.fi ? (
+                                fmtDateTime(s.fi)
+                              ) : (
+                                <span className="text-[#378ADD] font-medium">en curso</span>
+                              )}
+                              {s.fi && s.hores != null && (
+                                <span className="text-muted-foreground"> ({formatHHMM(s.hores)} h)</span>
+                              )}
+                            </div>
+                            {(s.cost_materials != null || s.desc_materials) && (
+                              <div className="text-xs text-muted-foreground mt-0.5">
+                                Materiales
+                                {s.cost_materials != null ? `: ${s.cost_materials.toFixed(2)} €` : ""}
+                                {s.desc_materials ? ` — ${s.desc_materials}` : ""}
+                              </div>
+                            )}
+                            {s.notas && <div className="text-xs text-muted-foreground mt-0.5">{s.notas}</div>}
+                          </div>
+                        );
+                      })
+                    )}
+                    {closedSessions.length > 0 && (
+                      <div className="text-sm font-medium">Total: {formatHHMM(totalHoras)} hrs.</div>
                     )}
                   </div>
                 </section>
