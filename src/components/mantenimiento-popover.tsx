@@ -216,7 +216,7 @@ export function MantenimientoPopover({
             </DialogHeader>
           )}
 
-          <div className="overflow-y-auto px-4 py-3 space-y-4">
+          <div className="overflow-y-auto px-4 py-3 space-y-3">
             {detailQ.isError ? (
               <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">
                 Error cargando la incidencia: {(detailQ.error as Error).message}
@@ -231,27 +231,15 @@ export function MantenimientoPopover({
                 </div>
 
                 <section>
-                  <Label className="text-xs uppercase tracking-wide text-muted-foreground">Descripción</Label>
-                  <Textarea
-                    rows={3}
-                    className="mt-1.5"
-                    placeholder="Describe la incidencia…"
-                    value={descripcio}
-                    onChange={(e) => setDescripcio(e.target.value)}
-                    disabled={!editable}
-                  />
-                  {editable && (
-                    <div className="mt-1.5 flex justify-end">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        disabled={!descripcioDirty}
-                        onClick={() => actions.guardarDescripcio(inc, descripcio)}
-                      >
-                        Guardar descripción
+                  <div className="flex items-center justify-between gap-2">
+                    <Label className="text-xs uppercase tracking-wide text-muted-foreground">Descripción</Label>
+                    {editable && (
+                      <Button size="sm" variant="outline" className="h-6 px-2 text-xs" disabled={!descripcioDirty} onClick={() => actions.guardarDescripcio(inc, descripcio)}>
+                        Guardar
                       </Button>
-                    </div>
-                  )}
+                    )}
+                  </div>
+                  <Textarea rows={3} className="mt-1" placeholder="Describe la incidencia…" value={descripcio} onChange={(e) => setDescripcio(e.target.value)} disabled={!editable} />
                 </section>
 
                 <section>
@@ -326,22 +314,15 @@ export function MantenimientoPopover({
                 )}
 
                 <section>
-                  <Label className="text-xs uppercase tracking-wide text-muted-foreground">Notas del gestor</Label>
-                  <Textarea
-                    rows={3}
-                    className="mt-1.5"
-                    placeholder="Añade notas internas…"
-                    value={nota}
-                    onChange={(e) => setNota(e.target.value)}
-                    disabled={!editable}
-                  />
-                  {editable && (
-                    <div className="mt-1.5 flex justify-end">
-                      <Button size="sm" variant="outline" disabled={!notaDirty} onClick={() => actions.guardarNota(inc, nota)}>
-                        Guardar nota
+                  <div className="flex items-center justify-between gap-2">
+                    <Label className="text-xs uppercase tracking-wide text-muted-foreground">Notas del gestor</Label>
+                    {editable && (
+                      <Button size="sm" variant="outline" className="h-6 px-2 text-xs" disabled={!notaDirty} onClick={() => actions.guardarNota(inc, nota)}>
+                        Guardar
                       </Button>
-                    </div>
-                  )}
+                    )}
+                  </div>
+                  <Textarea rows={3} className="mt-1" placeholder="Añade notas internas…" value={nota} onChange={(e) => setNota(e.target.value)} disabled={!editable} />
                 </section>
 
                 <section>
