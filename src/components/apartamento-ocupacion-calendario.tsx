@@ -35,23 +35,23 @@ function addDays(d: Date, n: number): Date {
   return x;
 }
 
-/** Weeks (Sun–Sat) covering the given month, padded with the leading/trailing days needed to complete each row — no fixed 6-row padding, so short months stay compact. */
-function monthGrid(year: number, month0: number): Date[][] {
-  const first = new Date(year, month0, 1);
-  const gridStart = addDays(first, -first.getDay());
-  const last = new Date(year, month0 + 1, 0);
-  const gridEnd = addDays(last, 6 - last.getDay());
-  const totalDays = Math.round((gridEnd.getTime() - gridStart.getTime()) / 86_400_000) + 1;
-  const rows: Date[][] = [];
-  for (let i = 0; i < totalDays; i += 7) {
-    rows.push(Array.from({ length: 7 }, (_, j) => addDays(gridStart, i + j)));
-  }
-  return rows;
+function startOfWeek(d: Date): Date {
+  return addDays(d, -d.getDay());
+}
+
+/** Rolling 3-week window (Sun–Sat rows) starting at the given anchor date's week. */
+function threeWeekGrid(anchorWeekStart: Date): Date[][] {
+  return Array.from({ length: 3 }, (_, i) =>
+    Array.from({ length: 7 }, (_, j) => addDays(anchorWeekStart, i * 7 + j)),
+  );
 }
 
 /**
- * Compact month-grid occupancy calendar for a single apartment. Fetches
- * reservations overlapping the visible grid (same overlap query shape as
+ * Compact occupancy calendar for a single apartment, showing a rolling
+ * 3-week window (anchored at the reference date's week, moving by 3 weeks
+ * at a time) rather than a full month — keeps the popup short regardless
+ * of which day of the month the reference date falls on. Fetches
+ * reservations overlapping the visible window (same overlap query shape as
  * programacion-limpiezas.tsx's Gantt, scoped to one id_apt) and renders a
  * bar per reservation, clipped per week row, with check-in/out TimeBadges
  * at each visible edge (green = KB-informed, gray = default).
@@ -68,12 +68,38 @@ export function ApartamentoOcupacionCalendario({
   className?: string;
 }) {
   const initial = initialDateISO ? new Date(initialDateISO + "T00:00:00") : new Date();
-  const [year, setYear] = useState(initial.getFullYear());
-  const [month0, setMonth0] = useState(initial.getMonth());
+  const [anchor, setAnchor] = useState(() => startOfWeek(initial));
 
-  const rows = useMemo(() => monthGrid(year, month0), [year, month0]);
+  const rows = useMemo(() => threeWeekGrid(anchor), [anchor]);
   const fromISO = toISO(rows[0][0]);
-  const toExclusiveISO = toISO(addDays(rows[rows.length - 1][6], 1));
+  const toExclusiveISO = toISO(addDays(rows[2][6], 1));
+
+  // Distinct (year, month) pairs spanned by the visible window, in order —
+  // used both for the header label and to alternate a subtle background
+  // tint per month so the transition is visible without a hard divider.
+  const monthKeys = useMemo(() => {
+    const keys: string[] = [];
+    for (const row of rows) {
+      for (const d of row) {
+        const key = `${d.getFullYear()}-${d.getMonth()}`;
+        if (keys[keys.length - 1] !== key) keys.push(key);
+      }
+    }
+    return keys;
+  }, [rows]);
+
+  function monthTintIndex(d: Date): number {
+    const key = `${d.getFullYear()}-${d.getMonth()}`;
+    return monthKeys.indexOf(key);
+  }
+
+  const headerLabel = useMemo(() => {
+    const [firstY, firstM] = monthKeys[0].split("-").map(Number);
+    const [lastY, lastM] = monthKeys[monthKeys.length - 1].split("-").map(Number);
+    if (monthKeys.length === 1) return `${MONTH_ES[firstM]} ${firstY}`;
+    if (firstY === lastY) return `${MONTH_ES[firstM]} – ${MONTH_ES[lastM]} ${lastY}`;
+    return `${MONTH_ES[firstM]} ${firstY} – ${MONTH_ES[lastM]} ${lastY}`;
+  }, [monthKeys]);
 
   const reservasQ = useQuery({
     queryKey: ["apt-ocupacion", idApt, fromISO, toExclusiveISO],
@@ -92,32 +118,24 @@ export function ApartamentoOcupacionCalendario({
   const reservas = reservasQ.data ?? [];
   const todayISO = toISO(new Date());
 
-  function prevMonth() {
-    const d = new Date(year, month0 - 1, 1);
-    setYear(d.getFullYear());
-    setMonth0(d.getMonth());
+  function prevWindow() {
+    setAnchor((a) => addDays(a, -7));
   }
-  function nextMonth() {
-    const d = new Date(year, month0 + 1, 1);
-    setYear(d.getFullYear());
-    setMonth0(d.getMonth());
+  function nextWindow() {
+    setAnchor((a) => addDays(a, 7));
   }
   function goToday() {
-    const t = new Date();
-    setYear(t.getFullYear());
-    setMonth0(t.getMonth());
+    setAnchor(startOfWeek(new Date()));
   }
 
   return (
     <div className={cn("select-none", className)}>
       <div className="flex items-center justify-between mb-1.5">
-        <Button variant="ghost" size="icon" className="h-6 w-6" onClick={prevMonth} aria-label="Mes anterior">
+        <Button variant="ghost" size="icon" className="h-6 w-6" onClick={prevWindow} aria-label="3 semanas antes">
           <ChevronLeft className="h-3.5 w-3.5" />
         </Button>
         <div className="flex items-center gap-1.5">
-          <span className="text-xs font-medium capitalize">
-            {MONTH_ES[month0]} {year}
-          </span>
+          <span className="text-xs font-medium capitalize">{headerLabel}</span>
           <button
             type="button"
             onClick={goToday}
@@ -126,7 +144,7 @@ export function ApartamentoOcupacionCalendario({
             hoy
           </button>
         </div>
-        <Button variant="ghost" size="icon" className="h-6 w-6" onClick={nextMonth} aria-label="Mes siguiente">
+        <Button variant="ghost" size="icon" className="h-6 w-6" onClick={nextWindow} aria-label="3 semanas después">
           <ChevronRight className="h-3.5 w-3.5" />
         </Button>
       </div>
@@ -145,7 +163,7 @@ export function ApartamentoOcupacionCalendario({
             <CalendarWeekRow
               key={ri}
               week={week}
-              month0={month0}
+              monthTintIndex={monthTintIndex}
               reservas={reservas}
               todayISO={todayISO}
               onSelectDate={onSelectDate}
@@ -159,13 +177,13 @@ export function ApartamentoOcupacionCalendario({
 
 function CalendarWeekRow({
   week,
-  month0,
+  monthTintIndex,
   reservas,
   todayISO,
   onSelectDate,
 }: {
   week: Date[];
-  month0: number;
+  monthTintIndex: (d: Date) => number;
   reservas: ReservaLite[];
   todayISO: string;
   onSelectDate?: (iso: string) => void;
@@ -179,12 +197,12 @@ function CalendarWeekRow({
   );
 
   return (
-    <div className="relative" style={{ height: 34 }}>
+    <div className="relative" style={{ height: 40 }}>
       <div className="grid grid-cols-7 h-full">
         {week.map((d, i) => {
           const iso = dayISOs[i];
-          const inMonth = d.getMonth() === month0;
           const isToday = iso === todayISO;
+          const tinted = monthTintIndex(d) % 2 === 1;
           return (
             <button
               key={i}
@@ -192,9 +210,8 @@ function CalendarWeekRow({
               disabled={!onSelectDate}
               onClick={() => onSelectDate?.(iso)}
               className={cn(
-                "text-left px-1 pt-0.5 text-[10px] leading-none",
-                !inMonth && "text-muted-foreground/40",
-                inMonth && "text-foreground",
+                "text-left px-1 pt-0.5 text-[10px] leading-none font-semibold text-foreground",
+                tinted && "bg-slate-50",
                 onSelectDate ? "hover:bg-muted/50 cursor-pointer" : "cursor-default",
               )}
             >
@@ -229,13 +246,23 @@ function OcupacionBar({ r, dayISOs }: { r: ReservaLite; dayISOs: string[] }) {
   const widthPct = rightPct - leftPct;
   if (widthPct <= 0) return null;
 
+  const isNarrow = coIdx - ciIdx <= 2;
+
   const leftTime = resolveTime(r["Hora estimada de llegada"], "15:00:00");
   const rightTime = resolveTime(r["Hora estimada de salida"], "11:00:00");
 
   return (
     <div
-      className="absolute rounded bg-[#378ADD] flex items-center justify-between gap-0.5 px-0.5 overflow-hidden"
-      style={{ left: `${leftPct}%`, width: `${widthPct}%`, bottom: 2, height: 14 }}
+      className={cn(
+        "absolute rounded bg-[#378ADD] flex items-center overflow-hidden",
+        isNarrow ? "flex-col justify-center gap-px px-0" : "justify-between gap-0.5 px-0.5",
+      )}
+      style={{
+        left: `calc(${leftPct}% + 1.5px)`,
+        width: `calc(${widthPct}% - 3px)`,
+        bottom: 2,
+        height: isNarrow ? 26 : 14,
+      }}
       title={`${fmtDate(ciISO)} → ${fmtDate(coISO)}`}
     >
       {ciVisible && <TimeBadge value={leftTime.value.slice(0, 5)} informed={leftTime.informed} size="xs" />}
