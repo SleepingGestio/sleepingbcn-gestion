@@ -56,13 +56,19 @@ export function MantenimientoPopover({
   const [loadingAdjunto, setLoadingAdjunto] = useState<number | null>(null);
 
   async function verAdjunto(idAdjunto: number, key: string) {
+    const newWindow = window.open("", "_blank");
     setLoadingAdjunto(idAdjunto);
     try {
       const result = await getAdjunto({ data: { key } });
-      window.open(result.dataUrl, "_blank");
+      if (newWindow) {
+        newWindow.location.href = result.dataUrl;
+      } else {
+        toast.error("El navegador bloqueó la ventana. Permite ventanas emergentes e inténtalo de nuevo.");
+      }
     } catch (e) {
       console.error("[MantenimientoPopover] failed to load adjunto:", e);
       toast.error("No se pudo cargar el adjunto");
+      newWindow?.close();
     } finally {
       setLoadingAdjunto(null);
     }
