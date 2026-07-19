@@ -34,6 +34,19 @@ import { Home, Loader2 } from "lucide-react";
 
 type Adjunto = Record<string, unknown> & { id_adjunt?: number };
 
+function dataUrlToBlobUrl(dataUrl: string): string {
+  const [header, base64] = dataUrl.split(",");
+  const contentType = header.match(/data:(.*?);base64/)?.[1] ?? "application/octet-stream";
+  const byteChars = atob(base64);
+  const byteNumbers = new Array(byteChars.length);
+  for (let i = 0; i < byteChars.length; i++) {
+    byteNumbers[i] = byteChars.charCodeAt(i);
+  }
+  const byteArray = new Uint8Array(byteNumbers);
+  const blob = new Blob([byteArray], { type: contentType });
+  return URL.createObjectURL(blob);
+}
+
 export function MantenimientoPopover({
   idIncidencia,
   onOpenChange,
@@ -61,7 +74,7 @@ export function MantenimientoPopover({
     try {
       const result = await getAdjunto({ data: { key } });
       if (newWindow) {
-        newWindow.location.href = result.dataUrl;
+        newWindow.location.href = dataUrlToBlobUrl(result.dataUrl);
       } else {
         toast.error("El navegador bloqueó la ventana. Permite ventanas emergentes e inténtalo de nuevo.");
       }
