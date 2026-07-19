@@ -51,8 +51,9 @@ export function AppSidebar() {
   });
 
   return (
-    <Sidebar collapsible="icon" className={isStaging ? "border-r-4 border-rose-800" : undefined}>
+    <Sidebar collapsible="icon">
       <SidebarHeader className="border-b">
+        {isStaging && <div className="h-2 w-full bg-rose-800" />}
         <div className="px-2 py-3">
           <div className="text-lg font-semibold tracking-tight">SleepingBCN</div>
           <div className="text-xs text-muted-foreground">Gestión interna</div>
