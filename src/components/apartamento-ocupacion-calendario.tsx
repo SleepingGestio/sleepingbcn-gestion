@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from "react";
+import { useMemo, useState, type CSSProperties, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
@@ -213,7 +213,7 @@ function CalendarWeekRow({
               onClick={() => onSelectDate?.(iso)}
               className={cn(
                 "text-left px-1 pt-0.5 text-[10px] leading-none font-semibold text-foreground",
-                tinted && "bg-blue-50",
+                tinted && "bg-blue-100",
                 onSelectDate ? "hover:bg-muted/50 cursor-pointer" : "cursor-default",
               )}
             >
@@ -248,23 +248,50 @@ function OcupacionBar({ r, dayISOs }: { r: ReservaLite; dayISOs: string[] }) {
   const widthPct = rightPct - leftPct;
   if (widthPct <= 0) return null;
 
-  const isNarrow = coIdx - ciIdx <= 2;
+  const isNarrow = coIdx - ciIdx <= 1;
 
   const leftTime = resolveTime(r["Hora estimada de llegada"], "15:00:00");
   const rightTime = resolveTime(r["Hora estimada de salida"], "11:00:00");
 
+  const barStyle: CSSProperties = {
+    left: `calc(${leftPct}% + 1.5px)`,
+    width: `calc(${widthPct}% - 3px)`,
+    bottom: 2,
+    height: 14,
+  };
+
+  if (isNarrow) {
+    return (
+      <Popover>
+        <PopoverTrigger asChild>
+          <button
+            type="button"
+            onClick={(e) => e.stopPropagation()}
+            className="absolute rounded bg-[#378ADD] hover:brightness-110"
+            style={barStyle}
+            title={`${fmtDate(ciISO)} → ${fmtDate(coISO)}`}
+          />
+        </PopoverTrigger>
+        <PopoverContent className="w-auto p-2 text-xs" align="center" onClick={(e) => e.stopPropagation()}>
+          <div className="space-y-1">
+            <div className="flex items-center gap-1.5">
+              <span className="text-muted-foreground">Entrada:</span>
+              <TimeBadge value={leftTime.value.slice(0, 5)} informed={leftTime.informed} size="xs" />
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="text-muted-foreground">Salida:</span>
+              <TimeBadge value={rightTime.value.slice(0, 5)} informed={rightTime.informed} size="xs" />
+            </div>
+          </div>
+        </PopoverContent>
+      </Popover>
+    );
+  }
+
   return (
     <div
-      className={cn(
-        "absolute rounded bg-[#378ADD] flex items-center overflow-hidden",
-        isNarrow ? "flex-col justify-center gap-px px-0" : "justify-between gap-0.5 px-0.5",
-      )}
-      style={{
-        left: `calc(${leftPct}% + 1.5px)`,
-        width: `calc(${widthPct}% - 3px)`,
-        bottom: 2,
-        height: isNarrow ? 26 : 14,
-      }}
+      className="absolute rounded bg-[#378ADD] flex items-center justify-between gap-0.5 px-0.5 overflow-hidden"
+      style={barStyle}
       title={`${fmtDate(ciISO)} → ${fmtDate(coISO)}`}
     >
       {ciVisible ? (
