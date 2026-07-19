@@ -22,13 +22,13 @@ const TIPO_OPTIONS: { value: IncidenciaTipo; label: string; icon: typeof AlertTr
 
 const PRIORIDAD_OPTIONS: Prioridad[] = ["alta", "normal", "baixa"];
 
-type AdjuntoTipo = "foto" | "video" | "audio" | "documento";
+type AdjuntoTipo = "foto" | "video" | "nota_veu" | "document";
 
 const ADJUNTO_OPTIONS: { tipo: AdjuntoTipo; label: string; icon: typeof Camera; accept: string; capture?: "environment" | "user" }[] = [
   { tipo: "foto", label: "Foto", icon: Camera, accept: "image/*", capture: "environment" },
   { tipo: "video", label: "Vídeo", icon: Video, accept: "video/*", capture: "environment" },
-  { tipo: "audio", label: "Nota de voz", icon: Mic, accept: "audio/*", capture: "user" },
-  { tipo: "documento", label: "Documento", icon: FileText, accept: ".pdf,.doc,.docx,image/*,video/*" },
+  { tipo: "nota_veu", label: "Nota de voz", icon: Mic, accept: "audio/*", capture: "user" },
+  { tipo: "document", label: "Documento", icon: FileText, accept: ".pdf,.doc,.docx" },
 ];
 
 /**
