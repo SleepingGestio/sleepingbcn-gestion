@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { getAdjunto } from "@/lib/api/manteniment-adjuntos.functions";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -28,7 +30,7 @@ import {
   type Registre,
   type PersonaLite,
 } from "@/lib/mantenimiento";
-import { Home } from "lucide-react";
+import { Home, Loader2 } from "lucide-react";
 
 type Adjunto = Record<string, unknown> & { id_adjunt?: number };
 
@@ -51,6 +53,20 @@ export function MantenimientoPopover({
   const [notaLoadedFor, setNotaLoadedFor] = useState<number | null>(null);
   const [descripcio, setDescripcio] = useState("");
   const [descripcioLoadedFor, setDescripcioLoadedFor] = useState<number | null>(null);
+  const [loadingAdjunto, setLoadingAdjunto] = useState<number | null>(null);
+
+  async function verAdjunto(idAdjunto: number, key: string) {
+    setLoadingAdjunto(idAdjunto);
+    try {
+      const result = await getAdjunto({ data: { key } });
+      window.open(result.dataUrl, "_blank");
+    } catch (e) {
+      console.error("[MantenimientoPopover] failed to load adjunto:", e);
+      toast.error("No se pudo cargar el adjunto");
+    } finally {
+      setLoadingAdjunto(null);
+    }
+  }
 
   const detailQ = useQuery({
     queryKey: ["mantenimiento-detail", idIncidencia],
@@ -344,9 +360,19 @@ export function MantenimientoPopover({
                             (a.nom_fitxer as string | undefined) ??
                             (a.tipus as string | undefined) ??
                             `Adjunto ${i + 1}`;
+                          const idAdjunto = (a.id_adjunt as number | undefined) ?? i;
+                          const url = a.url as string | undefined;
                           return (
-                            <li key={(a.id_adjunt as number | undefined) ?? i} className="text-sm">
-                              {label}
+                            <li key={idAdjunto} className="text-sm">
+                              <button
+                                type="button"
+                                disabled={!url || loadingAdjunto === idAdjunto}
+                                onClick={() => url && verAdjunto(idAdjunto, url)}
+                                className="flex items-center gap-1.5 text-primary underline decoration-dotted underline-offset-2 hover:text-primary/80 disabled:opacity-50 disabled:no-underline"
+                              >
+                                {loadingAdjunto === idAdjunto && <Loader2 className="h-3 w-3 animate-spin" />}
+                                {label}
+                              </button>
                             </li>
                           );
                         })}

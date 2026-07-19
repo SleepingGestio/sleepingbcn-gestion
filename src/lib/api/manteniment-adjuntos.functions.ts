@@ -1,5 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { getCloudflareEnv } from "@/lib/cloudflare-env.server";
+import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { z } from "zod";
 
 export const uploadAdjunto = createServerFn({ method: "POST" })
   .inputValidator((formData: unknown) => formData as FormData)
@@ -16,4 +18,19 @@ export const uploadAdjunto = createServerFn({ method: "POST" })
       httpMetadata: { contentType: file.type || "application/octet-stream" },
     });
     return { key, nombreOriginal: file.name };
+  });
+
+export const getAdjunto = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator(z.object({ key: z.string().min(1) }))
+  .handler(async ({ data }) => {
+    const env = getCloudflareEnv();
+    const object = await env.MANTENIMIENTO_BUCKET.get(data.key);
+    if (!object) {
+      throw new Error("Adjunto no encontrado");
+    }
+    const contentType = object.httpMetadata?.contentType ?? "application/octet-stream";
+    const arrayBuffer = await object.arrayBuffer();
+    const base64 = Buffer.from(arrayBuffer).toString("base64");
+    return { dataUrl: `data:${contentType};base64,${base64}`, contentType };
   });
