@@ -297,7 +297,7 @@ function OcupacionBar({ r, dayISOs }: { r: ReservaLite; dayISOs: string[] }) {
               borderClass,
             )}
             style={barStyle}
-            title={`${fmtDate(ciISO)} → ${fmtDate(coISO)}`}
+            title={`${fmtDate(ciISO)} ${leftTime.value.slice(0, 5)} → ${fmtDate(coISO)} ${rightTime.value.slice(0, 5)}`}
           >
             {!ciVisible && ciIdx < 0 && <span className="text-white text-xs font-black pl-0.5 leading-none">‹‹</span>}
             {!coVisible && coIdx > 6 && <span className="text-white text-xs font-black pr-0.5 leading-none">››</span>}
@@ -327,7 +327,7 @@ function OcupacionBar({ r, dayISOs }: { r: ReservaLite; dayISOs: string[] }) {
         borderClass,
       )}
       style={barStyle}
-      title={`${fmtDate(ciISO)} → ${fmtDate(coISO)}`}
+      title={`${fmtDate(ciISO)} ${leftTime.value.slice(0, 5)} → ${fmtDate(coISO)} ${rightTime.value.slice(0, 5)}`}
     >
       {ciVisible ? (
         <TimeBadge value={leftTime.value.slice(0, 5)} informed={leftTime.informed} size="xs" />
