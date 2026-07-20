@@ -618,6 +618,7 @@ function WorkerView({
       } else {
         q = q.in("estat", ["validada", "en_curs"]);
         if (mantFiltro === "mias") q = q.eq("id_assignat", personalId);
+        else q = q.not("id_assignat", "is", null).neq("id_assignat", personalId);
       }
       const { data, error } = await q.order("data_prevista", { ascending: true, nullsFirst: false });
       if (error) throw error;
@@ -956,7 +957,7 @@ function WorkerView({
                   mantFiltro === "todas" ? "bg-white shadow-sm text-slate-900" : "text-slate-600",
                 )}
               >
-                Todas
+                Asignadas a otros
               </button>
               <button
                 type="button"
@@ -965,14 +966,15 @@ function WorkerView({
                   markNuevasSeen();
                 }}
                 className={cn(
-                  "relative rounded-full px-3 py-1 transition-colors",
-                  mantFiltro === "nuevas" ? "bg-white shadow-sm text-slate-900" : "text-slate-600",
+                  "rounded-full px-3 py-1 transition-colors font-semibold",
+                  hasUnseenNuevas
+                    ? "bg-red-600 text-white"
+                    : mantFiltro === "nuevas"
+                      ? "bg-white shadow-sm text-slate-900"
+                      : "text-slate-600",
                 )}
               >
                 Nuevas
-                {hasUnseenNuevas && (
-                  <span className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-red-600" />
-                )}
               </button>
             </div>
           </div>
