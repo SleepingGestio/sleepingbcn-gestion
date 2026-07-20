@@ -656,6 +656,8 @@ function ProgramacionLimpiezasPage() {
                                         affected_by_kb_change: false,
                                         affected_reason: null,
                                         proxima_reserva_numero: null,
+                                        iniciada_en: null,
+                                        finalizada_en: null,
                                       };
                                   setPopover({
                                     loadKey,

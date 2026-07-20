@@ -10,8 +10,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { cn } from "@/lib/utils";
-import { fmtDate, resolveTime } from "@/lib/format";
+import { cn, formatHHMM } from "@/lib/utils";
+import { fmtDate, fmtDateTime, resolveTime } from "@/lib/format";
 import { fetchLimpiadores } from "@/lib/catalogos";
 import { fullName } from "@/lib/types";
 import { getUnavailableWorkerIds } from "@/lib/worker-availability";
@@ -54,6 +54,8 @@ export type Limpieza = {
   affected_by_kb_change: boolean | null;
   affected_reason: string | null;
   proxima_reserva_numero: string | null;
+  iniciada_en: string | null;
+  finalizada_en: string | null;
 };
 
 type AptInfo = {
@@ -120,6 +122,8 @@ function emptyLimpieza(apt: AptInfo, fecha: string): Limpieza {
     affected_by_kb_change: false,
     affected_reason: null,
     proxima_reserva_numero: null,
+    iniciada_en: null,
+    finalizada_en: null,
   };
 }
 
@@ -169,6 +173,14 @@ function fmtWindow(mins: number): string {
   const m = mins % 60;
   const hm = m === 0 ? `${hours}h` : `${hours}h${String(m).padStart(2, "0")}`;
   return days > 0 ? `${days}d ${hm}` : hm;
+}
+
+function diffHours(a: string | null, b: string | null): number {
+  if (!a || !b) return 0;
+  const da = new Date(a).getTime();
+  const db = new Date(b).getTime();
+  if (!isFinite(da) || !isFinite(db)) return 0;
+  return Math.max(0, (db - da) / 3_600_000);
 }
 
 export function LimpiezaPopover({ open, loadKey, onOpenChange, apt, fecha, existing, onSaved, readOnly = false }: Props) {
@@ -1006,6 +1018,27 @@ export function LimpiezaPopover({ open, loadKey, onOpenChange, apt, fecha, exist
                 disabled={readOnly}
               />
             </section>
+
+            {form.iniciada_en && (
+              <section>
+                <Label className="text-xs uppercase tracking-wide text-muted-foreground">Resumen</Label>
+                <div className="mt-1.5 text-sm rounded-md border bg-muted/30 px-2.5 py-1.5">
+                  <span className="font-medium">{workerObj?.codigo ?? "—"}</span>{" "}
+                  {fmtDateTime(form.iniciada_en)} →{" "}
+                  {form.finalizada_en ? (
+                    fmtDateTime(form.finalizada_en)
+                  ) : (
+                    <span className="text-[#378ADD] font-medium">en curso</span>
+                  )}
+                  {form.finalizada_en && (
+                    <span className="text-muted-foreground">
+                      {" "}
+                      ({formatHHMM(diffHours(form.iniciada_en, form.finalizada_en))} h)
+                    </span>
+                  )}
+                </div>
+              </section>
+            )}
               </>
             )}
           </div>
