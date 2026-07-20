@@ -253,12 +253,20 @@ function OcupacionBar({ r, dayISOs }: { r: ReservaLite; dayISOs: string[] }) {
   const leftTime = resolveTime(r["Hora estimada de llegada"], "15:00:00");
   const rightTime = resolveTime(r["Hora estimada de salida"], "11:00:00");
 
+  const leftInset = ciVisible ? 1.5 : 0;
+  const rightInset = coVisible ? 1.5 : 0;
   const barStyle: CSSProperties = {
-    left: `calc(${leftPct}% + 1.5px)`,
-    width: `calc(${widthPct}% - 3px)`,
+    left: `calc(${leftPct}% + ${leftInset}px)`,
+    width: `calc(${widthPct}% - ${leftInset + rightInset}px)`,
     bottom: 2,
     height: 14,
   };
+  const roundedClass = cn(ciVisible && "rounded-l", coVisible && "rounded-r");
+  const borderClass = cn(
+    "border-y-2 border-white",
+    ciVisible && "border-l-2",
+    coVisible && "border-r-2",
+  );
 
   if (isNarrow) {
     return (
@@ -267,7 +275,7 @@ function OcupacionBar({ r, dayISOs }: { r: ReservaLite; dayISOs: string[] }) {
           <button
             type="button"
             onClick={(e) => e.stopPropagation()}
-            className="absolute rounded bg-[#378ADD] hover:brightness-110 border-2 border-white"
+            className={cn("absolute bg-[#378ADD] hover:brightness-110", roundedClass, borderClass)}
             style={barStyle}
             title={`${fmtDate(ciISO)} → ${fmtDate(coISO)}`}
           />
@@ -290,7 +298,11 @@ function OcupacionBar({ r, dayISOs }: { r: ReservaLite; dayISOs: string[] }) {
 
   return (
     <div
-      className="absolute rounded bg-[#378ADD] flex items-center justify-between gap-0.5 px-0.5 overflow-hidden border-2 border-white"
+      className={cn(
+        "absolute bg-[#378ADD] flex items-center justify-between gap-0.5 px-0.5 overflow-hidden",
+        roundedClass,
+        borderClass,
+      )}
       style={barStyle}
       title={`${fmtDate(ciISO)} → ${fmtDate(coISO)}`}
     >
