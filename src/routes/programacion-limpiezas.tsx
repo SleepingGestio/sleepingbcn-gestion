@@ -723,7 +723,12 @@ function ProgramacionLimpiezasPage() {
           fecha={popover.fecha}
           existing={popover.existing}
           readOnly={!canEditProgramacion}
-          onSaved={() => limpiezasQ.refetch()}
+          onSaved={() => {
+            limpiezasQ.refetch();
+            reservasQ.refetch();
+            maxGeneratedQ.refetch();
+            missingCleaningsQ.refetch();
+          }}
         />
       )}
       <GenerarDialog
