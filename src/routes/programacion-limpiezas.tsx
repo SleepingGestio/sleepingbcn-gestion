@@ -231,6 +231,23 @@ function ProgramacionLimpiezasPage() {
     queryFn: async (): Promise<{ numero: string; id_apt: number; checkout: string }[]> => {
       const maxFecha = maxGeneratedQ.data!;
       const todayStr = todayISO;
+      const [aptsRes, gruposRes] = await Promise.all([
+        supabase.from("apartamentos").select("id_apt, id_grupo"),
+        supabase.from("grupos_apartamentos").select("id_grupo, mostrar_por_defecto"),
+      ]);
+      if (aptsRes.error) throw aptsRes.error;
+      if (gruposRes.error) throw gruposRes.error;
+      const aptMap = new Map<number, { id_apt: number; id_grupo: number | null }>(
+        (aptsRes.data ?? []).map((a) => [a.id_apt, a]),
+      );
+      const grupoMap = new Map<number, boolean>(
+        (gruposRes.data ?? []).map((g) => [g.id_grupo, g.mostrar_por_defecto !== false]),
+      );
+      const hiddenAptIds = new Set<number>(
+        Array.from(aptMap.values())
+          .filter((a) => a.id_grupo == null || !grupoMap.get(a.id_grupo))
+          .map((a) => a.id_apt),
+      );
       const { data: resv, error: e1 } = await supabase
         .from("v_reservas_por_apartamento")
         .select('"Número","Check-out",id_apt')
@@ -262,6 +279,7 @@ function ProgramacionLimpiezasPage() {
         (completaIntermedias ?? []).map((l) => `${l.id_apt}|${l.fecha_limpieza}`),
       );
       return ((resv ?? []) as { "Número": string; "Check-out": string | null; id_apt: number | null }[])
+        .filter((r) => r.id_apt == null || !hiddenAptIds.has(r.id_apt))
         .filter((r) => r.id_apt != null && r["Check-out"] != null)
         .filter((r) => !existingKeys.has(`${r["Número"]}|${r.id_apt}`))
         .filter((r) => !completaKeys.has(`${r.id_apt}|${r["Check-out"]}`))
