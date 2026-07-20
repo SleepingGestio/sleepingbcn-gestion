@@ -639,6 +639,20 @@ function WorkerView({
     refetchInterval: 60_000,
   });
 
+  const mantMiasCountQ = useQuery({
+    queryKey: ["mi-dia-mant-mias-count", personalId],
+    enabled: isMantenimiento,
+    queryFn: async (): Promise<number> => {
+      const { count, error } = await supabase
+        .from("manteniment_incidencies")
+        .select("id_incidencia", { count: "exact", head: true })
+        .eq("id_assignat", personalId)
+        .in("estat", ["validada", "en_curs"]);
+      if (error) throw error;
+      return count ?? 0;
+    },
+  });
+
   const mantNuevasSeenKey = `mant_nuevas_seen_${personalId}`;
   const [mantNuevasSeenIds, setMantNuevasSeenIds] = useState<number[]>(() => {
     if (typeof window === "undefined") return [];
@@ -1041,7 +1055,7 @@ function WorkerView({
         />
       )}
 
-      {daysWithTasks.length === 0 ? (
+      {daysWithTasks.length === 0 && !(mantMiasCountQ.data ?? 0) ? (
         <div className="p-8 text-center">
           {!activeGen && (
             <>
@@ -1056,6 +1070,10 @@ function WorkerView({
               </Button>
             </>
           )}
+        </div>
+      ) : daysWithTasks.length === 0 ? (
+        <div className="p-3 text-center text-xs text-muted-foreground">
+          No tienes limpiezas asignadas hoy, pero sí tareas de mantenimiento arriba.
         </div>
       ) : (
         <>
