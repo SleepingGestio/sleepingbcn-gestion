@@ -576,6 +576,8 @@ export function LimpiezaPopover({ open, loadKey, onOpenChange, apt, fecha, exist
   }
 
   const isCancelada = showKbAlert && kbChange?.reason === "cancelada";
+  const isApartamentoChanged = showKbAlert && kbChange?.reason === "apartamento";
+  const isProbablyUnneeded = isCancelada || isApartamentoChanged;
 
   const applyFresh = async () => {
     if (readOnly || !kbChange?.fresh || form.id_limpieza === 0) return;
@@ -700,9 +702,11 @@ export function LimpiezaPopover({ open, loadKey, onOpenChange, apt, fecha, exist
                 <div className="font-semibold text-orange-900">
                   {isCancelada
                     ? "⚠ Esta reserva ha sido cancelada — revisar si la limpieza sigue siendo necesaria"
-                    : "⚠ Cambios detectados en la reserva"}
+                    : isApartamentoChanged
+                      ? "⚠ Esta reserva ya no hace checkout en este apartamento — es probable que esta limpieza ya no sea necesaria"
+                      : "⚠ Cambios detectados en la reserva"}
                 </div>
-                {!isCancelada && kbChanges.length > 0 && (
+                {!isProbablyUnneeded && kbChanges.length > 0 && (
                   <ul className="space-y-1 text-orange-900">
                     {kbChanges.map((c) => (
                       <li key={c.label} className="flex flex-wrap items-center gap-1">
@@ -714,14 +718,14 @@ export function LimpiezaPopover({ open, loadKey, onOpenChange, apt, fecha, exist
                     ))}
                   </ul>
                 )}
-                {isCancelada && (
+                {isProbablyUnneeded && (
                   <div className="text-orange-800">
                     Si la limpieza ya no es necesaria, usa el botón <span className="font-semibold">Anular limpieza</span>.
                   </div>
                 )}
                 {!readOnly && (
                 <div className="flex flex-wrap gap-2 pt-1">
-                  {!isCancelada && (
+                  {!isProbablyUnneeded && (
                     <Button
                       size="sm"
                       className="bg-orange-600 hover:bg-orange-700 text-white"
