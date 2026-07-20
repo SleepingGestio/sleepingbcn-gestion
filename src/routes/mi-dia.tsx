@@ -599,7 +599,7 @@ function WorkerView({
   }
 
   // ---- Tareas de mantenimiento (role Mantenimiento only) ----
-  const [mantFiltro, setMantFiltro] = useState<"mias" | "todas">("mias");
+  const [mantFiltro, setMantFiltro] = useState<"mias" | "todas" | "nuevas">("mias");
 
   const mantAptQ = useApartamentosLite();
   const mantAptById = useMemo(() => new Map((mantAptQ.data ?? []).map((a) => [a.id_apt, a])), [mantAptQ.data]);
@@ -612,8 +612,13 @@ function WorkerView({
   const mantIncidenciasQ = useQuery({
     queryKey: ["mi-dia-mant-incidencias", mantFiltro, personalId],
     queryFn: async (): Promise<Incidencia[]> => {
-      let q = supabase.from("manteniment_incidencies").select(INCIDENCIA_COLUMNS).in("estat", ["validada", "en_curs"]);
-      if (mantFiltro === "mias") q = q.eq("id_assignat", personalId);
+      let q = supabase.from("manteniment_incidencies").select(INCIDENCIA_COLUMNS);
+      if (mantFiltro === "nuevas") {
+        q = q.eq("estat", "pendent_validacio");
+      } else {
+        q = q.in("estat", ["validada", "en_curs"]);
+        if (mantFiltro === "mias") q = q.eq("id_assignat", personalId);
+      }
       const { data, error } = await q.order("data_prevista", { ascending: true, nullsFirst: false });
       if (error) throw error;
       return (data ?? []) as unknown as Incidencia[];
@@ -906,6 +911,16 @@ function WorkerView({
               >
                 Todas
               </button>
+              <button
+                type="button"
+                onClick={() => setMantFiltro("nuevas")}
+                className={cn(
+                  "rounded-full px-3 py-1 transition-colors",
+                  mantFiltro === "nuevas" ? "bg-white shadow-sm text-slate-900" : "text-slate-600",
+                )}
+              >
+                Nuevas
+              </button>
             </div>
           </div>
           {mantIncidenciasQ.isLoading ? (
@@ -915,27 +930,63 @@ function WorkerView({
               <p className="text-sm font-medium text-slate-600">
                 {mantFiltro === "mias"
                   ? "No tienes tareas de mantenimiento asignadas."
-                  : "No hay tareas de mantenimiento abiertas."}
+                  : mantFiltro === "nuevas"
+                    ? "No hay incidencias nuevas pendientes de validar."
+                    : "No hay tareas de mantenimiento abiertas."}
               </p>
             </div>
           ) : (
             <div className="flex flex-col gap-3">
-              {(mantIncidenciasQ.data ?? []).map((inc) => (
-                <MantenimientoTaskCard
-                  key={inc.id_incidencia}
-                  inc={inc}
-                  location={resolveLocation(inc, mantAptById, mantEspacioById, mantGrupoById)}
-                  asignadoCodigo={workerCode(inc.id_assignat, mantAssignatCodigosQ.data ?? [])}
-                  misSesiones={mantMisSesionesByIncidencia.get(inc.id_incidencia) ?? []}
-                  disabled={disabled}
-                  onIniciar={() => mantActions.iniciar(inc, personalId)}
-                  onFinParcial={() =>
-                    mantActions.finParcial(inc, personalId, mantMisSesionesByIncidencia.get(inc.id_incidencia) ?? [])
-                  }
-                  onFinTotal={() => mantActions.finTotal(inc)}
-                  onOpenDetail={() => setMantDetailId(inc.id_incidencia)}
-                />
-              ))}
+              {mantFiltro === "nuevas"
+                ? (mantIncidenciasQ.data ?? []).map((inc) => (
+                    <div
+                      key={inc.id_incidencia}
+                      className="rounded-xl bg-white shadow-sm overflow-hidden flex cursor-pointer"
+                      onClick={() => setMantDetailId(inc.id_incidencia)}
+                    >
+                      <div className="w-1.5 shrink-0 bg-amber-400" />
+                      <div className="flex-1 p-3 space-y-1.5">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <TipoBadge tipus={inc.tipus} />
+                          <PrioridadPill prioridad={inc.prioritat_confirmada ?? inc.prioritat_proposta} />
+                        </div>
+                        <div className="text-sm font-medium">
+                          {resolveLocation(inc, mantAptById, mantEspacioById, mantGrupoById)}
+                        </div>
+                        {inc.descripcio && (
+                          <div className="text-xs text-slate-600 line-clamp-2">{inc.descripcio}</div>
+                        )}
+                        <div className="pt-1" onClick={(e) => e.stopPropagation()}>
+                          <Button
+                            size="sm"
+                            className="bg-[#26215C] hover:bg-[#1e1a48] text-white"
+                            disabled={disabled}
+                            onClick={() =>
+                              mantActions.confirmarAsignacion(inc, personalId, null, inc.prioritat_proposta)
+                            }
+                          >
+                            Autoasignar
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                : (mantIncidenciasQ.data ?? []).map((inc) => (
+                    <MantenimientoTaskCard
+                      key={inc.id_incidencia}
+                      inc={inc}
+                      location={resolveLocation(inc, mantAptById, mantEspacioById, mantGrupoById)}
+                      asignadoCodigo={workerCode(inc.id_assignat, mantAssignatCodigosQ.data ?? [])}
+                      misSesiones={mantMisSesionesByIncidencia.get(inc.id_incidencia) ?? []}
+                      disabled={disabled}
+                      onIniciar={() => mantActions.iniciar(inc, personalId)}
+                      onFinParcial={() =>
+                        mantActions.finParcial(inc, personalId, mantMisSesionesByIncidencia.get(inc.id_incidencia) ?? [])
+                      }
+                      onFinTotal={() => mantActions.finTotal(inc)}
+                      onOpenDetail={() => setMantDetailId(inc.id_incidencia)}
+                    />
+                  ))}
             </div>
           )}
         </div>
