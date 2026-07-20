@@ -734,22 +734,6 @@ export function LimpiezaPopover({ open, loadKey, onOpenChange, apt, fecha, exist
               </div>
             )}
 
-            {mantForAptQ.data && (
-              <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-xs flex items-center gap-2">
-                <Wrench className="h-4 w-4 text-amber-700 shrink-0" />
-                <span className="flex-1 text-amber-900">
-                  Mantenimiento programado: {mantForAptQ.data.titol}
-                </span>
-                <button
-                  type="button"
-                  className="text-amber-800 font-medium underline shrink-0"
-                  onClick={() => setMantDetailId(mantForAptQ.data!.id_incidencia)}
-                >
-                  Ver detalle
-                </button>
-              </div>
-            )}
-
             {/* KB-change alert */}
             {showKbAlert && (
               <div className="rounded-md border border-orange-300 bg-orange-50 p-3 text-xs space-y-2">
@@ -1002,6 +986,22 @@ export function LimpiezaPopover({ open, loadKey, onOpenChange, apt, fecha, exist
                 />
               </div>
             </section>
+            )}
+
+            {mantForAptQ.data && (
+              <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-xs flex items-center gap-2">
+                <Wrench className="h-4 w-4 text-amber-700 shrink-0" />
+                <span className="flex-1 text-amber-900">
+                  Mantenimiento programado: {mantForAptQ.data.titol}
+                </span>
+                <button
+                  type="button"
+                  className="text-amber-800 font-medium underline shrink-0"
+                  onClick={() => setMantDetailId(mantForAptQ.data!.id_incidencia)}
+                >
+                  Ver detalle
+                </button>
+              </div>
             )}
 
             {/* Observaciones */}
