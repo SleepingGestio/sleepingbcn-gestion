@@ -797,18 +797,6 @@ export function LimpiezaPopover({ open, loadKey, onOpenChange, apt, fecha, exist
                     👤 {nextReservation["Huéspedes"]} {nextReservation["Huéspedes"] === 1 ? "huésped entrante" : "huéspedes entrantes"}
                   </div>
                 )}
-                <div
-                  className={cn(
-                    "inline-block rounded px-2 py-1 text-xs font-semibold",
-                    winMinsAdj == null
-                      ? "bg-muted text-muted-foreground"
-                      : winCritical
-                        ? "bg-amber-200 text-amber-900"
-                        : "bg-teal-200 text-teal-900",
-                  )}
-                >
-                  {winMinsAdj == null ? "Sin próxima entrada en 7 días" : fmtWindow(winMinsAdj)}
-                </div>
               </div>
             </section>
             )}
@@ -824,14 +812,14 @@ export function LimpiezaPopover({ open, loadKey, onOpenChange, apt, fecha, exist
                   value={form.fecha_limpieza}
                   onChange={(e) => set("fecha_limpieza", e.target.value)}
                   disabled={readOnly}
-                  className="flex-1"
+                  className="w-[150px] shrink-0"
                 />
                 <button
                   type="button"
                   onClick={togglePriority}
                   disabled={readOnly}
                   className={cn(
-                    "rounded-md border px-2 py-1.5 text-xs font-medium flex items-center gap-1 transition-colors disabled:cursor-not-allowed disabled:opacity-50",
+                    "rounded-md border px-2 py-1.5 text-xs font-medium flex items-center gap-1 transition-colors disabled:cursor-not-allowed disabled:opacity-50 shrink-0",
                     isPriority
                       ? "bg-red-600 text-white border-red-600"
                       : "bg-white text-muted-foreground hover:bg-muted",
@@ -839,6 +827,20 @@ export function LimpiezaPopover({ open, loadKey, onOpenChange, apt, fecha, exist
                 >
                   <Zap className="h-3 w-3" /> Prioritaria
                 </button>
+                {form.tipo !== "intermedia" && (
+                  <div
+                    className={cn(
+                      "inline-block rounded px-2.5 py-1.5 text-sm font-bold",
+                      winMinsAdj == null
+                        ? "bg-muted text-muted-foreground"
+                        : winCritical
+                          ? "bg-amber-200 text-amber-900"
+                          : "bg-teal-200 text-teal-900",
+                    )}
+                  >
+                    {winMinsAdj == null ? "Sin próxima entrada en 7 días" : fmtWindow(winMinsAdj)}
+                  </div>
+                )}
               </div>
             </section>
 
