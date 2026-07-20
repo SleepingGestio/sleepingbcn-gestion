@@ -625,6 +625,39 @@ function WorkerView({
     },
   });
 
+  const mantNuevasAllQ = useQuery({
+    queryKey: ["mi-dia-mant-nuevas-all"],
+    enabled: isMantenimiento,
+    queryFn: async (): Promise<number[]> => {
+      const { data, error } = await supabase
+        .from("manteniment_incidencies")
+        .select("id_incidencia")
+        .eq("estat", "pendent_validacio");
+      if (error) throw error;
+      return (data ?? []).map((r) => r.id_incidencia);
+    },
+    refetchInterval: 60_000,
+  });
+
+  const mantNuevasSeenKey = `mant_nuevas_seen_${personalId}`;
+  const [mantNuevasSeenIds, setMantNuevasSeenIds] = useState<number[]>(() => {
+    if (typeof window === "undefined") return [];
+    try {
+      return JSON.parse(window.localStorage.getItem(mantNuevasSeenKey) ?? "[]");
+    } catch {
+      return [];
+    }
+  });
+  const hasUnseenNuevas = (mantNuevasAllQ.data ?? []).some((id) => !mantNuevasSeenIds.includes(id));
+
+  function markNuevasSeen() {
+    const ids = mantNuevasAllQ.data ?? [];
+    setMantNuevasSeenIds(ids);
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(mantNuevasSeenKey, JSON.stringify(ids));
+    }
+  }
+
   const mantIncIds = useMemo(() => (mantIncidenciasQ.data ?? []).map((i) => i.id_incidencia), [mantIncidenciasQ.data]);
   const mantIncIdsKey = useMemo(() => mantIncIds.slice().sort((a, b) => a - b).join(","), [mantIncIds]);
 
@@ -913,13 +946,19 @@ function WorkerView({
               </button>
               <button
                 type="button"
-                onClick={() => setMantFiltro("nuevas")}
+                onClick={() => {
+                  setMantFiltro("nuevas");
+                  markNuevasSeen();
+                }}
                 className={cn(
-                  "rounded-full px-3 py-1 transition-colors",
+                  "relative rounded-full px-3 py-1 transition-colors",
                   mantFiltro === "nuevas" ? "bg-white shadow-sm text-slate-900" : "text-slate-600",
                 )}
               >
                 Nuevas
+                {hasUnseenNuevas && (
+                  <span className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-red-600" />
+                )}
               </button>
             </div>
           </div>
@@ -1213,8 +1252,12 @@ function WorkerView({
         onOpenChange={(o) => {
           if (!o) setMantDetailId(null);
         }}
-        onSaved={() => mantIncidenciasQ.refetch()}
+        onSaved={() => {
+          mantIncidenciasQ.refetch();
+          mantNuevasAllQ.refetch();
+        }}
         workers={personalQ.data ?? []}
+        selfAssignId={personalId}
       />
 
       {/* Equipo trabajando este día */}

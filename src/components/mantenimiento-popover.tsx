@@ -80,11 +80,13 @@ export function MantenimientoPopover({
   onOpenChange,
   onSaved,
   workers,
+  selfAssignId,
 }: {
   idIncidencia: number | null;
   onOpenChange: (o: boolean) => void;
   onSaved: () => void;
   workers: PersonaLite[];
+  selfAssignId?: number;
 }) {
   const { canEdit } = usePermissions();
   const editable = canEdit("mantenimiento");
@@ -418,12 +420,21 @@ export function MantenimientoPopover({
                   >
                     Rechazar
                   </Button>
-                  <Button
-                    className="bg-[#26215C] hover:bg-[#1e1a48] text-white"
-                    onClick={() => setAssignOpen(true)}
-                  >
-                    Asignar
-                  </Button>
+                  {selfAssignId != null ? (
+                    <Button
+                      className="bg-[#26215C] hover:bg-[#1e1a48] text-white"
+                      onClick={() => actions.confirmarAsignacion(inc, selfAssignId, null, inc.prioritat_proposta)}
+                    >
+                      Autoasignar
+                    </Button>
+                  ) : (
+                    <Button
+                      className="bg-[#26215C] hover:bg-[#1e1a48] text-white"
+                      onClick={() => setAssignOpen(true)}
+                    >
+                      Asignar
+                    </Button>
+                  )}
                 </>
               )}
               {inc.estat === "validada" && !hasOpenSession && (
