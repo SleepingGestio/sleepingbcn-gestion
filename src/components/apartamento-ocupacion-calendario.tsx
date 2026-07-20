@@ -224,12 +224,12 @@ function CalendarWeekRow({
           );
         })}
       </div>
-      {Array.from({ length: 7 }, (_, i) => (
+      {Array.from({ length: 6 }, (_, i) => (
         <div
           key={`tick-${i}`}
           className="absolute bg-slate-300"
           style={{
-            left: `${i * (100 / 7) + 0.5 * (100 / 7)}%`,
+            left: `${(i + 1) * (100 / 7)}%`,
             bottom: 0,
             width: 1,
             height: 20,
@@ -256,8 +256,9 @@ function OcupacionBar({ r, dayISOs }: { r: ReservaLite; dayISOs: string[] }) {
   if (!coVisible) coIdx = coISO < dayISOs[0] ? -1 : 7;
 
   const cellPct = 100 / 7;
-  const leftPct = ciVisible ? ciIdx * cellPct + 0.5 * cellPct : ciIdx < 0 ? 0 : 7 * cellPct;
-  const rightPct = coVisible ? coIdx * cellPct + 0.5 * cellPct : coIdx < 0 ? 0 : 7 * cellPct;
+  const dayOffsetPct = 0.75 * cellPct;
+  const leftPct = ciVisible ? ciIdx * cellPct + dayOffsetPct : ciIdx < 0 ? 0 : 7 * cellPct;
+  const rightPct = coVisible ? coIdx * cellPct + dayOffsetPct : coIdx < 0 ? 0 : 7 * cellPct;
   const widthPct = rightPct - leftPct;
   if (widthPct <= 0) return null;
 
