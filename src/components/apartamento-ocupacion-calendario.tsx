@@ -256,8 +256,8 @@ function OcupacionBar({ r, dayISOs }: { r: ReservaLite; dayISOs: string[] }) {
   if (!coVisible) coIdx = coISO < dayISOs[0] ? -1 : 7;
 
   const cellPct = 100 / 7;
-  const checkinOffsetPct = 0.5 * cellPct;
-  const checkoutOffsetPct = 0.3 * cellPct;
+  const checkinOffsetPct = 0.45 * cellPct;
+  const checkoutOffsetPct = 0.35 * cellPct;
   const leftPct = ciVisible ? ciIdx * cellPct + checkinOffsetPct : ciIdx < 0 ? 0 : 7 * cellPct;
   const rightPct = coVisible ? coIdx * cellPct + checkoutOffsetPct : coIdx < 0 ? 0 : 7 * cellPct;
   const widthPct = rightPct - leftPct;
@@ -291,10 +291,17 @@ function OcupacionBar({ r, dayISOs }: { r: ReservaLite; dayISOs: string[] }) {
           <button
             type="button"
             onClick={(e) => e.stopPropagation()}
-            className={cn("absolute bg-[#378ADD] hover:brightness-110", roundedClass, borderClass)}
+            className={cn(
+              "absolute bg-[#378ADD] hover:brightness-110 flex items-center justify-between",
+              roundedClass,
+              borderClass,
+            )}
             style={barStyle}
             title={`${fmtDate(ciISO)} → ${fmtDate(coISO)}`}
-          />
+          >
+            {!ciVisible && ciIdx < 0 && <span className="text-white text-xs font-black pl-0.5 leading-none">‹‹</span>}
+            {!coVisible && coIdx > 6 && <span className="text-white text-xs font-black pr-0.5 leading-none">››</span>}
+          </button>
         </PopoverTrigger>
         <PopoverContent className="w-auto p-2 text-xs" align="center" onClick={(e) => e.stopPropagation()}>
           <div className="space-y-1">
