@@ -195,7 +195,7 @@ function CalendarWeekRow({
   const rowEndExclusiveISO = toISO(addDays(week[6], 1));
 
   const overlapping = reservas.filter(
-    (r) => !!r["Check in"] && !!r["Check-out"] && r["Check in"]! < rowEndExclusiveISO && r["Check-out"]! > rowStartISO,
+    (r) => !!r["Check in"] && !!r["Check-out"] && r["Check in"]! < rowEndExclusiveISO && r["Check-out"]! >= rowStartISO,
   );
 
   return (
