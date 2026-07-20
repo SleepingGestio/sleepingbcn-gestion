@@ -210,6 +210,52 @@ function ProgramacionLimpiezasPage() {
     queryFn: () => fetchLimpiezas(fetchFromISO, fetchToExclusiveISO),
   });
 
+  const maxGeneratedQ = useQuery({
+    queryKey: ["limpiezas-max-generated-fecha"],
+    queryFn: async (): Promise<string | null> => {
+      const { data, error } = await supabase
+        .from("limpiezas")
+        .select("fecha_limpieza")
+        .eq("tipo", "salida")
+        .order("fecha_limpieza", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (error) throw error;
+      return data?.fecha_limpieza ?? null;
+    },
+  });
+
+  const missingCleaningsQ = useQuery({
+    queryKey: ["limpiezas-missing", maxGeneratedQ.data],
+    enabled: !!maxGeneratedQ.data,
+    queryFn: async (): Promise<{ numero: string; id_apt: number; checkout: string }[]> => {
+      const maxFecha = maxGeneratedQ.data!;
+      const todayStr = todayISO;
+      const { data: resv, error: e1 } = await supabase
+        .from("v_reservas_por_apartamento")
+        .select('"Número","Check-out",id_apt')
+        .in("Estado", ["Confirmada", "Check-in realizado", "Check-out realizado"])
+        .gte("Check-out", todayStr)
+        .lte("Check-out", maxFecha);
+      if (e1) throw e1;
+      const { data: existing, error: e2 } = await supabase
+        .from("limpiezas")
+        .select("numero_reserva,id_apt")
+        .eq("tipo", "salida")
+        .neq("estado", "anulada")
+        .gte("fecha_limpieza", todayStr)
+        .lte("fecha_limpieza", maxFecha);
+      if (e2) throw e2;
+      const existingKeys = new Set(
+        (existing ?? []).map((l) => `${l.numero_reserva}|${l.id_apt}`),
+      );
+      return ((resv ?? []) as { "Número": string; "Check-out": string | null; id_apt: number | null }[])
+        .filter((r) => r.id_apt != null && r["Check-out"] != null)
+        .filter((r) => !existingKeys.has(`${r["Número"]}|${r.id_apt}`))
+        .map((r) => ({ numero: r["Número"], id_apt: r.id_apt as number, checkout: r["Check-out"] as string }));
+    },
+  });
+
   const reservasByApt = useMemo(() => {
     const m = new Map<number, ReservaRow[]>();
     for (const r of reservasQ.data ?? []) {
@@ -252,6 +298,23 @@ function ProgramacionLimpiezasPage() {
     }
     return m;
   }, [reservasQ.data]);
+
+  const [generatingMissing, setGeneratingMissing] = useState(false);
+  async function generateMissingCleanings() {
+    if (!maxGeneratedQ.data || generatingMissing) return;
+    setGeneratingMissing(true);
+    try {
+      const res = await generarLimpiezas(todayISO, maxGeneratedQ.data);
+      toast.success(`${res.created} limpiezas generadas`);
+      limpiezasQ.refetch();
+      missingCleaningsQ.refetch();
+      maxGeneratedQ.refetch();
+    } catch (e) {
+      toast.error("Error: " + (e as Error).message);
+    } finally {
+      setGeneratingMissing(false);
+    }
+  }
 
   const [onlyAffected, setOnlyAffected] = useState(false);
   const affectedCount = useMemo(
@@ -340,6 +403,20 @@ function ProgramacionLimpiezasPage() {
           {affectedCount === 1 ? "limpieza afectada" : "limpiezas afectadas"} — revisar
           <span className="ml-2 text-xs opacity-80">
             {onlyAffected ? "(filtro activo · clic para quitar)" : "(clic para filtrar)"}
+          </span>
+        </button>
+      )}
+      {(missingCleaningsQ.data ?? []).length > 0 && canEditProgramacion && (
+        <button
+          type="button"
+          disabled={generatingMissing}
+          onClick={generateMissingCleanings}
+          className="mb-3 w-full rounded-md border border-purple-300 bg-purple-50 px-3 py-2 text-left text-sm text-purple-900 transition-colors hover:bg-purple-100 disabled:opacity-60"
+        >
+          <span className="font-semibold">{missingCleaningsQ.data!.length}</span>{" "}
+          {missingCleaningsQ.data!.length === 1 ? "reserva sin limpieza generada" : "reservas sin limpieza generada"}
+          <span className="ml-2 text-xs opacity-80">
+            {generatingMissing ? "generando…" : "(clic para generarlas ahora)"}
           </span>
         </button>
       )}
