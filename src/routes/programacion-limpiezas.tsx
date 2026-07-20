@@ -1034,7 +1034,7 @@ function SalidaLabel({
     }
   }
   if (isPriority && hasWorker && !anulada) {
-    cls += " ring-2 ring-amber-400";
+    cls += " ring-2 ring-red-400";
   }
   if (affected && !anulada) {
     cls += " border-dashed border-amber-300";
@@ -1106,7 +1106,7 @@ function IntermediaOverlay({
     }
   }
   if (isPriority && hasWorker && !anulada) {
-    cls += " ring-2 ring-amber-400";
+    cls += " ring-2 ring-red-400";
   }
   if (affected && !anulada) {
     cls += " border-dashed border-amber-300";

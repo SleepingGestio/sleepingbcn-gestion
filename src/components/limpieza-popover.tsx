@@ -712,13 +712,13 @@ export function LimpiezaPopover({ open, loadKey, onOpenChange, apt, fecha, exist
                       : "⚠ Cambios detectados en la reserva"}
                 </div>
                 {!isProbablyUnneeded && kbChanges.length > 0 && (
-                  <ul className="space-y-1 text-orange-900">
+                  <ul className="space-y-1">
                     {kbChanges.map((c) => (
                       <li key={c.label} className="flex flex-wrap items-center gap-1">
-                        <span className="font-medium">{c.label}:</span>
-                        <span className="line-through text-orange-700/70">{c.old}</span>
-                        <span>→</span>
-                        <span className="font-semibold">{c.nu}</span>
+                        <span className="text-muted-foreground">{c.label}:</span>
+                        <span className="line-through text-red-600">{c.old}</span>
+                        <span className="text-muted-foreground">→</span>
+                        <span className="font-bold text-emerald-700">{c.nu}</span>
                       </li>
                     ))}
                   </ul>
@@ -797,27 +797,18 @@ export function LimpiezaPopover({ open, loadKey, onOpenChange, apt, fecha, exist
                     👤 {nextReservation["Huéspedes"]} {nextReservation["Huéspedes"] === 1 ? "huésped entrante" : "huéspedes entrantes"}
                   </div>
                 )}
-              </div>
-            </section>
-            )}
-
-            {/* Ventana */}
-            {form.tipo !== "intermedia" && (
-            <section>
-              <Label className="text-xs uppercase tracking-wide text-muted-foreground">Ventana de limpieza</Label>
-              <div
-                className={cn(
-                  "mt-2 block w-full rounded-md px-3 py-2 text-sm font-semibold text-center",
-                  winMinsAdj == null
-                    ? "bg-muted text-muted-foreground"
-                    : winCritical
-                      ? "bg-amber-200 text-amber-900"
-                      : "bg-teal-200 text-teal-900",
-                )}
-              >
-                {winMinsAdj == null
-                  ? "Sin próxima entrada en 7 días"
-                  : fmtWindow(winMinsAdj)}
+                <div
+                  className={cn(
+                    "inline-block rounded px-2 py-1 text-xs font-semibold",
+                    winMinsAdj == null
+                      ? "bg-muted text-muted-foreground"
+                      : winCritical
+                        ? "bg-amber-200 text-amber-900"
+                        : "bg-teal-200 text-teal-900",
+                  )}
+                >
+                  {winMinsAdj == null ? "Sin próxima entrada en 7 días" : fmtWindow(winMinsAdj)}
+                </div>
               </div>
             </section>
             )}
@@ -842,7 +833,7 @@ export function LimpiezaPopover({ open, loadKey, onOpenChange, apt, fecha, exist
                   className={cn(
                     "rounded-md border px-2 py-1.5 text-xs font-medium flex items-center gap-1 transition-colors disabled:cursor-not-allowed disabled:opacity-50",
                     isPriority
-                      ? "bg-orange-500 text-white border-orange-500"
+                      ? "bg-red-600 text-white border-red-600"
                       : "bg-white text-muted-foreground hover:bg-muted",
                   )}
                 >
@@ -851,30 +842,37 @@ export function LimpiezaPopover({ open, loadKey, onOpenChange, apt, fecha, exist
               </div>
             </section>
 
-            {/* Orden de trabajo */}
-            {form.worker && (
-              <section>
-                <Label className="text-xs uppercase tracking-wide text-muted-foreground">
-                  Orden de trabajo {workerObj ? `— ${workerObj.nombre ?? ""}` : ""}
-                </Label>
-                <div className="mt-2 flex items-center gap-2">
-                  <div className="rounded-md border bg-muted/40 px-3 py-1.5 text-sm">
-                    Orden:{" "}
-                    <span className="font-semibold">{form.orden_trabajo ?? "—"}</span>
-                    <span className="text-muted-foreground">
-                      {" "}de {Math.max(siblingsQ.data?.length ?? 0, form.orden_trabajo ?? 0)}
-                    </span>
-                  </div>
-                  <Input
-                    placeholder="--:--"
-                    value={form.hora_sugerida ?? ""}
-                    onChange={(e) => set("hora_sugerida", e.target.value || null)}
-                    disabled={readOnly}
-                    className="flex-1"
-                  />
+            {/* Asignar limpiador */}
+            <section>
+              <Label className="text-xs uppercase tracking-wide text-muted-foreground">
+                Asignar limpiador
+              </Label>
+              <Select
+                value={form.worker == null ? "__none__" : String(form.worker)}
+                onValueChange={onChangeWorker}
+                disabled={readOnly}
+              >
+                <SelectTrigger className="mt-2">
+                  <SelectValue placeholder="Sin asignar" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">Sin asignar</SelectItem>
+                  {limpiadoresQ.data?.map((p) => (
+                    <WorkerSelectItem
+                      key={p.id_persona}
+                      id_persona={p.id_persona}
+                      label={`${fullName(p)}${p.codigo ? ` (${p.codigo})` : ""}`}
+                      reason={unavailableQ.data?.get(p.id_persona)}
+                    />
+                  ))}
+                </SelectContent>
+              </Select>
+              {form.worker != null && unavailableQ.data?.get(form.worker) && (
+                <div className="mt-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                  ⚠ Este trabajador {unavailabilityWarningText(unavailableQ.data.get(form.worker)!)} este día.
                 </div>
-              </section>
-            )}
+              )}
+            </section>
 
             {/* Tareas */}
             {form.tipo === "intermedia" ? (
@@ -954,38 +952,6 @@ export function LimpiezaPopover({ open, loadKey, onOpenChange, apt, fecha, exist
               </div>
             </section>
             )}
-
-            {/* Asignar limpiador */}
-            <section>
-              <Label className="text-xs uppercase tracking-wide text-muted-foreground">
-                Asignar limpiador
-              </Label>
-              <Select
-                value={form.worker == null ? "__none__" : String(form.worker)}
-                onValueChange={onChangeWorker}
-                disabled={readOnly}
-              >
-                <SelectTrigger className="mt-2">
-                  <SelectValue placeholder="Sin asignar" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__none__">Sin asignar</SelectItem>
-                  {limpiadoresQ.data?.map((p) => (
-                    <WorkerSelectItem
-                      key={p.id_persona}
-                      id_persona={p.id_persona}
-                      label={`${fullName(p)}${p.codigo ? ` (${p.codigo})` : ""}`}
-                      reason={unavailableQ.data?.get(p.id_persona)}
-                    />
-                  ))}
-                </SelectContent>
-              </Select>
-              {form.worker != null && unavailableQ.data?.get(form.worker) && (
-                <div className="mt-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-                  ⚠ Este trabajador {unavailabilityWarningText(unavailableQ.data.get(form.worker)!)} este día.
-                </div>
-              )}
-            </section>
 
             {/* Observaciones */}
             <section>
