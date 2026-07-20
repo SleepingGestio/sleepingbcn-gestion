@@ -257,7 +257,7 @@ function OcupacionBar({ r, dayISOs }: { r: ReservaLite; dayISOs: string[] }) {
 
   const cellPct = 100 / 7;
   const checkinOffsetPct = 0.5 * cellPct;
-  const checkoutOffsetPct = 0.25 * cellPct;
+  const checkoutOffsetPct = 0.3 * cellPct;
   const leftPct = ciVisible ? ciIdx * cellPct + checkinOffsetPct : ciIdx < 0 ? 0 : 7 * cellPct;
   const rightPct = coVisible ? coIdx * cellPct + checkoutOffsetPct : coIdx < 0 ? 0 : 7 * cellPct;
   const widthPct = rightPct - leftPct;
@@ -273,6 +273,7 @@ function OcupacionBar({ r, dayISOs }: { r: ReservaLite; dayISOs: string[] }) {
   const barStyle: CSSProperties = {
     left: `calc(${leftPct}% + ${leftInset}px)`,
     width: `calc(${widthPct}% - ${leftInset + rightInset}px)`,
+    minWidth: 8,
     bottom: 2,
     height: 14,
   };
