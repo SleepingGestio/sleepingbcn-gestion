@@ -8,7 +8,7 @@ import { Card } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, Sofa, Zap } from "lucide-react";
+import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, Sofa, Zap, Wrench } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { fetchLimpiadores } from "@/lib/catalogos";
 import { fullName } from "@/lib/types";
@@ -179,6 +179,19 @@ function ComunicarTareasPage() {
     queryKey: ["comunicaciones_dia", fecha],
     queryFn: () => fetchComDia(fecha),
   });
+  const mantByAptQ = useQuery({
+    queryKey: ["comunicar-tareas-mant-by-apt", fecha],
+    queryFn: async (): Promise<Set<number>> => {
+      const { data, error } = await supabase
+        .from("manteniment_incidencies")
+        .select("id_apt")
+        .eq("data_prevista", fecha)
+        .in("estat", ["validada", "en_curs"])
+        .not("id_apt", "is", null);
+      if (error) throw error;
+      return new Set((data ?? []).map((r) => r.id_apt as number));
+    },
+  });
 
   const reservaNumeros = useMemo(() => {
     const s = new Set<string>();
@@ -343,6 +356,7 @@ function ComunicarTareasPage() {
                 state={state}
                 aptById={aptById}
                 reservas={reservasQ.data ?? new Map()}
+                mantByApt={mantByAptQ.data ?? new Set()}
                 onCardClick={openCard}
                 onComunicar={() => comunicar(w.id_persona)}
                 onReorder={(from, to) => reorder(w.id_persona, from, to)}
@@ -391,6 +405,7 @@ function WorkerColumn({
   state,
   aptById,
   reservas,
+  mantByApt,
   onCardClick,
   onComunicar,
   onReorder,
@@ -402,6 +417,7 @@ function WorkerColumn({
   state: AggState;
   aptById: Map<number, Apartamento>;
   reservas: Map<string, ResvLite>;
+  mantByApt: Set<number>;
   onCardClick: (l: Limpieza) => void;
   onComunicar: () => void;
   onReorder: (from: number, to: number) => void;
@@ -457,6 +473,7 @@ function WorkerColumn({
             t={t}
             apt={aptById.get(t.id_apt)}
             reservas={reservas}
+            mantByApt={mantByApt}
             onClick={() => onCardClick(t)}
             draggable
             onDragStart={() => setDragIdx(idx)}
@@ -492,6 +509,7 @@ function TaskCard({
   t,
   apt,
   reservas,
+  mantByApt,
   onClick,
   draggable,
   onDragStart,
@@ -501,6 +519,7 @@ function TaskCard({
   t: Limpieza;
   apt: Apartamento | undefined;
   reservas: Map<string, ResvLite>;
+  mantByApt: Set<number>;
   onClick: () => void;
   draggable?: boolean;
   onDragStart?: () => void;
@@ -549,6 +568,11 @@ function TaskCard({
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             <div className="text-sm font-medium truncate flex-1">{apt?.nombre ?? `Apt #${t.id_apt}`}</div>
+            {mantByApt.has(t.id_apt) && (
+              <span className="inline-flex items-center gap-0.5 rounded-full bg-amber-100 px-1.5 py-0.5 text-[9px] font-medium text-amber-800">
+                <Wrench className="h-2.5 w-2.5" /> Mant.
+              </span>
+            )}
             <span
               className={cn(
                 "rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide",

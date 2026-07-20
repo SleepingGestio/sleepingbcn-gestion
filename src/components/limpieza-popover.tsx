@@ -16,7 +16,9 @@ import { fetchLimpiadores } from "@/lib/catalogos";
 import { fullName } from "@/lib/types";
 import { getUnavailableWorkerIds } from "@/lib/worker-availability";
 import { WorkerSelectItem, unavailabilityWarningText } from "@/components/worker-select-item";
-import { Link2, RotateCcw, Trash2, X, Zap } from "lucide-react";
+import { Link2, RotateCcw, Trash2, X, Zap, Wrench } from "lucide-react";
+import { MantenimientoPopover } from "@/components/mantenimiento-popover";
+import { usePersonalLite } from "@/hooks/use-mantenimiento";
 import { bedLabel } from "@/routes/programacion-limpiezas";
 import { fmtTime } from "@/lib/format";
 import { TimeBadge } from "@/components/time-badge";
@@ -176,6 +178,25 @@ export function LimpiezaPopover({ open, loadKey, onOpenChange, apt, fecha, exist
   const [nextReservation, setNextReservation] = useState<ReservaPopoverRow | null>(null);
   const [saving, setSaving] = useState(false);
   const [anularOpen, setAnularOpen] = useState(false);
+
+  const [mantDetailId, setMantDetailId] = useState<number | null>(null);
+  const personalQ = usePersonalLite();
+  const mantForAptQ = useQuery({
+    queryKey: ["limpieza-popover-mant", apt.id_apt, form.fecha_limpieza],
+    enabled: open && !!apt.id_apt && !!form.fecha_limpieza,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("manteniment_incidencies")
+        .select("id_incidencia, titol")
+        .eq("id_apt", apt.id_apt)
+        .eq("data_prevista", form.fecha_limpieza)
+        .in("estat", ["validada", "en_curs"])
+        .limit(1)
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+  });
 
   useEffect(() => {
     if (!open) return;
@@ -701,6 +722,22 @@ export function LimpiezaPopover({ open, loadKey, onOpenChange, apt, fecha, exist
               </div>
             )}
 
+            {mantForAptQ.data && (
+              <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-xs flex items-center gap-2">
+                <Wrench className="h-4 w-4 text-amber-700 shrink-0" />
+                <span className="flex-1 text-amber-900">
+                  Mantenimiento programado: {mantForAptQ.data.titol}
+                </span>
+                <button
+                  type="button"
+                  className="text-amber-800 font-medium underline shrink-0"
+                  onClick={() => setMantDetailId(mantForAptQ.data!.id_incidencia)}
+                >
+                  Ver detalle
+                </button>
+              </div>
+            )}
+
             {/* KB-change alert */}
             {showKbAlert && (
               <div className="rounded-md border border-orange-300 bg-orange-50 p-3 text-xs space-y-2">
@@ -1069,6 +1106,15 @@ export function LimpiezaPopover({ open, loadKey, onOpenChange, apt, fecha, exist
           onOpenChange(false);
           onSaved();
         }}
+      />
+
+      <MantenimientoPopover
+        idIncidencia={mantDetailId}
+        onOpenChange={(o) => {
+          if (!o) setMantDetailId(null);
+        }}
+        onSaved={() => mantForAptQ.refetch()}
+        workers={personalQ.data ?? []}
       />
     </>
   );

@@ -433,6 +433,20 @@ function WorkerView({
     },
   });
 
+  const mantByAptQ = useQuery({
+    queryKey: ["mi-dia-mant-by-apt", activeDay],
+    queryFn: async (): Promise<Set<number>> => {
+      const { data, error } = await supabase
+        .from("manteniment_incidencies")
+        .select("id_apt")
+        .eq("data_prevista", activeDay)
+        .in("estat", ["validada", "en_curs"])
+        .not("id_apt", "is", null);
+      if (error) throw error;
+      return new Set((data ?? []).map((r) => r.id_apt as number));
+    },
+  });
+
   const otherWorkerIds = useMemo(() => {
     const ids = new Set<number>();
     for (const t of otherQ.data ?? []) {
@@ -1314,6 +1328,11 @@ function WorkerView({
                         <span className="truncate block max-w-[80px]" title={aptName}>
                           {shortAptName(aptName)}
                         </span>
+                        {mantByAptQ.data?.has(t.id_apt) && (
+                          <span className="ml-1 inline-flex items-center gap-0.5 rounded-full bg-amber-100 px-1.5 py-0.5 text-[9px] font-medium text-amber-800">
+                            <Wrench className="h-2.5 w-2.5" /> Mant.
+                          </span>
+                        )}
                       </TableCell>
                       <TableCell className="py-2 px-2">
                         <CompactTipoBadge tipo={t.tipo} completa={t.check_limpieza_completa ?? false} />
