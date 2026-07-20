@@ -643,8 +643,13 @@ export function LimpiezaPopover({ open, loadKey, onOpenChange, apt, fecha, exist
             {(apt.grupo_nombre || apt.camas_fijas != null || form.tipo === "intermedia") && (
               <DialogDescription className="text-xs">
                 {form.tipo === "intermedia" && (
-                  <span className="inline-block mr-1 rounded bg-teal-100 text-teal-800 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide">
-                    Limpieza extra
+                  <span
+                    className={cn(
+                      "inline-block mr-1 rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
+                      form.check_limpieza_completa ? "bg-emerald-100 text-emerald-800" : "bg-teal-100 text-teal-800",
+                    )}
+                  >
+                    {form.check_limpieza_completa ? "Limpieza estándar" : "Limpieza extra"}
                   </span>
                 )}
                 {apt.grupo_nombre}

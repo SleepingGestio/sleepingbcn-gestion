@@ -182,8 +182,8 @@ function CompactEstadoBadge({ estado }: { estado: string | null }) {
   );
 }
 
-function CompactTipoBadge({ tipo }: { tipo: string | null }) {
-  const isSalida = tipo === "salida";
+function CompactTipoBadge({ tipo, completa }: { tipo: string | null; completa?: boolean }) {
+  const isSalida = tipo === "salida" || completa;
   return (
     <span
       className={cn(
@@ -1316,7 +1316,7 @@ function WorkerView({
                         </span>
                       </TableCell>
                       <TableCell className="py-2 px-2">
-                        <CompactTipoBadge tipo={t.tipo} />
+                        <CompactTipoBadge tipo={t.tipo} completa={t.check_limpieza_completa ?? false} />
                       </TableCell>
                       <TableCell className="py-2 px-2 text-[10px] font-medium">
                         {workerCode(t.worker, otherWorkersQ.data ?? [])}

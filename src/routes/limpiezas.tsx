@@ -274,12 +274,12 @@ function LimpiezasAsignadasPage() {
                       <span
                         className={cn(
                           "inline-block rounded px-2 py-0.5 text-[11px] font-semibold",
-                          isSalida
+                          isSalida || l.check_limpieza_completa
                             ? "bg-slate-200 text-slate-800"
                             : "bg-fuchsia-200 text-fuchsia-900",
                         )}
                       >
-                        {isSalida ? "Limpieza STD" : "Limpieza EXTRA-CR"}
+                        {isSalida || l.check_limpieza_completa ? "Limpieza STD" : "Limpieza EXTRA-CR"}
                       </span>
                     </TableCell>
                     <TableCell className="text-xs">

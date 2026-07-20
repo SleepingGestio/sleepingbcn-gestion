@@ -249,9 +249,22 @@ function ProgramacionLimpiezasPage() {
       const existingKeys = new Set(
         (existing ?? []).map((l) => `${l.numero_reserva}|${l.id_apt}`),
       );
+      const { data: completaIntermedias, error: e3 } = await supabase
+        .from("limpiezas")
+        .select("id_apt,fecha_limpieza")
+        .eq("tipo", "intermedia")
+        .eq("check_limpieza_completa", true)
+        .neq("estado", "anulada")
+        .gte("fecha_limpieza", todayStr)
+        .lte("fecha_limpieza", maxFecha);
+      if (e3) throw e3;
+      const completaKeys = new Set(
+        (completaIntermedias ?? []).map((l) => `${l.id_apt}|${l.fecha_limpieza}`),
+      );
       return ((resv ?? []) as { "Número": string; "Check-out": string | null; id_apt: number | null }[])
         .filter((r) => r.id_apt != null && r["Check-out"] != null)
         .filter((r) => !existingKeys.has(`${r["Número"]}|${r.id_apt}`))
+        .filter((r) => !completaKeys.has(`${r.id_apt}|${r["Check-out"]}`))
         .map((r) => ({ numero: r["Número"], id_apt: r.id_apt as number, checkout: r["Check-out"] as string }));
     },
   });

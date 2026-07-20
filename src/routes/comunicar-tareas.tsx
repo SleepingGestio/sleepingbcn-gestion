@@ -524,7 +524,7 @@ function TaskCard({
     t.prioritaria_manual != null ? !!t.prioritaria_manual : !!t.prioritaria;
   const sfcMontar = !!t.sfc_montar;
   const sfcDesmontar = !!t.sfc_desmontar;
-  const isIntermedia = t.tipo === "intermedia";
+  const isIntermedia = t.tipo === "intermedia" && !t.check_limpieza_completa;
   const nextGuests = nxt?.["Huéspedes"] ?? null;
 
   const estadoKey = (t.estado ?? "activa") as keyof typeof ESTADO_BADGE;
