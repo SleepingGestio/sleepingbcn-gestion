@@ -212,7 +212,7 @@ function CalendarWeekRow({
               disabled={!onSelectDate}
               onClick={() => onSelectDate?.(iso)}
               className={cn(
-                "text-left px-1 pt-0.5 text-[10px] leading-none font-semibold text-foreground",
+                "text-center pt-0.5 text-[10px] leading-none font-semibold text-foreground",
                 tinted && "bg-blue-100",
                 onSelectDate ? "hover:bg-muted/50 cursor-pointer" : "cursor-default",
               )}
@@ -224,6 +224,19 @@ function CalendarWeekRow({
           );
         })}
       </div>
+      {Array.from({ length: 7 }, (_, i) => (
+        <div
+          key={`tick-${i}`}
+          className="absolute bg-slate-300"
+          style={{
+            left: `${i * (100 / 7) + 0.5 * (100 / 7)}%`,
+            bottom: 0,
+            width: 1,
+            height: 20,
+            transform: "translateX(-0.5px)",
+          }}
+        />
+      ))}
       {overlapping.map((r) => (
         <OcupacionBar key={r["Número"]} r={r} dayISOs={dayISOs} />
       ))}
