@@ -426,6 +426,21 @@ function WorkerView({
     },
   });
 
+  const monthGenericQ = useQuery({
+    queryKey: ["mi-dia-month-generic", personalId, monthStart, monthEnd],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("registre_temps_generic")
+        .select("id_registre, inici, fi")
+        .eq("id_persona", personalId)
+        .not("fi", "is", null)
+        .gte("inici", `${monthStart}T00:00:00`)
+        .lte("inici", `${monthEnd}T23:59:59`);
+      if (error) throw error;
+      return (data ?? []) as { id_registre: number; inici: string; fi: string | null }[];
+    },
+  });
+
   const monthDayHours = useMemo(() => {
     const m = new Map<string, number>();
     for (const t of monthTasksQ.data ?? []) {
@@ -437,8 +452,13 @@ function WorkerView({
       const fecha = r.inici.slice(0, 10);
       m.set(fecha, (m.get(fecha) ?? 0) + h);
     }
+    for (const g of monthGenericQ.data ?? []) {
+      const h = diffHoursMinutes(g.inici, g.fi);
+      const fecha = g.inici.slice(0, 10);
+      m.set(fecha, (m.get(fecha) ?? 0) + h);
+    }
     return m;
-  }, [monthTasksQ.data, monthMantQ.data]);
+  }, [monthTasksQ.data, monthMantQ.data, monthGenericQ.data]);
 
   const monthHours = useMemo(() => {
     let total = 0;
@@ -889,6 +909,7 @@ function WorkerView({
     tasksQ.refetch();
     monthTasksQ.refetch();
     monthMantQ.refetch();
+    monthGenericQ.refetch();
   };
 
   const detailTask = detailId != null ? (tasksQ.data ?? []).find((t) => t.id_limpieza === detailId) ?? null : null;
