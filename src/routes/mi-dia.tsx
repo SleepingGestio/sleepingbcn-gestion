@@ -1308,7 +1308,7 @@ function WorkerView({
             <Table>
               <TableHeader>
                 <TableRow className="bg-slate-50">
-                  <TableHead className="text-[10px] py-2 px-2 h-auto">Apto.</TableHead>
+                  <TableHead className="text-[10px] py-2 px-2 h-auto">Ubicación</TableHead>
                   <TableHead className="text-[10px] py-2 px-2 h-auto">Tipo</TableHead>
                   <TableHead className="text-[10px] py-2 px-2 h-auto">N.</TableHead>
                   <TableHead className="text-[10px] py-2 px-2 h-auto">Sale</TableHead>
@@ -1325,7 +1325,7 @@ function WorkerView({
                   return (
                     <TableRow key={t.id_limpieza} className="text-xs">
                       <TableCell className="py-2 px-2">
-                        <span className="truncate block max-w-[80px]" title={aptName}>
+                        <span className="truncate block max-w-[160px]" title={aptName}>
                           {shortAptName(aptName)}
                         </span>
                         {mantByAptQ.data?.has(t.id_apt) && (
