@@ -292,9 +292,31 @@ function WorkerView({
 }) {
   const { signOut } = useAuth();
   const navigate = useNavigate();
-  const { canView, onlyMiDia } = usePermissions();
+  const workerPermsQ = useQuery({
+    queryKey: ["mi-dia-worker-perms", personalId],
+    queryFn: async (): Promise<Record<string, boolean>> => {
+      const { data: prData, error: prErr } = await supabase
+        .from("personal_roles")
+        .select("id_rol")
+        .eq("id_persona", personalId)
+        .is("fecha_hasta", null);
+      if (prErr) throw prErr;
+      const roleIds = (prData ?? []).map((r: { id_rol: number }) => r.id_rol);
+      if (!roleIds.length) return {};
+      const { data, error } = await supabase
+        .from("rol_permisos")
+        .select("menu, pot_veure")
+        .in("id_rol", roleIds);
+      if (error) throw error;
+      const map: Record<string, boolean> = {};
+      for (const r of (data ?? []) as { menu: string; pot_veure: boolean }[]) {
+        map[r.menu] = map[r.menu] || !!r.pot_veure;
+      }
+      return map;
+    },
+  });
   const fullModeRoute = useMemo<string | null>(() => {
-    if (onlyMiDia) return null;
+    const perms = workerPermsQ.data ?? {};
     const order: { route: string; menu: string }[] = [
       { route: "/reservas", menu: "reservas" },
       { route: "/checkins", menu: "checkins" },
@@ -303,8 +325,9 @@ function WorkerView({
       { route: "/comunicar-tareas", menu: "comunicar_tareas" },
       { route: "/registre-horari", menu: "registre_horari" },
     ];
-    return order.find((m) => canView(m.menu))?.route ?? "/reservas";
-  }, [onlyMiDia, canView]);
+    const match = order.find((m) => !!perms[m.menu]);
+    return match?.route ?? null;
+  }, [workerPermsQ.data]);
   const todayISO = toISO(new Date());
   const tomorrowISO = toISO(new Date(Date.now() + 86400000));
   const monthStart = toISO(startOfMonth(new Date()));
