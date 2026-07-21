@@ -411,11 +411,40 @@ function WorkerView({
     },
   });
 
+  const monthMantQ = useQuery({
+    queryKey: ["mi-dia-month-mant", personalId, monthStart, monthEnd],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("manteniment_registre")
+        .select("id_registre, inici, hores")
+        .eq("id_persona", personalId)
+        .not("fi", "is", null)
+        .gte("inici", `${monthStart}T00:00:00`)
+        .lte("inici", `${monthEnd}T23:59:59`);
+      if (error) throw error;
+      return (data ?? []) as { id_registre: number; inici: string; hores: number | null }[];
+    },
+  });
+
+  const monthDayHours = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const t of monthTasksQ.data ?? []) {
+      const h = diffHoursMinutes(t.iniciada_en, t.finalizada_en);
+      m.set(t.fecha_limpieza, (m.get(t.fecha_limpieza) ?? 0) + h);
+    }
+    for (const r of monthMantQ.data ?? []) {
+      const h = Number(r.hores ?? 0);
+      const fecha = r.inici.slice(0, 10);
+      m.set(fecha, (m.get(fecha) ?? 0) + h);
+    }
+    return m;
+  }, [monthTasksQ.data, monthMantQ.data]);
+
   const monthHours = useMemo(() => {
     let total = 0;
-    for (const t of monthTasksQ.data ?? []) total += diffHoursMinutes(t.iniciada_en, t.finalizada_en);
+    for (const h of monthDayHours.values()) total += h;
     return total;
-  }, [monthTasksQ.data]);
+  }, [monthDayHours]);
 
   // ---- Equipo trabajando este día ----
   const otherQ = useQuery({
@@ -859,6 +888,7 @@ function WorkerView({
   const refetchAll = () => {
     tasksQ.refetch();
     monthTasksQ.refetch();
+    monthMantQ.refetch();
   };
 
   const detailTask = detailId != null ? (tasksQ.data ?? []).find((t) => t.id_limpieza === detailId) ?? null : null;
@@ -1088,8 +1118,19 @@ function WorkerView({
           )}
         </div>
       ) : daysWithTasks.length === 0 ? (
-        <div className="p-3 text-center text-xs text-muted-foreground">
-          No tienes limpiezas asignadas hoy, pero sí tareas de mantenimiento arriba.
+        <div className="p-3 text-center">
+          <p className="text-xs text-muted-foreground mb-3">
+            No tienes limpiezas asignadas hoy, pero sí tareas de mantenimiento arriba.
+          </p>
+          {!activeGen && (
+            <Button
+              className="w-full h-12 bg-[#26215C] hover:bg-[#1e1a48] text-white"
+              disabled={disabled}
+              onClick={() => setStartSheetOpen(true)}
+            >
+              <ClipboardList className="h-4 w-4" /> Iniciar tarea genérica
+            </Button>
+          )}
         </div>
       ) : (
         <>
@@ -1211,7 +1252,7 @@ function WorkerView({
         <SheetContent side="right" className="w-full sm:max-w-md p-0 overflow-y-auto">
           <HoursPanel
             monthHours={monthHours}
-            rows={monthTasksQ.data ?? []}
+            byDay={monthDayHours}
             onClose={() => setHoursOpen(false)}
           />
         </SheetContent>
@@ -1867,10 +1908,10 @@ function CheckRow({ label, checked, onChange }: { label: string; checked: boolea
 /* ---------------- Hours panel ---------------- */
 
 function HoursPanel({
-  monthHours, rows, onClose,
+  monthHours, byDay: byDayMap, onClose,
 }: {
   monthHours: number;
-  rows: { fecha_limpieza: string; iniciada_en: string | null; finalizada_en: string | null }[];
+  byDay: Map<string, number>;
   onClose: () => void;
 }) {
   const now = new Date();
@@ -1878,15 +1919,10 @@ function HoursPanel({
   const year = now.getFullYear();
 
   const byDay = useMemo(() => {
-    const m = new Map<string, number>();
-    for (const r of rows) {
-      const h = diffHoursMinutes(r.iniciada_en, r.finalizada_en);
-      m.set(r.fecha_limpieza, (m.get(r.fecha_limpieza) ?? 0) + h);
-    }
-    return Array.from(m.entries())
+    return Array.from(byDayMap.entries())
       .filter(([, h]) => h > 0)
       .sort(([a], [b]) => a.localeCompare(b));
-  }, [rows]);
+  }, [byDayMap]);
 
   return (
     <div className="flex flex-col min-h-full">
