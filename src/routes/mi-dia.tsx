@@ -30,6 +30,7 @@ import { Label } from "@/components/ui/label";
 import { Zap, Sofa, LogOut, Clock, ArrowLeft, Check, X, Play, Menu, UserCircle2, KeyRound, Square, ClipboardList, Plus, LayoutDashboard, AlertTriangle, Wrench, Home, RotateCcw } from "lucide-react";
 import { ReportarIncidenciaSheet, type ReportarIncidenciaContext } from "@/components/reportar-incidencia";
 import { MantenimientoPopover } from "@/components/mantenimiento-popover";
+import { ApartamentoOcupacionCalendario } from "@/components/apartamento-ocupacion-calendario";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { TimeBadge } from "@/components/time-badge";
@@ -1815,31 +1816,45 @@ function MantenimientoTaskCard({
                 <RotateCcw className="h-4 w-4" /> Reprogramar
               </Button>
               {reprogramando && (
-                <div className="w-full flex items-center gap-2 mt-1">
-                  <input
-                    type="date"
-                    min={todayISO}
-                    value={nuevaFecha}
-                    onChange={(e) => setNuevaFecha(e.target.value)}
-                    className="h-9 rounded-md border border-input bg-transparent px-3 text-sm"
-                  />
-                  <Button
-                    size="sm"
-                    className="h-9 px-3 bg-[#26215C] hover:bg-[#1e1a48] text-white"
-                    disabled={disabled || submitting || !nuevaFecha}
-                    onClick={guardarReprogramar}
-                  >
-                    Guardar
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="h-9 px-3"
-                    disabled={submitting}
-                    onClick={() => { setReprogramando(false); setNuevaFecha(""); }}
-                  >
-                    Cancelar
-                  </Button>
+                <div className="w-full flex flex-col gap-2 mt-1">
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="date"
+                      min={todayISO}
+                      value={nuevaFecha}
+                      onChange={(e) => setNuevaFecha(e.target.value)}
+                      className="h-9 rounded-md border border-input bg-transparent px-3 text-sm"
+                    />
+                    <Button
+                      size="sm"
+                      className="h-9 px-3 bg-[#26215C] hover:bg-[#1e1a48] text-white"
+                      disabled={disabled || submitting || !nuevaFecha}
+                      onClick={guardarReprogramar}
+                    >
+                      Guardar
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-9 px-3"
+                      disabled={submitting}
+                      onClick={() => { setReprogramando(false); setNuevaFecha(""); }}
+                    >
+                      Cancelar
+                    </Button>
+                  </div>
+                  {inc.id_apt != null && (
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">Ocupación del apartamento</Label>
+                      <div className="rounded-md border p-2">
+                        <ApartamentoOcupacionCalendario
+                          idApt={inc.id_apt}
+                          initialDateISO={nuevaFecha || inc.data_prevista}
+                          onSelectDate={(iso) => setNuevaFecha(iso)}
+                        />
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </>
