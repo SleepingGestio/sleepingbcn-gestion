@@ -28,6 +28,7 @@ export type Incidencia = {
   notas_gestor: string | null;
   tasca_realitzada: boolean | null;
   material_reposat: boolean | null;
+  data_reprogramada_por_operario: boolean;
 };
 
 export type Registre = {
@@ -51,7 +52,7 @@ export type GrupoLite = { id_grupo: number; nombre: string };
 // both always work from the same shape of row (no separate "lite" vs
 // "full" incidencia/registre types to keep in sync).
 export const INCIDENCIA_COLUMNS =
-  "id_incidencia,titol,descripcio,tipus,estat,origen,numero_reserva,id_apt,id_grup,id_tipo_espacio_comun,id_limpieza,id_reporter,id_assignat,prioritat_proposta,prioritat_confirmada,data_prevista,data_incident,creado_en,validat_per,validat_en,iniciat_en,finalitzat_en,notas_gestor,tasca_realitzada,material_reposat";
+  "id_incidencia,titol,descripcio,tipus,estat,origen,numero_reserva,id_apt,id_grup,id_tipo_espacio_comun,id_limpieza,id_reporter,id_assignat,prioritat_proposta,prioritat_confirmada,data_prevista,data_incident,creado_en,validat_per,validat_en,iniciat_en,finalitzat_en,notas_gestor,tasca_realitzada,material_reposat,data_reprogramada_por_operario";
 
 export const REGISTRE_COLUMNS =
   "id_registre,id_incidencia,id_persona,inici,fi,hores,notas,cost_materials,desc_materials";

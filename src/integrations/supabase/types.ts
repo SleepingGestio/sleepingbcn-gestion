@@ -609,6 +609,7 @@ export type Database = {
           creado_en: string | null
           data_incident: string | null
           data_prevista: string | null
+          data_reprogramada_por_operario: boolean
           descripcio: string | null
           estat: string
           finalitzat_en: string | null
@@ -636,6 +637,7 @@ export type Database = {
           creado_en?: string | null
           data_incident?: string | null
           data_prevista?: string | null
+          data_reprogramada_por_operario?: boolean
           descripcio?: string | null
           estat?: string
           finalitzat_en?: string | null
@@ -663,6 +665,7 @@ export type Database = {
           creado_en?: string | null
           data_incident?: string | null
           data_prevista?: string | null
+          data_reprogramada_por_operario?: boolean
           descripcio?: string | null
           estat?: string
           finalitzat_en?: string | null

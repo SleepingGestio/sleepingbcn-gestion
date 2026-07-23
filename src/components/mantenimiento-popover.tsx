@@ -30,7 +30,7 @@ import {
   type Registre,
   type PersonaLite,
 } from "@/lib/mantenimiento";
-import { Home, Loader2 } from "lucide-react";
+import { Home, Loader2, RotateCcw } from "lucide-react";
 
 type Adjunto = Record<string, unknown> & { id_adjunt?: number };
 
@@ -291,6 +291,11 @@ export function MantenimientoPopover({
                             <div className="text-xs text-muted-foreground">
                               <OcupacionPopoverTrigger idApt={inc.id_apt} initialDateISO={inc.data_prevista}>
                                 Prevista: {inc.data_prevista ? fmtDate(inc.data_prevista) : "Sin fecha prevista"}
+                                {inc.data_reprogramada_por_operario && (
+                                  <span title="Fecha modificada por el operario">
+                                    <RotateCcw className="inline-block h-3 w-3 ml-1 text-amber-600" />
+                                  </span>
+                                )}
                               </OcupacionPopoverTrigger>
                             </div>
                           </div>

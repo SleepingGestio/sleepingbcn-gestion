@@ -42,7 +42,7 @@ import {
   type Registre,
   type PersonaLite,
 } from "@/lib/mantenimiento";
-import { Home, Plus } from "lucide-react";
+import { Home, Plus, RotateCcw } from "lucide-react";
 
 export const Route = createFileRoute("/mantenimiento")({
   component: MantenimientoPage,
@@ -565,6 +565,11 @@ function TareaRow({
             <span className="text-muted-foreground">
               <OcupacionPopoverTrigger idApt={inc.id_apt} initialDateISO={inc.data_prevista} underline={false}>
                 Prevista: {inc.data_prevista ? fmtDate(inc.data_prevista) : "—"}
+                {inc.data_reprogramada_por_operario && (
+                  <span title="Fecha modificada por el operario">
+                    <RotateCcw className="inline-block h-3 w-3 ml-1 text-amber-600" />
+                  </span>
+                )}
               </OcupacionPopoverTrigger>
             </span>
             <PrioridadPill prioridad={inc.prioritat_confirmada} />

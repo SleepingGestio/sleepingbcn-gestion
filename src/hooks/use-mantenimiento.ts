@@ -106,6 +106,7 @@ export function useMantenimientoActions(onMutated?: () => void) {
         prioritat_confirmada: prioridad,
         validat_per: persona?.id_persona ?? null,
         validat_en: new Date().toISOString(),
+        data_reprogramada_por_operario: false,
       })
       .eq("id_incidencia", inc.id_incidencia);
     if (error) {
@@ -257,5 +258,18 @@ export function useMantenimientoActions(onMutated?: () => void) {
     onMutated?.();
   }
 
-  return { rechazar, confirmarAsignacion, iniciar, finParcial, finTotal, guardarNota, guardarDescripcio };
+  async function reprogramar(inc: Pick<Incidencia, "id_incidencia">, nuevaFecha: string) {
+    const { error } = await supabase
+      .from("manteniment_incidencies")
+      .update({ data_prevista: nuevaFecha, data_reprogramada_por_operario: true })
+      .eq("id_incidencia", inc.id_incidencia);
+    if (error) {
+      toast.error("Error: " + error.message);
+      return;
+    }
+    toast.success("Fecha reprogramada");
+    onMutated?.();
+  }
+
+  return { rechazar, confirmarAsignacion, iniciar, finParcial, finTotal, guardarNota, guardarDescripcio, reprogramar };
 }

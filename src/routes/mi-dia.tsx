@@ -27,7 +27,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { PasswordInput } from "@/components/ui/password-input";
 import { Label } from "@/components/ui/label";
-import { Zap, Sofa, LogOut, Clock, ArrowLeft, Check, X, Play, Menu, UserCircle2, KeyRound, Square, ClipboardList, Plus, LayoutDashboard, AlertTriangle, Wrench, Home } from "lucide-react";
+import { Zap, Sofa, LogOut, Clock, ArrowLeft, Check, X, Play, Menu, UserCircle2, KeyRound, Square, ClipboardList, Plus, LayoutDashboard, AlertTriangle, Wrench, Home, RotateCcw } from "lucide-react";
 import { ReportarIncidenciaSheet, type ReportarIncidenciaContext } from "@/components/reportar-incidencia";
 import { MantenimientoPopover } from "@/components/mantenimiento-popover";
 import { cn } from "@/lib/utils";
@@ -1160,6 +1160,8 @@ function WorkerView({
                       }
                       onFinTotal={() => mantActions.finTotal(inc)}
                       onOpenDetail={() => setMantDetailId(inc.id_incidencia)}
+                      onReprogramar={(nuevaFecha) => mantActions.reprogramar(inc, nuevaFecha)}
+                      todayISO={todayISO}
                     />
                   ))}
             </div>
@@ -1303,6 +1305,8 @@ function WorkerView({
               }
               onFinTotal={() => mantActions.finTotal(inc)}
               onOpenDetail={() => setMantDetailId(inc.id_incidencia)}
+              onReprogramar={(nuevaFecha) => mantActions.reprogramar(inc, nuevaFecha)}
+              todayISO={todayISO}
             />
           ))}
         </div>
@@ -1728,6 +1732,8 @@ function MantenimientoTaskCard({
   onFinParcial,
   onFinTotal,
   onOpenDetail,
+  onReprogramar,
+  todayISO,
 }: {
   inc: Incidencia;
   location: string;
@@ -1738,8 +1744,12 @@ function MantenimientoTaskCard({
   onFinParcial: () => Promise<void> | void;
   onFinTotal: () => Promise<void> | void;
   onOpenDetail: () => void;
+  onReprogramar: (nuevaFecha: string) => Promise<void> | void;
+  todayISO: string;
 }) {
   const [submitting, setSubmitting] = useState(false);
+  const [reprogramando, setReprogramando] = useState(false);
+  const [nuevaFecha, setNuevaFecha] = useState("");
   const misOpenSession = findOpenSession(misSesiones);
 
   async function guarded(action: () => Promise<void> | void) {
@@ -1750,6 +1760,13 @@ function MantenimientoTaskCard({
     } finally {
       setSubmitting(false);
     }
+  }
+
+  async function guardarReprogramar() {
+    if (!nuevaFecha) return;
+    await guarded(() => onReprogramar(nuevaFecha));
+    setReprogramando(false);
+    setNuevaFecha("");
   }
 
   return (
@@ -1767,17 +1784,65 @@ function MantenimientoTaskCard({
           <Home className="h-3 w-3 shrink-0" /> {location}
         </div>
         <div className="text-xs text-slate-600">Asignado a: {asignadoCodigo}</div>
-        {inc.data_prevista && <div className="text-xs text-slate-600">Prevista: {fmtDate(inc.data_prevista)}</div>}
+        {inc.data_prevista && (
+          <div className="text-xs text-slate-600 flex items-center gap-1">
+            Prevista: {fmtDate(inc.data_prevista)}
+            {inc.data_reprogramada_por_operario && (
+              <span title="Fecha modificada por el operario">
+                <RotateCcw className="h-3 w-3 text-amber-600" />
+              </span>
+            )}
+          </div>
+        )}
         <div className="mt-2 flex flex-wrap gap-2" onClick={(e) => e.stopPropagation()}>
           {!misOpenSession ? (
-            <Button
-              size="sm"
-              className="h-11 px-4 bg-[#26215C] hover:bg-[#1e1a48] text-white"
-              disabled={disabled || submitting}
-              onClick={() => guarded(onIniciar)}
-            >
-              <Play className="h-4 w-4" /> {submitting ? "Iniciando…" : "Iniciar"}
-            </Button>
+            <>
+              <Button
+                size="sm"
+                className="h-11 px-4 bg-[#26215C] hover:bg-[#1e1a48] text-white"
+                disabled={disabled || submitting}
+                onClick={() => guarded(onIniciar)}
+              >
+                <Play className="h-4 w-4" /> {submitting ? "Iniciando…" : "Iniciar"}
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-11 px-4"
+                disabled={disabled || submitting}
+                onClick={() => setReprogramando((v) => !v)}
+              >
+                <RotateCcw className="h-4 w-4" /> Reprogramar
+              </Button>
+              {reprogramando && (
+                <div className="w-full flex items-center gap-2 mt-1">
+                  <input
+                    type="date"
+                    min={todayISO}
+                    value={nuevaFecha}
+                    onChange={(e) => setNuevaFecha(e.target.value)}
+                    className="h-9 rounded-md border border-input bg-transparent px-3 text-sm"
+                  />
+                  <Button
+                    size="sm"
+                    className="h-9 px-3 bg-[#26215C] hover:bg-[#1e1a48] text-white"
+                    disabled={disabled || submitting || !nuevaFecha}
+                    onClick={guardarReprogramar}
+                  >
+                    Guardar
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-9 px-3"
+                    disabled={submitting}
+                    onClick={() => { setReprogramando(false); setNuevaFecha(""); }}
+                  >
+                    Cancelar
+                  </Button>
+                </div>
+              )}
+            </>
           ) : (
             <>
               <Button
