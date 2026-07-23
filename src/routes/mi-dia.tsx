@@ -652,6 +652,19 @@ function WorkerView({
     },
   });
 
+  const espaciosComunesQ = useQuery({
+    queryKey: ["mi-dia-espacios-comunes"],
+    queryFn: async (): Promise<{ id_tipo: number; nombre: string }[]> => {
+      const { data, error } = await supabase
+        .from("tipos_espacio_comun")
+        .select("id_tipo,nombre")
+        .eq("activo", true)
+        .order("nombre");
+      if (error) throw error;
+      return (data ?? []) as { id_tipo: number; nombre: string }[];
+    },
+  });
+
   const activeGen = activeGenQ.data ?? null;
   const fichaje = fichajeQ.data ?? null;
 
@@ -826,6 +839,7 @@ function WorkerView({
     notes: string,
     idGrupo: number | null,
     idApt: number | null,
+    idEspacioComun: number | null,
   ) {
     if (disabled || startGenericInFlightRef.current) return;
     startGenericInFlightRef.current = true;
@@ -851,6 +865,7 @@ function WorkerView({
       };
       if (idApt != null) payload.id_apt = idApt;
       if (idGrupo != null) payload.id_grupo = idGrupo;
+      if (idEspacioComun != null) payload.id_tipo_espacio_comun = idEspacioComun;
       const { error: rErr } = await supabase
         .from("registre_temps_generic")
         .insert(payload);
@@ -1328,6 +1343,7 @@ function WorkerView({
             tipos={tiposQ.data ?? []}
             grupos={gruposQ.data ?? []}
             apartamentos={aptsAllQ.data ?? []}
+            espaciosComunes={espaciosComunesQ.data ?? []}
             disabled={disabled}
             onStart={startGeneric}
             onCancel={() => setStartSheetOpen(false)}
@@ -2180,17 +2196,19 @@ function ActiveGenericBanner({
 }
 
 function StartJornadaPanel({
-  tipos, grupos, apartamentos, disabled, onStart, onCancel, onCreateType,
+  tipos, grupos, apartamentos, espaciosComunes, disabled, onStart, onCancel, onCreateType,
 }: {
   tipos: { id_tipus: number; nombre: string }[];
   grupos: { id_grupo: number; nombre: string }[];
   apartamentos: { id_apt: number; nombre: string; id_grupo: number | null }[];
+  espaciosComunes: { id_tipo: number; nombre: string }[];
   disabled: boolean;
   onStart: (
     idTipus: number,
     notes: string,
     idGrupo: number | null,
     idApt: number | null,
+    idEspacioComun: number | null,
   ) => void | Promise<void>;
   onCancel: () => void;
   onCreateType: (nombre: string) => Promise<number | null>;
@@ -2201,6 +2219,7 @@ function StartJornadaPanel({
   const [propOpen, setPropOpen] = useState(false);
   const [idGrupo, setIdGrupo] = useState<number | null>(null);
   const [idApt, setIdApt] = useState<number | null>(null);
+  const [idEspacioComun, setIdEspacioComun] = useState<number | null>(null);
   const [creating, setCreating] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
@@ -2325,16 +2344,37 @@ function StartJornadaPanel({
               </select>
             </div>
             <div className="space-y-1">
-              <Label className="text-xs">Apartamento</Label>
+              <Label className="text-xs">Ubicación</Label>
               <select
-                value={idApt ?? ""}
-                onChange={(e) => setIdApt(e.target.value ? Number(e.target.value) : null)}
+                value={
+                  idApt != null
+                    ? `apt-${idApt}`
+                    : idEspacioComun != null
+                      ? `esp-${idEspacioComun}`
+                      : ""
+                }
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setIdApt(v.startsWith("apt-") ? Number(v.slice(4)) : null);
+                  setIdEspacioComun(v.startsWith("esp-") ? Number(v.slice(4)) : null);
+                }}
                 className="w-full h-9 rounded-md border border-input bg-transparent px-3 text-sm"
               >
                 <option value="">— Ninguno —</option>
-                {filteredApts.map((a) => (
-                  <option key={a.id_apt} value={a.id_apt}>{a.nombre}</option>
-                ))}
+                {filteredApts.length > 0 && (
+                  <optgroup label="Apartamentos">
+                    {filteredApts.map((a) => (
+                      <option key={`apt-${a.id_apt}`} value={`apt-${a.id_apt}`}>{a.nombre}</option>
+                    ))}
+                  </optgroup>
+                )}
+                {espaciosComunes.length > 0 && (
+                  <optgroup label="Espacios comunes">
+                    {espaciosComunes.map((esp) => (
+                      <option key={`esp-${esp.id_tipo}`} value={`esp-${esp.id_tipo}`}>{esp.nombre}</option>
+                    ))}
+                  </optgroup>
+                )}
               </select>
             </div>
           </div>
@@ -2360,7 +2400,7 @@ function StartJornadaPanel({
             if (selected == null || submitting) return;
             setSubmitting(true);
             try {
-              await onStart(selected, notes, idGrupo, idApt);
+              await onStart(selected, notes, idGrupo, idApt, idEspacioComun);
             } finally {
               setSubmitting(false);
             }

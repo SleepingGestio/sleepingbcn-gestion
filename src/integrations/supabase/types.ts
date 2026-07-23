@@ -1184,6 +1184,7 @@ export type Database = {
           id_grupo: number | null
           id_persona: number
           id_registre: number
+          id_tipo_espacio_comun: number | null
           id_tipus: number
           inici: string
           notes: string | null
@@ -1196,6 +1197,7 @@ export type Database = {
           id_grupo?: number | null
           id_persona: number
           id_registre?: number
+          id_tipo_espacio_comun?: number | null
           id_tipus: number
           inici?: string
           notes?: string | null
@@ -1208,6 +1210,7 @@ export type Database = {
           id_grupo?: number | null
           id_persona?: number
           id_registre?: number
+          id_tipo_espacio_comun?: number | null
           id_tipus?: number
           inici?: string
           notes?: string | null
