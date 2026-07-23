@@ -89,6 +89,8 @@ type Limpieza = {
   proxima_reserva_numero: string | null;
 };
 
+type LimpiezaDia = Limpieza & { esPendienteAtrasada?: boolean };
+
 type Apartamento = { id_apt: number; nombre: string };
 type ResvLite = { Número: string; "Check in": string | null; "Check-out": string | null; "Huéspedes": number | null };
 type ComDia = { worker: number; fecha: string; observaciones: string | null };
@@ -350,7 +352,7 @@ function WorkerView({
         .from("limpiezas")
         .select("*")
         .eq("worker", personalId)
-        .gte("fecha_limpieza", todayISO)
+        .or(`fecha_limpieza.gte.${todayISO},and(fecha_limpieza.lt.${todayISO},estado.neq.finalizada)`)
         .in("estado", VISIBLE_STATES as unknown as string[])
         .order("fecha_limpieza", { ascending: true })
         .order("orden_trabajo", { ascending: true, nullsFirst: false });
@@ -891,19 +893,34 @@ function WorkerView({
 
   // Group by day
   const daysWithTasks = useMemo(() => {
-    const m = new Map<string, Limpieza[]>();
+    const overdue: LimpiezaDia[] = [];
+    const m = new Map<string, LimpiezaDia[]>();
     for (const t of tasksQ.data ?? []) {
+      if (t.fecha_limpieza < todayISO && t.estado !== "finalizada") {
+        overdue.push(t);
+        continue;
+      }
       const arr = m.get(t.fecha_limpieza) ?? [];
       arr.push(t); m.set(t.fecha_limpieza, arr);
+    }
+    const todayOwn = (m.get(todayISO) ?? []).sort((a, b) => (a.orden_trabajo ?? 999) - (b.orden_trabajo ?? 999));
+    if (overdue.length > 0) {
+      overdue.sort((a, b) => a.fecha_limpieza.localeCompare(b.fecha_limpieza));
+      m.set(todayISO, [
+        ...overdue.map((t) => ({ ...t, esPendienteAtrasada: true })),
+        ...todayOwn,
+      ]);
+    } else if (m.has(todayISO)) {
+      m.set(todayISO, todayOwn);
     }
     return Array.from(m.entries())
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([fecha, tasks]) => ({
         fecha,
-        tasks: tasks.sort((a, b) => (a.orden_trabajo ?? 999) - (b.orden_trabajo ?? 999)),
+        tasks: fecha === todayISO ? tasks : tasks.sort((a, b) => (a.orden_trabajo ?? 999) - (b.orden_trabajo ?? 999)),
         hasPending: tasks.some((t) => t.estado === "comunicada"),
       }));
-  }, [tasksQ.data]);
+  }, [tasksQ.data, todayISO]);
 
   // Default day: first available if today has none
   useEffect(() => {
@@ -1475,6 +1492,14 @@ function StateBadge({ estado }: { estado: string | null }) {
   return <span className={cn("rounded-full px-2.5 py-1 text-[11px] font-semibold border", c.cls)}>{c.label}</span>;
 }
 
+function PendienteAtrasadaBadge() {
+  return (
+    <span className="rounded-full px-2.5 py-1 text-[11px] font-semibold border bg-rose-100 text-rose-900 border-rose-300">
+      ⏰ PENDIENTE
+    </span>
+  );
+}
+
 function TimeChip({ time, informed }: { time: string | null; informed: boolean | null }) {
   return <TimeBadge time={time} informed={informed} size="md" className="rounded-md" />;
 }
@@ -1482,7 +1507,7 @@ function TimeChip({ time, informed }: { time: string | null; informed: boolean |
 function TaskCard({
   t, apt, resv, onChanged, onOpenDetail, onFinish, onReportIncidencia,
 }: {
-  t: Limpieza;
+  t: LimpiezaDia;
   apt: Apartamento | undefined;
   resv: Map<string, ResvLite>;
   onChanged: () => void;
@@ -1539,8 +1564,14 @@ function TaskCard({
           </div>
           <div className="flex-1 min-w-0">
             <div className="text-sm font-semibold leading-tight truncate">{apt?.nombre ?? `Apt #${t.id_apt}`}</div>
+            {t.esPendienteAtrasada && (
+              <div className="text-[11px] text-rose-700 mt-0.5">Pendiente desde {fmtDate(t.fecha_limpieza)}</div>
+            )}
           </div>
-          <StateBadge estado={t.estado} />
+          <div className="flex items-center gap-1.5 shrink-0">
+            {t.esPendienteAtrasada && <PendienteAtrasadaBadge />}
+            <StateBadge estado={t.estado} />
+          </div>
         </div>
 
         {/* Times */}
