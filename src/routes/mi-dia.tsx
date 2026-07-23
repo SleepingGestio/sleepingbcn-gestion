@@ -343,7 +343,11 @@ function WorkerView({
   const [startSheetOpen, setStartSheetOpen] = useState(false);
   const [endSheetOpen, setEndSheetOpen] = useState(false);
   const [mantDetailId, setMantDetailId] = useState<number | null>(null);
-  const disabled = !!previewing;
+  const [previewEditEnabled, setPreviewEditEnabled] = useState(false);
+  useEffect(() => {
+    setPreviewEditEnabled(false);
+  }, [personalId]);
+  const disabled = !!previewing && !previewEditEnabled;
 
   // Upcoming tasks (today + future)
   const tasksQ = useQuery({
@@ -981,6 +985,18 @@ function WorkerView({
           <span className="flex-1">👁 Modo supervisión — viendo como: {previewing}</span>
           <button
             type="button"
+            onClick={() => setPreviewEditEnabled((v) => !v)}
+            className={cn(
+              "rounded-full px-3 h-7 text-xs font-semibold border transition-colors",
+              previewEditEnabled
+                ? "bg-amber-950 text-amber-50 border-amber-950"
+                : "bg-transparent text-amber-950 border-amber-950/40 hover:bg-amber-500/40",
+            )}
+          >
+            {previewEditEnabled ? "Edición activada ✓" : "Activar edición"}
+          </button>
+          <button
+            type="button"
             onClick={() => onExitPreview?.()}
             className="h-7 w-7 grid place-items-center rounded-full hover:bg-amber-500/40"
             aria-label="Salir del modo supervisión"
@@ -1254,6 +1270,7 @@ function WorkerView({
                 t={t}
                 apt={aptById.get(t.id_apt)}
                 resv={resvQ.data ?? new Map()}
+                disabled={disabled}
                 onChanged={refetchAll}
                 onOpenDetail={() => setDetailId(t.id_limpieza)}
                 onFinish={() => finishTask(t)}
@@ -1321,6 +1338,7 @@ function WorkerView({
               t={detailTask}
               apt={aptById.get(detailTask.id_apt)}
               resv={resvQ.data ?? new Map()}
+              disabled={disabled}
               onClose={() => setDetailId(null)}
               onChanged={refetchAll}
             />
@@ -1526,11 +1544,12 @@ function TimeChip({ time, informed }: { time: string | null; informed: boolean |
 }
 
 function TaskCard({
-  t, apt, resv, onChanged, onOpenDetail, onFinish, onReportIncidencia,
+  t, apt, resv, disabled, onChanged, onOpenDetail, onFinish, onReportIncidencia,
 }: {
   t: LimpiezaDia;
   apt: Apartamento | undefined;
   resv: Map<string, ResvLite>;
+  disabled: boolean;
   onChanged: () => void;
   onOpenDetail: () => void;
   onFinish: () => void;
@@ -1660,10 +1679,10 @@ function TaskCard({
         <div className="mt-3 flex flex-wrap gap-2">
           {t.estado === "comunicada" && !rejecting && (
             <>
-              <Button size="sm" className="h-11 px-4 bg-emerald-600 hover:bg-emerald-700 text-white" disabled={busy} onClick={accept}>
+              <Button size="sm" className="h-11 px-4 bg-emerald-600 hover:bg-emerald-700 text-white" disabled={disabled || busy} onClick={accept}>
                 <Check className="h-4 w-4" /> Aceptar
               </Button>
-              <Button size="sm" className="h-11 px-4 bg-amber-500 hover:bg-amber-600 text-white" disabled={busy} onClick={() => setRejecting(true)}>
+              <Button size="sm" className="h-11 px-4 bg-amber-500 hover:bg-amber-600 text-white" disabled={disabled || busy} onClick={() => setRejecting(true)}>
                 <X className="h-4 w-4" /> Rechazar
               </Button>
               <Button size="sm" variant="secondary" className="h-11 px-4" onClick={onOpenDetail}>
@@ -1680,7 +1699,7 @@ function TaskCard({
                 className="text-sm min-h-[70px]"
               />
               <div className="mt-2 flex gap-2">
-                <Button size="sm" className="h-11 px-4 bg-amber-500 hover:bg-amber-600 text-white" disabled={busy} onClick={confirmReject}>
+                <Button size="sm" className="h-11 px-4 bg-amber-500 hover:bg-amber-600 text-white" disabled={disabled || busy} onClick={confirmReject}>
                   Confirmar rechazo
                 </Button>
                 <Button size="sm" variant="ghost" className="h-11 px-4" onClick={() => { setRejecting(false); setMotivo(""); }}>
@@ -1691,7 +1710,7 @@ function TaskCard({
           )}
           {t.estado === "aceptada" && (
             <>
-              <Button size="sm" className="h-11 px-4 bg-[#26215C] hover:bg-[#1e1a48] text-white" disabled={busy} onClick={start}>
+              <Button size="sm" className="h-11 px-4 bg-[#26215C] hover:bg-[#1e1a48] text-white" disabled={disabled || busy} onClick={start}>
                 <Play className="h-4 w-4" /> Iniciar limpieza
               </Button>
               <Button size="sm" variant="secondary" className="h-11 px-4" onClick={onOpenDetail}>
@@ -1837,7 +1856,7 @@ function MantenimientoTaskCard({
                       size="sm"
                       variant="outline"
                       className="h-9 px-3"
-                      disabled={submitting}
+                      disabled={disabled || submitting}
                       onClick={() => { setReprogramando(false); setNuevaFecha(""); }}
                     >
                       Cancelar
@@ -1888,11 +1907,12 @@ function MantenimientoTaskCard({
 /* ---------------- Detail view ---------------- */
 
 function DetailView({
-  t, apt, resv, onClose, onChanged,
+  t, apt, resv, disabled, onClose, onChanged,
 }: {
   t: Limpieza;
   apt: Apartamento | undefined;
   resv: Map<string, ResvLite>;
+  disabled: boolean;
   onClose: () => void;
   onChanged: () => void;
 }) {
@@ -1912,6 +1932,7 @@ function DetailView({
   const win = windowHours(t.hora_out_time, t.hora_in_time, t.fecha_limpieza, next?.["Check in"] ?? null);
 
   const updateField = async <K extends keyof Limpieza>(key: K, value: Limpieza[K]) => {
+    if (disabled) return;
     setLocal((l) => ({ ...l, [key]: value }));
     const { error } = await supabase
       .from("limpiezas")
@@ -1925,6 +1946,7 @@ function DetailView({
     updateField(field, !local[field] as any);
   };
   const toggleIntermedia = (field: "check_toallas" | "check_sabanas" | "check_limpieza_basica" | "check_limpieza_completa") => {
+    if (disabled) return;
     if (field === "check_limpieza_completa") {
       const newVal = !local.check_limpieza_completa;
       const patch: Partial<Limpieza> = newVal
@@ -1945,6 +1967,7 @@ function DetailView({
   };
 
   const accept = async () => {
+    if (disabled) return;
     setBusy(true);
     const { error } = await supabase.from("limpiezas").update({ estado: "aceptada" }).eq("id_limpieza", t.id_limpieza);
     setBusy(false);
@@ -1952,6 +1975,7 @@ function DetailView({
     onChanged(); onClose();
   };
   const start = async () => {
+    if (disabled) return;
     setBusy(true);
     const { error } = await supabase.from("limpiezas").update({ estado: "en_curso", iniciada_en: new Date().toISOString() }).eq("id_limpieza", t.id_limpieza);
     setBusy(false);
@@ -2008,17 +2032,17 @@ function DetailView({
           <div className="rounded-lg border bg-white p-3 space-y-3">
             {t.tipo === "salida" ? (
               <>
-                <CheckRow label="Montar sofá cama" checked={!!local.sfc_montar} onChange={() => toggleSalida("sfc_montar")} />
-                <CheckRow label="Desmontar sofá cama" checked={!!local.sfc_desmontar} onChange={() => toggleSalida("sfc_desmontar")} />
-                <CheckRow label="Realizar check-in" checked={!!local.check_checkin} onChange={() => toggleSalida("check_checkin")} />
-                <CheckRow label="Cobrar tasas" checked={!!local.check_tasas} onChange={() => toggleSalida("check_tasas")} />
+                <CheckRow label="Montar sofá cama" checked={!!local.sfc_montar} disabled={disabled} onChange={() => toggleSalida("sfc_montar")} />
+                <CheckRow label="Desmontar sofá cama" checked={!!local.sfc_desmontar} disabled={disabled} onChange={() => toggleSalida("sfc_desmontar")} />
+                <CheckRow label="Realizar check-in" checked={!!local.check_checkin} disabled={disabled} onChange={() => toggleSalida("check_checkin")} />
+                <CheckRow label="Cobrar tasas" checked={!!local.check_tasas} disabled={disabled} onChange={() => toggleSalida("check_tasas")} />
               </>
             ) : (
               <>
-                <CheckRow label="Cambiar toallas" checked={!!local.check_toallas} onChange={() => toggleIntermedia("check_toallas")} />
-                <CheckRow label="Cambiar sábanas" checked={!!local.check_sabanas} onChange={() => toggleIntermedia("check_sabanas")} />
-                <CheckRow label="Limpieza básica" checked={!!local.check_limpieza_basica} onChange={() => toggleIntermedia("check_limpieza_basica")} />
-                <CheckRow label="Limpieza completa" checked={!!local.check_limpieza_completa} onChange={() => toggleIntermedia("check_limpieza_completa")} />
+                <CheckRow label="Cambiar toallas" checked={!!local.check_toallas} disabled={disabled} onChange={() => toggleIntermedia("check_toallas")} />
+                <CheckRow label="Cambiar sábanas" checked={!!local.check_sabanas} disabled={disabled} onChange={() => toggleIntermedia("check_sabanas")} />
+                <CheckRow label="Limpieza básica" checked={!!local.check_limpieza_basica} disabled={disabled} onChange={() => toggleIntermedia("check_limpieza_basica")} />
+                <CheckRow label="Limpieza completa" checked={!!local.check_limpieza_completa} disabled={disabled} onChange={() => toggleIntermedia("check_limpieza_completa")} />
               </>
             )}
           </div>
@@ -2041,6 +2065,7 @@ function DetailView({
             onBlur={saveIncidencias}
             placeholder="Anota cualquier incidencia detectada…"
             className="text-sm min-h-[90px] bg-white"
+            disabled={disabled}
           />
         </section>
 
@@ -2048,7 +2073,7 @@ function DetailView({
         <section className="pt-2">
           {t.estado === "comunicada" && (
             <div className="flex gap-2">
-              <Button className="flex-1 h-12 bg-emerald-600 hover:bg-emerald-700 text-white" disabled={busy} onClick={accept}>
+              <Button className="flex-1 h-12 bg-emerald-600 hover:bg-emerald-700 text-white" disabled={disabled || busy} onClick={accept}>
                 <Check className="h-4 w-4" /> Aceptar
               </Button>
               <Button className="flex-1 h-12 bg-amber-500 hover:bg-amber-600 text-white" disabled={busy} onClick={onClose}>
@@ -2057,7 +2082,7 @@ function DetailView({
             </div>
           )}
           {t.estado === "aceptada" && (
-            <Button className="w-full h-12 bg-[#26215C] hover:bg-[#1e1a48] text-white" disabled={busy} onClick={start}>
+            <Button className="w-full h-12 bg-[#26215C] hover:bg-[#1e1a48] text-white" disabled={disabled || busy} onClick={start}>
               <Play className="h-4 w-4" /> Iniciar limpieza
             </Button>
           )}
@@ -2067,10 +2092,10 @@ function DetailView({
   );
 }
 
-function CheckRow({ label, checked, onChange }: { label: string; checked: boolean; onChange: () => void }) {
+function CheckRow({ label, checked, disabled, onChange }: { label: string; checked: boolean; disabled?: boolean; onChange: () => void }) {
   return (
-    <label className="flex items-center gap-3 min-h-[44px] cursor-pointer">
-      <Checkbox checked={checked} onCheckedChange={onChange} className="h-5 w-5" />
+    <label className={cn("flex items-center gap-3 min-h-[44px]", disabled ? "cursor-not-allowed opacity-60" : "cursor-pointer")}>
+      <Checkbox checked={checked} disabled={disabled} onCheckedChange={onChange} className="h-5 w-5" />
       <span className="text-sm">{label}</span>
     </label>
   );
