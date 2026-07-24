@@ -1654,7 +1654,7 @@ function TaskCard({
             )}
             {sfcMontar && (
               <span className="inline-flex items-center gap-0.5 rounded bg-indigo-100 text-indigo-900 px-2 py-0.5 text-[11px] font-semibold">
-                <Sofa className="h-3 w-3" /> Montar SFC
+                <Sofa className="h-3 w-3" /> {t.tipo === "intermedia" ? "Cambiar ropa SFC" : "Montar SFC"}
               </span>
             )}
             {sfcDesmontar && (
@@ -2039,6 +2039,7 @@ function DetailView({
               </>
             ) : (
               <>
+                <CheckRow label="Cambiar ropa SFC" checked={!!local.sfc_montar} disabled={disabled} onChange={() => toggleSalida("sfc_montar")} />
                 <CheckRow label="Cambiar toallas" checked={!!local.check_toallas} disabled={disabled} onChange={() => toggleIntermedia("check_toallas")} />
                 <CheckRow label="Cambiar sábanas" checked={!!local.check_sabanas} disabled={disabled} onChange={() => toggleIntermedia("check_sabanas")} />
                 <CheckRow label="Limpieza básica" checked={!!local.check_limpieza_basica} disabled={disabled} onChange={() => toggleIntermedia("check_limpieza_basica")} />

@@ -425,6 +425,8 @@ export async function generarLimpiezas(fromISO: string, toISO: string): Promise<
     const existingFechas = existingIntermediaByPair.get(key) ?? new Set<string>();
     // If already has expected count, skip
     if (existingFechas.size >= offsets.length) continue;
+    const intermediaSfcMontar =
+      !r.es_reserva_compartida && !!apt?.tiene_sofa_cama && (r["Huéspedes"] ?? 0) > (apt.camas_fijas ?? 0);
     for (const off of offsets) {
       const fecha = addDaysISO(ci, off);
       if (fecha < fromISO || fecha > toISO) continue;
@@ -438,7 +440,7 @@ export async function generarLimpiezas(fromISO: string, toISO: string): Promise<
         hora_out_informed: false,
         hora_in_time: null,
         hora_in_informed: false,
-        sfc_montar: false,
+        sfc_montar: intermediaSfcMontar,
         sfc_desmontar: false,
         prioritaria: false,
         estado: "activa",

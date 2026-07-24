@@ -915,6 +915,13 @@ export function LimpiezaPopover({ open, loadKey, onOpenChange, apt, fecha, exist
               <Label className="text-xs uppercase tracking-wide text-muted-foreground">Tareas</Label>
               <div className="mt-2 space-y-2">
                 <TaskRow
+                  label="Cambiar ropa SFC"
+                  checked={!!form.sfc_montar}
+                  onChange={(v) => setForm((f) => ({ ...f, sfc_montar: v, sfc_montar_manual: v }))}
+                  manualSet={form.sfc_montar_manual !== null && form.sfc_montar_manual !== undefined}
+                  disabled={readOnly}
+                />
+                <TaskRow
                   label="Cambiar toallas"
                   checked={!!form.check_toallas}
                   onChange={(v) => set("check_toallas", v)}

@@ -613,7 +613,7 @@ function TaskCard({
             )}
             {sfcMontar && (
               <span className="inline-flex items-center gap-0.5 rounded bg-indigo-100 text-indigo-900 px-1.5 py-0.5 text-[10px] font-semibold">
-                <Sofa className="h-3 w-3" /> Montar SFC
+                <Sofa className="h-3 w-3" /> {t.tipo === "intermedia" ? "Cambiar ropa SFC" : "Montar SFC"}
               </span>
             )}
             {sfcDesmontar && (
