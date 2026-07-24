@@ -210,7 +210,7 @@ function DetallPage() {
       const { data, error } = await supabase
         .from("limpiezas_registre")
         .select(
-          "id_registre, id_limpieza, id_persona, inici, fi, hores, limpiezas(id_apt, tipo, fecha_limpieza)",
+          "id_registre, id_limpieza, id_persona, inici, fi, hores, limpiezas!limpiezas_registre_id_limpieza_fkey(id_apt, tipo, fecha_limpieza)",
         )
         .eq("id_persona", idPersona)
         .not("fi", "is", null)
