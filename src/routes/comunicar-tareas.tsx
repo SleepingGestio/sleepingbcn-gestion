@@ -612,7 +612,12 @@ function TaskCard({
               </span>
             )}
             {sfcMontar && (
-              <span className="inline-flex items-center gap-0.5 rounded bg-indigo-100 text-indigo-900 px-1.5 py-0.5 text-[10px] font-semibold">
+              <span
+                className={cn(
+                  "inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[10px] font-semibold",
+                  t.tipo === "intermedia" ? "bg-orange-100 text-orange-900" : "bg-indigo-100 text-indigo-900",
+                )}
+              >
                 <Sofa className="h-3 w-3" /> {t.tipo === "intermedia" ? "Cambiar ropa SFC" : "Montar SFC"}
               </span>
             )}
