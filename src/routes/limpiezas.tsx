@@ -46,6 +46,18 @@ async function fetchLimpiezasAsignadas(fechaFrom: string, fechaTo: string): Prom
   return (data ?? []) as LimpiezaExt[];
 }
 
+async function fetchLimpiezasRegistre(fechaFrom: string, fechaTo: string): Promise<{ id_limpieza: number; hores: number | null }[]> {
+  const { data, error } = await supabase
+    .from("limpiezas_registre")
+    .select("id_limpieza, hores")
+    .not("fi", "is", null)
+    .not("hores", "is", null)
+    .gte("inici", `${fechaFrom}T00:00:00`)
+    .lte("inici", `${fechaTo}T23:59:59`);
+  if (error) throw error;
+  return (data ?? []) as { id_limpieza: number; hores: number | null }[];
+}
+
 async function fetchAptsExtra(): Promise<AptExtra[]> {
   const { data, error } = await supabase
     .from("apartamentos")
@@ -103,6 +115,19 @@ function LimpiezasAsignadasPage() {
     queryKey: ["limpiezas_asignadas", range.from, range.to],
     queryFn: () => fetchLimpiezasAsignadas(range.from, range.to),
   });
+
+  const limpiezasRegistreQ = useQuery({
+    queryKey: ["limpiezas_asignadas_registre", range.from, range.to],
+    queryFn: () => fetchLimpiezasRegistre(range.from, range.to),
+  });
+
+  const sessionHoursByLimpieza = useMemo(() => {
+    const m = new Map<number, number>();
+    for (const r of limpiezasRegistreQ.data ?? []) {
+      m.set(r.id_limpieza, (m.get(r.id_limpieza) ?? 0) + Number(r.hores ?? 0));
+    }
+    return m;
+  }, [limpiezasRegistreQ.data]);
 
   const numeros = useMemo(() => {
     const s = new Set<string>();
@@ -257,8 +282,11 @@ function LimpiezasAsignadasPage() {
                   guests != null &&
                   info.camas_fijas != null &&
                   guests > info.camas_fijas;
+                const sessionHours = sessionHoursByLimpieza.get(l.id_limpieza);
                 const hours =
-                  l.estado === "finalizada" ? elapsedHours(l.iniciada_en, l.finalizada_en) : null;
+                  sessionHours != null
+                    ? sessionHours
+                    : l.estado === "finalizada" ? elapsedHours(l.iniciada_en, l.finalizada_en) : null;
                 return (
                   <TableRow key={l.id_limpieza}>
                     <TableCell>{fmtDate(l.fecha_limpieza)}</TableCell>

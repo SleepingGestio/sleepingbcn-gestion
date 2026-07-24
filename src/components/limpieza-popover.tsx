@@ -210,6 +210,21 @@ export function LimpiezaPopover({ open, loadKey, onOpenChange, apt, fecha, exist
     },
   });
 
+  const limpiezaRegistreQ = useQuery({
+    queryKey: ["limpieza-popover-registre", form.id_limpieza],
+    enabled: open && form.id_limpieza > 0,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("limpiezas_registre")
+        .select("id_registre, hores")
+        .eq("id_limpieza", form.id_limpieza)
+        .not("fi", "is", null)
+        .not("hores", "is", null);
+      if (error) throw error;
+      return (data ?? []) as { id_registre: number; hores: number | null }[];
+    },
+  });
+
   useEffect(() => {
     if (!open) return;
     setForm(emptyLimpieza(apt, fecha));
@@ -1040,7 +1055,11 @@ export function LimpiezaPopover({ open, loadKey, onOpenChange, apt, fecha, exist
                   {form.finalizada_en && (
                     <span className="text-muted-foreground">
                       {" "}
-                      ({formatHHMM(diffHours(form.iniciada_en, form.finalizada_en))} h)
+                      ({formatHHMM(
+                        (limpiezaRegistreQ.data?.length ?? 0) > 0
+                          ? (limpiezaRegistreQ.data ?? []).reduce((sum, r) => sum + Number(r.hores ?? 0), 0)
+                          : diffHours(form.iniciada_en, form.finalizada_en),
+                      )} h)
                     </span>
                   )}
                 </div>

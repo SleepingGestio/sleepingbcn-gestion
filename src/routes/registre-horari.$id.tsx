@@ -204,6 +204,28 @@ function DetallPage() {
     },
   });
 
+  const limpiezasRegistreQ = useQuery({
+    queryKey: ["reg-horari-det-limpiezas-registre", idPersona, start, end],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("limpiezas_registre")
+        .select(
+          "id_registre, id_limpieza, id_persona, inici, fi, hores, limpiezas(id_apt, tipo, fecha_limpieza)",
+        )
+        .eq("id_persona", idPersona)
+        .not("fi", "is", null)
+        .not("hores", "is", null)
+        .gte("inici", `${start}T00:00:00`)
+        .lte("inici", `${end}T23:59:59`);
+      if (error) throw error;
+      return (data ?? []) as unknown as Array<{
+        id_registre: number; id_limpieza: number; id_persona: number;
+        inici: string; fi: string | null; hores: number | null;
+        limpiezas: { id_apt: number; tipo: string | null; fecha_limpieza: string } | null;
+      }>;
+    },
+  });
+
   const genericQ = useQuery({
     queryKey: ["reg-horari-det-generic", idPersona, start, end],
     queryFn: async () => {
@@ -297,9 +319,10 @@ function DetallPage() {
   const aptIds = useMemo(() => {
     const s = new Set<number>();
     for (const l of limpiezasQ.data ?? []) s.add(l.id_apt);
+    for (const r of limpiezasRegistreQ.data ?? []) if (r.limpiezas?.id_apt != null) s.add(r.limpiezas.id_apt);
     for (const r of genericQ.data ?? []) if (r.id_apt != null) s.add(r.id_apt);
     return Array.from(s);
-  }, [limpiezasQ.data, genericQ.data]);
+  }, [limpiezasQ.data, limpiezasRegistreQ.data, genericQ.data]);
 
   const aptsQ = useQuery({
     queryKey: ["reg-horari-det-apts", aptIds.join(",")],
@@ -322,7 +345,9 @@ function DetallPage() {
 
   const rows = useMemo<Row[]>(() => {
     const out: Row[] = [];
+    const limpiezasConSesiones = new Set((limpiezasRegistreQ.data ?? []).map((r) => r.id_limpieza));
     for (const l of limpiezasQ.data ?? []) {
+      if (limpiezasConSesiones.has(l.id_limpieza)) continue;
       const isSalida = l.tipo === "salida";
       const kind: RowKind = isSalida ? "checkout" : "extra_cr";
       out.push({
@@ -335,6 +360,22 @@ function DetallPage() {
         tipus: isSalida ? "Limpieza STD" : "Extra-CR",
         hores: diffHours(l.iniciada_en, l.finalizada_en),
         raw: l as unknown as Record<string, unknown>,
+      });
+    }
+    for (const r of limpiezasRegistreQ.data ?? []) {
+      const lim = r.limpiezas;
+      const isSalida = lim?.tipo === "salida";
+      const kind: RowKind = isSalida ? "checkout" : "extra_cr";
+      out.push({
+        key: `limpreg-${r.id_registre}`,
+        kind,
+        fecha: lim?.fecha_limpieza ?? dateOnly(r.inici),
+        inici: r.inici,
+        fi: r.fi,
+        propietat: lim?.id_apt != null ? (aptName.get(lim.id_apt) ?? `Apt #${lim.id_apt}`) : "—",
+        tipus: isSalida ? "Limpieza STD" : "Extra-CR",
+        hores: Number(r.hores ?? 0),
+        raw: r as unknown as Record<string, unknown>,
       });
     }
     for (const r of genericQ.data ?? []) {
@@ -388,7 +429,7 @@ function DetallPage() {
       });
     }
     return out;
-  }, [limpiezasQ.data, genericQ.data, mantenimentQ.data, ajustosQ.data, aptName, mantAptById, mantEspacioById, mantGrupoById]);
+  }, [limpiezasQ.data, limpiezasRegistreQ.data, genericQ.data, mantenimentQ.data, ajustosQ.data, aptName, mantAptById, mantEspacioById, mantGrupoById]);
 
   const filteredRows = useMemo(() => {
     let list = rows;
@@ -413,7 +454,12 @@ function DetallPage() {
   const totals = useMemo(() => {
     let worked = 0, otherAdjustments = 0, reductions = 0;
     let reductionTipo: string | null = null;
-    for (const l of limpiezasQ.data ?? []) worked += diffHours(l.iniciada_en, l.finalizada_en);
+    const limpiezasConSesiones = new Set((limpiezasRegistreQ.data ?? []).map((r) => r.id_limpieza));
+    for (const l of limpiezasQ.data ?? []) {
+      if (limpiezasConSesiones.has(l.id_limpieza)) continue;
+      worked += diffHours(l.iniciada_en, l.finalizada_en);
+    }
+    for (const r of limpiezasRegistreQ.data ?? []) worked += Number(r.hores ?? 0);
     for (const r of genericQ.data ?? []) worked += diffHours(r.inici, r.fi);
     for (const m of mantenimentQ.data ?? []) worked += Number(m.hores ?? 0);
     for (const a of ajustosQ.data ?? []) {
@@ -434,7 +480,7 @@ function DetallPage() {
     const effectiveObjective = baseObjective != null ? Math.max(0, baseObjective - reductions) : null;
     const saldo = !isAutonom && effectiveObjective != null ? worked - effectiveObjective + otherAdjustments : 0;
     return { worked, adjustments: otherAdjustments, reductions, reductionTipo, objective: baseObjective, effectiveObjective, isAutonom, saldo };
-  }, [limpiezasQ.data, genericQ.data, mantenimentQ.data, ajustosQ.data, personaQ.data, activePeriodQ.data]);
+  }, [limpiezasQ.data, limpiezasRegistreQ.data, genericQ.data, mantenimentQ.data, ajustosQ.data, personaQ.data, activePeriodQ.data]);
 
   function toggleSort(k: SortKey) {
     if (sortKey === k) setSortDir(sortDir === "asc" ? "desc" : "asc");

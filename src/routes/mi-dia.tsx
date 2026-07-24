@@ -471,11 +471,37 @@ function WorkerView({
     },
   });
 
+  const monthLimpiezasRegistreQ = useQuery({
+    queryKey: ["mi-dia-month-limpiezas-registre", personalId, monthStart, monthEnd],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("limpiezas_registre")
+        .select("id_limpieza, hores")
+        .eq("id_persona", personalId)
+        .not("fi", "is", null)
+        .not("hores", "is", null)
+        .gte("inici", `${monthStart}T00:00:00`)
+        .lte("inici", `${monthEnd}T23:59:59`);
+      if (error) throw error;
+      return (data ?? []) as { id_limpieza: number; hores: number | null }[];
+    },
+  });
+
   const monthDayHours = useMemo(() => {
     const m = new Map<string, number>();
+    const fechaByLimpieza = new Map<number, string>();
+    for (const t of monthTasksQ.data ?? []) fechaByLimpieza.set(t.id_limpieza, t.fecha_limpieza);
+    const limpiezasConSesiones = new Set((monthLimpiezasRegistreQ.data ?? []).map((r) => r.id_limpieza));
     for (const t of monthTasksQ.data ?? []) {
+      if (limpiezasConSesiones.has(t.id_limpieza)) continue;
       const h = diffHoursMinutes(t.iniciada_en, t.finalizada_en);
       m.set(t.fecha_limpieza, (m.get(t.fecha_limpieza) ?? 0) + h);
+    }
+    for (const r of monthLimpiezasRegistreQ.data ?? []) {
+      const fecha = fechaByLimpieza.get(r.id_limpieza);
+      if (!fecha) continue;
+      const h = Number(r.hores ?? 0);
+      m.set(fecha, (m.get(fecha) ?? 0) + h);
     }
     for (const r of monthMantQ.data ?? []) {
       const h = Number(r.hores ?? 0);
@@ -488,7 +514,7 @@ function WorkerView({
       m.set(fecha, (m.get(fecha) ?? 0) + h);
     }
     return m;
-  }, [monthTasksQ.data, monthMantQ.data, monthGenericQ.data]);
+  }, [monthTasksQ.data, monthLimpiezasRegistreQ.data, monthMantQ.data, monthGenericQ.data]);
 
   const monthHours = useMemo(() => {
     let total = 0;
@@ -982,6 +1008,7 @@ function WorkerView({
   const refetchAll = () => {
     tasksQ.refetch();
     monthTasksQ.refetch();
+    monthLimpiezasRegistreQ.refetch();
     monthMantQ.refetch();
     monthGenericQ.refetch();
   };

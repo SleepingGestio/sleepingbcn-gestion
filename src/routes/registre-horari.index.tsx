@@ -157,13 +157,30 @@ function RegistreHorariPage() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("limpiezas")
-        .select("worker, iniciada_en, finalizada_en, estado, fecha_limpieza")
+        .select("id_limpieza, worker, iniciada_en, finalizada_en, estado, fecha_limpieza")
         .in("worker", workerIds)
         .eq("estado", "finalizada")
         .gte("fecha_limpieza", start)
         .lte("fecha_limpieza", end);
       if (error) throw error;
-      return (data ?? []) as { worker: number | null; iniciada_en: string | null; finalizada_en: string | null }[];
+      return (data ?? []) as { id_limpieza: number; worker: number | null; iniciada_en: string | null; finalizada_en: string | null }[];
+    },
+  });
+
+  const limpiezasRegistreQ = useQuery({
+    queryKey: ["reg-horari-limpiezas-registre", start, end, workerIds.join(",")],
+    enabled: workerIds.length > 0,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("limpiezas_registre")
+        .select("id_limpieza, id_persona, hores")
+        .in("id_persona", workerIds)
+        .not("fi", "is", null)
+        .not("hores", "is", null)
+        .gte("inici", `${start}T00:00:00`)
+        .lte("inici", `${end}T23:59:59`);
+      if (error) throw error;
+      return (data ?? []) as { id_limpieza: number; id_persona: number; hores: number | null }[];
     },
   });
 
@@ -233,9 +250,14 @@ function RegistreHorariPage() {
 
   const hoursByWorker = useMemo(() => {
     const map = new Map<number, number>();
+    const limpiezasConSesiones = new Set((limpiezasRegistreQ.data ?? []).map((r) => r.id_limpieza));
     for (const l of limpiezasQ.data ?? []) {
       if (l.worker == null) continue;
+      if (limpiezasConSesiones.has(l.id_limpieza)) continue;
       map.set(l.worker, (map.get(l.worker) ?? 0) + diffHours(l.iniciada_en, l.finalizada_en));
+    }
+    for (const r of limpiezasRegistreQ.data ?? []) {
+      map.set(r.id_persona, (map.get(r.id_persona) ?? 0) + Number(r.hores ?? 0));
     }
     for (const r of genericQ.data ?? []) {
       map.set(r.id_persona, (map.get(r.id_persona) ?? 0) + diffHours(r.inici, r.fi));
@@ -247,7 +269,7 @@ function RegistreHorariPage() {
       map.set(m.id_persona, (map.get(m.id_persona) ?? 0) + Number(m.hores ?? 0));
     }
     return map;
-  }, [limpiezasQ.data, genericQ.data, ajustosQ.data, mantenimentQ.data]);
+  }, [limpiezasQ.data, limpiezasRegistreQ.data, genericQ.data, ajustosQ.data, mantenimentQ.data]);
 
   const reductionsByWorker = useMemo(() => {
     const map = new Map<number, number>();
@@ -281,7 +303,7 @@ function RegistreHorariPage() {
     return m || 1;
   }, [workers, hoursByWorker, activeObjectiveByWorker]);
 
-  const loading = workersQ.isLoading || limpiezasQ.isLoading || genericQ.isLoading || ajustosQ.isLoading || mantenimentQ.isLoading || reduccionesQ.isLoading || activePeriodsQ.isLoading;
+  const loading = workersQ.isLoading || limpiezasQ.isLoading || limpiezasRegistreQ.isLoading || genericQ.isLoading || ajustosQ.isLoading || mantenimentQ.isLoading || reduccionesQ.isLoading || activePeriodsQ.isLoading;
 
   return (
     <AppShell title="Registro horario">
