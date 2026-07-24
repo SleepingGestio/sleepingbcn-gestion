@@ -27,7 +27,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { PasswordInput } from "@/components/ui/password-input";
 import { Label } from "@/components/ui/label";
-import { Zap, Sofa, LogOut, Clock, ArrowLeft, Check, X, Play, Menu, UserCircle2, KeyRound, Square, ClipboardList, Plus, LayoutDashboard, AlertTriangle, Wrench, Home, RotateCcw } from "lucide-react";
+import { Zap, Sofa, LogOut, Clock, ArrowLeft, Check, X, Play, Pause, Menu, UserCircle2, KeyRound, Square, ClipboardList, Plus, LayoutDashboard, AlertTriangle, Wrench, Home, RotateCcw } from "lucide-react";
 import { ReportarIncidenciaSheet, type ReportarIncidenciaContext } from "@/components/reportar-incidencia";
 import { MantenimientoPopover } from "@/components/mantenimiento-popover";
 import { ApartamentoOcupacionCalendario } from "@/components/apartamento-ocupacion-calendario";
@@ -956,9 +956,23 @@ function WorkerView({
 
   async function finishTask(task: Limpieza) {
     if (disabled) return;
+    const nowIso = new Date().toISOString();
+    const { data: openSessions, error: eSel } = await supabase
+      .from("limpiezas_registre")
+      .select("id_registre, inici")
+      .eq("id_limpieza", task.id_limpieza)
+      .is("fi", null);
+    if (eSel) { toast.error("Error: " + eSel.message); return; }
+    for (const s of openSessions ?? []) {
+      const { error: eUpd } = await supabase
+        .from("limpiezas_registre")
+        .update({ fi: nowIso, hores: diffHoursMinutes(s.inici, nowIso) })
+        .eq("id_registre", s.id_registre);
+      if (eUpd) { toast.error("Error: " + eUpd.message); return; }
+    }
     const { error } = await supabase
       .from("limpiezas")
-      .update({ estado: "finalizada", finalizada_en: new Date().toISOString() })
+      .update({ estado: "finalizada", finalizada_en: nowIso })
       .eq("id_limpieza", task.id_limpieza);
     if (error) { toast.error("Error: " + error.message); return; }
     refetchAll();
@@ -1581,7 +1595,53 @@ function TaskCard({
   };
 
   const accept = () => update({ estado: "aceptada" });
-  const start = () => update({ estado: "en_curso", iniciada_en: new Date().toISOString() });
+  const start = async () => {
+    if (t.worker == null) { toast.error("La limpieza no tiene un operario asignado"); return; }
+    setBusy(true);
+    const nowIso = new Date().toISOString();
+    const { error: e1 } = await supabase.from("limpiezas_registre").insert({
+      id_limpieza: t.id_limpieza,
+      id_persona: t.worker,
+      inici: nowIso,
+    });
+    if (e1) {
+      setBusy(false);
+      toast.error("Error: " + e1.message);
+      return;
+    }
+    const patch: Partial<Limpieza> = { estado: "en_curso" };
+    if (!t.iniciada_en) patch.iniciada_en = nowIso;
+    await update(patch);
+  };
+  const finParcial = async () => {
+    setBusy(true);
+    const nowIso = new Date().toISOString();
+    const { data: openSession, error: eSel } = await supabase
+      .from("limpiezas_registre")
+      .select("id_registre, inici")
+      .eq("id_limpieza", t.id_limpieza)
+      .is("fi", null)
+      .limit(1)
+      .maybeSingle();
+    if (eSel) {
+      setBusy(false);
+      toast.error("Error: " + eSel.message);
+      return;
+    }
+    if (openSession) {
+      const { error: eUpd } = await supabase
+        .from("limpiezas_registre")
+        .update({ fi: nowIso, hores: diffHoursMinutes(openSession.inici, nowIso) })
+        .eq("id_registre", openSession.id_registre);
+      if (eUpd) {
+        setBusy(false);
+        toast.error("Error: " + eUpd.message);
+        return;
+      }
+    }
+    const ok = await update({ estado: "aceptada" });
+    if (ok) toast.success("Sesión pausada");
+  };
   const confirmReject = async () => {
     const m = motivo.trim();
     if (!m) { toast.error("Indica un motivo de rechazo"); return; }
@@ -1727,6 +1787,9 @@ function TaskCard({
             <>
               <Button size="sm" className="h-11 px-4 bg-emerald-600 hover:bg-emerald-700 text-white" onClick={onFinish}>
                 <Check className="h-4 w-4" /> Finalizar
+              </Button>
+              <Button size="sm" variant="outline" className="h-11 px-4" disabled={disabled || busy} onClick={finParcial}>
+                <Pause className="h-4 w-4" /> Fin parcial
               </Button>
               <Button size="sm" variant="secondary" className="h-11 px-4" onClick={onOpenDetail}>
                 <Menu className="h-4 w-4" /> Detalle
@@ -1981,8 +2044,22 @@ function DetailView({
   };
   const start = async () => {
     if (disabled) return;
+    if (t.worker == null) { toast.error("La limpieza no tiene un operario asignado"); return; }
     setBusy(true);
-    const { error } = await supabase.from("limpiezas").update({ estado: "en_curso", iniciada_en: new Date().toISOString() }).eq("id_limpieza", t.id_limpieza);
+    const nowIso = new Date().toISOString();
+    const { error: e1 } = await supabase.from("limpiezas_registre").insert({
+      id_limpieza: t.id_limpieza,
+      id_persona: t.worker,
+      inici: nowIso,
+    });
+    if (e1) {
+      setBusy(false);
+      toast.error("Error: " + e1.message);
+      return;
+    }
+    const patch: Partial<Limpieza> = { estado: "en_curso" };
+    if (!t.iniciada_en) patch.iniciada_en = nowIso;
+    const { error } = await supabase.from("limpiezas").update(patch).eq("id_limpieza", t.id_limpieza);
     setBusy(false);
     if (error) { toast.error(error.message); return; }
     onChanged(); onClose();

@@ -559,6 +559,51 @@ export type Database = {
           },
         ]
       }
+      limpiezas_registre: {
+        Row: {
+          creado_en: string | null
+          fi: string | null
+          hores: number | null
+          id_limpieza: number
+          id_persona: number
+          id_registre: number
+          inici: string
+        }
+        Insert: {
+          creado_en?: string | null
+          fi?: string | null
+          hores?: number | null
+          id_limpieza: number
+          id_persona: number
+          id_registre?: never
+          inici: string
+        }
+        Update: {
+          creado_en?: string | null
+          fi?: string | null
+          hores?: number | null
+          id_limpieza?: number
+          id_persona?: number
+          id_registre?: never
+          inici?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "limpiezas_registre_id_limpieza_fkey"
+            columns: ["id_limpieza"]
+            isOneToOne: false
+            referencedRelation: "limpiezas"
+            referencedColumns: ["id_limpieza"]
+          },
+          {
+            foreignKeyName: "limpiezas_registre_id_persona_fkey"
+            columns: ["id_persona"]
+            isOneToOne: false
+            referencedRelation: "personal"
+            referencedColumns: ["id_persona"]
+          },
+        ]
+      }
       manteniment_adjunts: {
         Row: {
           creado_en: string | null
