@@ -18,7 +18,7 @@ type EspacioComun = {
   activo: boolean | null;
 };
 
-export function TiposEspacioComunAdmin() {
+export function TiposEspacioComunAdmin({ readOnly = false }: { readOnly?: boolean }) {
   const [createOpen, setCreateOpen] = useState(false);
   const [editing, setEditing] = useState<EspacioComun | null>(null);
 
@@ -40,9 +40,11 @@ export function TiposEspacioComunAdmin() {
         <div className="text-sm text-muted-foreground">
           Gestiona los tipos de espacio común disponibles para reportar incidencias.
         </div>
-        <Button onClick={() => setCreateOpen(true)}>
-          <Plus className="h-4 w-4" /> Nuevo tipo
-        </Button>
+        {!readOnly && (
+          <Button onClick={() => setCreateOpen(true)}>
+            <Plus className="h-4 w-4" /> Nuevo tipo
+          </Button>
+        )}
       </div>
 
       <div className="rounded-md border divide-y">
@@ -65,14 +67,16 @@ export function TiposEspacioComunAdmin() {
             >
               {t.activo ? "Activo" : "Inactivo"}
             </span>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => setEditing(t)}
-              title="Editar"
-            >
-              <Pencil className="h-4 w-4" />
-            </Button>
+            {!readOnly && (
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setEditing(t)}
+                title="Editar"
+              >
+                <Pencil className="h-4 w-4" />
+              </Button>
+            )}
           </div>
         ))}
       </div>

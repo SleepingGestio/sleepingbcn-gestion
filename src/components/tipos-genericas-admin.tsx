@@ -60,7 +60,7 @@ function personaName(p: Persona | undefined): string {
   return [p.nombre, p.apellidos].filter(Boolean).join(" ").trim() || "—";
 }
 
-export function TiposGenericasAdmin() {
+export function TiposGenericasAdmin({ readOnly = false }: { readOnly?: boolean }) {
   const [createOpen, setCreateOpen] = useState(false);
   const [editing, setEditing] = useState<Tipus | null>(null);
   const [recordsFor, setRecordsFor] = useState<Tipus | null>(null);
@@ -116,9 +116,11 @@ export function TiposGenericasAdmin() {
         <div className="text-sm text-muted-foreground">
           Gestiona la lista de tareas genéricas disponibles.
         </div>
-        <Button onClick={() => setCreateOpen(true)}>
-          <Plus className="h-4 w-4" /> Nueva tarea
-        </Button>
+        {!readOnly && (
+          <Button onClick={() => setCreateOpen(true)}>
+            <Plus className="h-4 w-4" /> Nueva tarea
+          </Button>
+        )}
       </div>
 
       <div className="rounded-md border divide-y">
@@ -141,14 +143,16 @@ export function TiposGenericasAdmin() {
             >
               {t.actiu ? "Activa" : "Inactiva"}
             </span>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => setEditing(t)}
-              title="Editar"
-            >
-              <Pencil className="h-4 w-4" />
-            </Button>
+            {!readOnly && (
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setEditing(t)}
+                title="Editar"
+              >
+                <Pencil className="h-4 w-4" />
+              </Button>
+            )}
           </div>
         ))}
       </div>

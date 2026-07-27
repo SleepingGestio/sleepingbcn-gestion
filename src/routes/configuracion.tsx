@@ -28,8 +28,8 @@ function ConfigPage() {
     { value: "general", label: "General", visible: isAdmin || canView("config_general") },
     { value: "personal", label: "Personal", visible: isAdmin || canView("config_personal") },
     { value: "apartamentos", label: "Apartamentos", visible: isAdmin || canView("config_apartamentos") },
-    { value: "tasques", label: "Tareas genéricas", visible: isAdmin || canEdit("config_personal") },
-    { value: "espacios", label: "Espacios comunes", visible: isAdmin || canEdit("config_personal") },
+    { value: "tasques", label: "Tareas genéricas", visible: isAdmin || canView("config_tareas_genericas") || canEdit("config_tareas_genericas") },
+    { value: "espacios", label: "Espacios comunes", visible: isAdmin || canView("config_espacios_comunes") || canEdit("config_espacios_comunes") },
     { value: "roles", label: "Roles", visible: isAdmin },
   ].filter((t) => t.visible);
   const defaultTab = tabs[0]?.value ?? "general";
@@ -84,14 +84,14 @@ function ConfigPage() {
         <TabsContent value="apartamentos">
           <ApartamentosAdmin />
         </TabsContent>
-        {(isAdmin || canEdit("config_personal")) && (
+        {(isAdmin || canView("config_tareas_genericas") || canEdit("config_tareas_genericas")) && (
           <TabsContent value="tasques">
-            <TiposGenericasAdmin />
+            <TiposGenericasAdmin readOnly={!isAdmin && !canEdit("config_tareas_genericas")} />
           </TabsContent>
         )}
-        {(isAdmin || canEdit("config_personal")) && (
+        {(isAdmin || canView("config_espacios_comunes") || canEdit("config_espacios_comunes")) && (
           <TabsContent value="espacios">
-            <TiposEspacioComunAdmin />
+            <TiposEspacioComunAdmin readOnly={!isAdmin && !canEdit("config_espacios_comunes")} />
           </TabsContent>
         )}
         {isAdmin && (
