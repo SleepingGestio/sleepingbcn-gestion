@@ -481,72 +481,98 @@ function ApartamentoDialog({
               }
             />
           </div>
-          <div className="col-span-2 space-y-1">
-            <Label className="text-xs">Modo de tiempo estándar</Label>
-            <select
-              className="w-full h-9 rounded-md border border-input bg-transparent px-3 text-sm"
-              value={form.tiempo_estandar_modo ?? "individual"}
-              onChange={(e) => setForm({ ...form, tiempo_estandar_modo: e.target.value })}
-            >
-              <option value="individual">Individual</option>
-              <option value="compartido">Compartido por tipología</option>
-            </select>
-          </div>
-          {form.tiempo_estandar_modo === "compartido" ? (
+          {!!form.activo && (
             <>
               <div className="col-span-2 space-y-1">
-                <Label className="text-xs">Tipología</Label>
+                <Label className="text-xs">Modo de tiempo estándar</Label>
                 <select
                   className="w-full h-9 rounded-md border border-input bg-transparent px-3 text-sm"
-                  value={form.tipologia ?? ""}
-                  onChange={(e) => setForm({ ...form, tipologia: e.target.value || null })}
+                  value={form.tiempo_estandar_modo ?? "individual"}
+                  onChange={(e) => setForm({ ...form, tiempo_estandar_modo: e.target.value })}
                 >
-                  <option value="" disabled>Selecciona una tipología…</option>
-                  <option value="apartamento">Apartamento</option>
-                  <option value="habitacion">Habitación</option>
+                  <option value="individual">Individual</option>
+                  <option value="compartido">Compartido por tipología</option>
                 </select>
               </div>
-              <div className="col-span-2 space-y-1.5 rounded-md border px-3 py-2 text-xs">
-                <div>
-                  <span className="font-medium">STD sin SFC:</span> {sharedAvgText("std_sin_sfc")}{" "}
-                  <span className="text-muted-foreground">(media compartida últimos 50 días)</span>
-                </div>
-                <div>
-                  <span className="font-medium">STD con SFC:</span> {sharedAvgText("std_con_sfc")}{" "}
-                  <span className="text-muted-foreground">(media compartida últimos 50 días)</span>
-                </div>
-                <div>
-                  <span className="font-medium">Extra-CR:</span> {sharedAvgText("extra_cr")}{" "}
-                  <span className="text-muted-foreground">(media compartida últimos 50 días)</span>
-                </div>
-              </div>
-            </>
-          ) : (
-            <>
-              <div className="col-span-2 space-y-1">
-                <Label className="text-xs">Tiempo estándar (STD sin SFC)</Label>
-                <HHMMInput
-                  value={form.tiempo_estandar_std_sin_sfc ?? ""}
-                  onChange={(v) => setForm({ ...form, tiempo_estandar_std_sin_sfc: v })}
-                  placeholder={individualPlaceholder("std_sin_sfc")}
-                />
-              </div>
-              <div className="col-span-2 space-y-1">
-                <Label className="text-xs">Tiempo estándar (STD con SFC)</Label>
-                <HHMMInput
-                  value={form.tiempo_estandar_std_con_sfc ?? ""}
-                  onChange={(v) => setForm({ ...form, tiempo_estandar_std_con_sfc: v })}
-                  placeholder={individualPlaceholder("std_con_sfc")}
-                />
-              </div>
-              <div className="col-span-2 space-y-1">
-                <Label className="text-xs">Tiempo estándar (Extra-CR)</Label>
-                <HHMMInput
-                  value={form.tiempo_estandar_extra_cr ?? ""}
-                  onChange={(v) => setForm({ ...form, tiempo_estandar_extra_cr: v })}
-                  placeholder={individualPlaceholder("extra_cr")}
-                />
-              </div>
+              {form.tiempo_estandar_modo === "compartido" ? (
+                <>
+                  <div className="col-span-2 space-y-1">
+                    <Label className="text-xs">Tipología</Label>
+                    <select
+                      className="w-full h-9 rounded-md border border-input bg-transparent px-3 text-sm"
+                      value={form.tipologia ?? ""}
+                      onChange={(e) => setForm({ ...form, tipologia: e.target.value || null })}
+                    >
+                      <option value="" disabled>Selecciona una tipología…</option>
+                      <option value="apartamento">Apartamento</option>
+                      <option value="habitacion">Habitación</option>
+                    </select>
+                  </div>
+                  <div className="col-span-2 space-y-1.5 rounded-md border px-3 py-2 text-xs">
+                    {form.tiene_sofa_cama ? (
+                      <>
+                        <div>
+                          <span className="font-medium">STD sin SFC:</span> {sharedAvgText("std_sin_sfc")}{" "}
+                          <span className="text-muted-foreground">(media compartida últimos 50 días)</span>
+                        </div>
+                        <div>
+                          <span className="font-medium">STD con SFC:</span> {sharedAvgText("std_con_sfc")}{" "}
+                          <span className="text-muted-foreground">(media compartida últimos 50 días)</span>
+                        </div>
+                      </>
+                    ) : (
+                      <div>
+                        <span className="font-medium">Limpieza STD:</span> {sharedAvgText("std_sin_sfc")}{" "}
+                        <span className="text-muted-foreground">(media compartida últimos 50 días)</span>
+                      </div>
+                    )}
+                    <div>
+                      <span className="font-medium">Extra-CR:</span> {sharedAvgText("extra_cr")}{" "}
+                      <span className="text-muted-foreground">(media compartida últimos 50 días)</span>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <>
+                  {form.tiene_sofa_cama ? (
+                    <>
+                      <div className="col-span-2 space-y-1">
+                        <Label className="text-xs">Tiempo estándar (STD sin SFC)</Label>
+                        <HHMMInput
+                          value={form.tiempo_estandar_std_sin_sfc ?? ""}
+                          onChange={(v) => setForm({ ...form, tiempo_estandar_std_sin_sfc: v })}
+                          placeholder={individualPlaceholder("std_sin_sfc")}
+                        />
+                      </div>
+                      <div className="col-span-2 space-y-1">
+                        <Label className="text-xs">Tiempo estándar (STD con SFC)</Label>
+                        <HHMMInput
+                          value={form.tiempo_estandar_std_con_sfc ?? ""}
+                          onChange={(v) => setForm({ ...form, tiempo_estandar_std_con_sfc: v })}
+                          placeholder={individualPlaceholder("std_con_sfc")}
+                        />
+                      </div>
+                    </>
+                  ) : (
+                    <div className="col-span-2 space-y-1">
+                      <Label className="text-xs">Tiempo estándar (Limpieza STD)</Label>
+                      <HHMMInput
+                        value={form.tiempo_estandar_std_sin_sfc ?? ""}
+                        onChange={(v) => setForm({ ...form, tiempo_estandar_std_sin_sfc: v })}
+                        placeholder={individualPlaceholder("std_sin_sfc")}
+                      />
+                    </div>
+                  )}
+                  <div className="col-span-2 space-y-1">
+                    <Label className="text-xs">Tiempo estándar (Extra-CR)</Label>
+                    <HHMMInput
+                      value={form.tiempo_estandar_extra_cr ?? ""}
+                      onChange={(v) => setForm({ ...form, tiempo_estandar_extra_cr: v })}
+                      placeholder={individualPlaceholder("extra_cr")}
+                    />
+                  </div>
+                </>
+              )}
             </>
           )}
           <ToggleRow
