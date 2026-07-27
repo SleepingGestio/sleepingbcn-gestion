@@ -42,6 +42,7 @@ const MONTH_ES = [
   "enero", "febrero", "marzo", "abril", "mayo", "junio",
   "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre",
 ];
+const DOW_SHORT = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"];
 
 function pad(n: number) { return String(n).padStart(2, "0"); }
 
@@ -623,17 +624,17 @@ function DetallPage() {
                     <Popover key={r.key}>
                       <PopoverTrigger asChild>
                          <tr className="border-b hover:bg-muted/40 cursor-pointer" onClick={() => openRow(r)}>
-                          <td className="p-3">{fmtDate(r.fecha)}</td>
-                          <td className="p-3">{r.kind === "ajust" ? "—" : fmtHM(r.inici)}</td>
-                          <td className="p-3">{r.kind === "ajust" ? "—" : fmtHM(r.fi)}</td>
-                          <td className="p-3">{r.propietat}</td>
-                          <td className="p-3">
+                          <td className="py-1.5 px-3">{DOW_SHORT[new Date(r.fecha + "T00:00:00").getDay()]} {fmtDate(r.fecha)}</td>
+                          <td className="py-1.5 px-3">{r.kind === "ajust" ? "—" : fmtHM(r.inici)}</td>
+                          <td className="py-1.5 px-3">{r.kind === "ajust" ? "—" : fmtHM(r.fi)}</td>
+                          <td className="py-1.5 px-3">{r.propietat}</td>
+                          <td className="py-1.5 px-3">
                             <RowTypeBadge kind={r.kind} label={r.tipus} />
                           </td>
-                          <td className={`p-3 text-right tabular-nums ${ajustCellClass(r)}`}>
+                          <td className={`py-1.5 px-3 text-right tabular-nums ${ajustCellClass(r)}`}>
                             {ajustCellText(r)}
                           </td>
-                          <td className="p-3">
+                          <td className="py-1.5 px-3">
                             {r.kind === "ajust" && (
                               <button
                                 className="text-muted-foreground hover:text-red-600"
