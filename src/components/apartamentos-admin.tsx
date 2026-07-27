@@ -303,11 +303,13 @@ export function ApartamentosAdmin() {
                       {a.camas_fijas ?? 0} pax · orden {a.orden ?? "—"}
                       {a.tiene_sofa_cama ? " · SFC" : ""}
                       {a.requiere_limpieza_intermedia === false ? " · sin intermedia" : ""}
-                      {a.id_categoria != null && categoriaNombreById.get(a.id_categoria)
-                        ? ` · ${categoriaNombreById.get(a.id_categoria)}`
-                        : ""}
                     </div>
                   </div>
+                  {a.id_categoria != null && categoriaNombreById.get(a.id_categoria) && (
+                    <span className="shrink-0 text-[10px] uppercase rounded bg-blue-100 text-blue-800 px-2 py-0.5 font-medium">
+                      {categoriaNombreById.get(a.id_categoria)}
+                    </span>
+                  )}
                   <Button size="sm" variant="ghost" onClick={() => setEditingApt(a)}>
                     <Pencil className="h-4 w-4" />
                   </Button>
