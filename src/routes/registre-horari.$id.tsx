@@ -446,6 +446,12 @@ function DetallPage() {
       else if (sortKey === "hores") { va = a.hores; vb = b.hores; }
       if (va < vb) return -1 * dir;
       if (va > vb) return 1 * dir;
+      if (sortKey === "fecha") {
+        const ia = a.inici ?? "";
+        const ib = b.inici ?? "";
+        if (ia < ib) return -1 * dir;
+        if (ia > ib) return 1 * dir;
+      }
       return 0;
     });
     return sorted;
