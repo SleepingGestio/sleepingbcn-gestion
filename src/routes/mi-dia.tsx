@@ -31,7 +31,7 @@ import { Zap, Sofa, LogOut, Clock, ArrowLeft, Check, X, Play, Pause, Menu, UserC
 import { ReportarIncidenciaSheet, type ReportarIncidenciaContext } from "@/components/reportar-incidencia";
 import { MantenimientoPopover } from "@/components/mantenimiento-popover";
 import { ApartamentoOcupacionCalendario } from "@/components/apartamento-ocupacion-calendario";
-import { cn } from "@/lib/utils";
+import { cn, formatHHMM } from "@/lib/utils";
 import { toast } from "sonner";
 import { TimeBadge } from "@/components/time-badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -2227,7 +2227,7 @@ function HoursPanel({
   const byDay = useMemo(() => {
     return Array.from(byDayMap.entries())
       .filter(([, h]) => h > 0)
-      .sort(([a], [b]) => a.localeCompare(b));
+      .sort(([a], [b]) => b.localeCompare(a));
   }, [byDayMap]);
 
   return (
@@ -2254,7 +2254,7 @@ function HoursPanel({
               return (
                 <li key={fecha} className="flex items-center justify-between px-3 py-3 text-sm">
                   <span>{DOW_SHORT[d.getDay()]} {dd}/{mm}</span>
-                  <span className="font-semibold">{fmtHours(h)}</span>
+                  <span className="font-semibold">{formatHHMM(h)}</span>
                 </li>
               );
             })}
