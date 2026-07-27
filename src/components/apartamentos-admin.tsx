@@ -10,6 +10,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { AlertTriangle, Pencil, Plus } from "lucide-react";
 import { toast } from "sonner";
+import { formatHHMM } from "@/lib/utils";
+import { HHMMInput } from "@/components/hhmm-input";
 
 type Grupo = {
   id_grupo: number;
@@ -28,7 +30,29 @@ type Apartamento = {
   orden: number | null;
   activo: boolean;
   notas: string | null;
+  tiempo_estandar_modo: string;
+  tipologia: string | null;
+  tiempo_estandar_std_sin_sfc: number | null;
+  tiempo_estandar_std_con_sfc: number | null;
+  tiempo_estandar_extra_cr: number | null;
 };
+
+const fiftyDaysAgoISO = new Date(Date.now() - 50 * 86400000).toISOString().slice(0, 10);
+
+type Bucket = "std_sin_sfc" | "std_con_sfc" | "extra_cr";
+
+function bucketKey(tipo: string, sfcMontar: boolean | null): Bucket {
+  if (tipo === "intermedia") return "extra_cr";
+  return sfcMontar ? "std_con_sfc" : "std_sin_sfc";
+}
+
+function diffHours(a: string | null, b: string | null): number | null {
+  if (!a || !b) return null;
+  const da = new Date(a).getTime();
+  const db = new Date(b).getTime();
+  if (!isFinite(da) || !isFinite(db) || db <= da) return null;
+  return (db - da) / 3_600_000;
+}
 
 export function ApartamentosAdmin() {
   const gruposQ = useQuery({
@@ -49,7 +73,7 @@ export function ApartamentosAdmin() {
       const { data, error } = await supabase
         .from("apartamentos")
         .select(
-          "id_apt,nombre,id_grupo,camas_fijas,tiene_sofa_cama,requiere_limpieza_intermedia,orden,activo,notas",
+          "id_apt,nombre,id_grupo,camas_fijas,tiene_sofa_cama,requiere_limpieza_intermedia,orden,activo,notas,tiempo_estandar_modo,tipologia,tiempo_estandar_std_sin_sfc,tiempo_estandar_std_con_sfc,tiempo_estandar_extra_cr",
         )
         .order("orden", { ascending: true });
       if (error) throw error;
@@ -68,6 +92,93 @@ export function ApartamentosAdmin() {
       return (data ?? []) as Array<Record<string, unknown>>;
     },
   });
+
+  const limpiezas50Q = useQuery({
+    queryKey: ["cfg-apartamentos-limpiezas-50", fiftyDaysAgoISO],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("limpiezas")
+        .select("id_apt, tipo, id_limpieza, iniciada_en, finalizada_en, sfc_montar")
+        .eq("estado", "finalizada")
+        .gte("fecha_limpieza", fiftyDaysAgoISO);
+      if (error) throw error;
+      return (data ?? []) as {
+        id_apt: number; tipo: string; id_limpieza: number;
+        iniciada_en: string | null; finalizada_en: string | null; sfc_montar: boolean | null;
+      }[];
+    },
+  });
+
+  const limpiezasRegistre50Q = useQuery({
+    queryKey: ["cfg-apartamentos-limpiezas-registre-50", fiftyDaysAgoISO],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("limpiezas_registre")
+        .select("id_limpieza, hores")
+        .not("fi", "is", null)
+        .not("hores", "is", null)
+        .gte("inici", `${fiftyDaysAgoISO}T00:00:00`);
+      if (error) throw error;
+      return (data ?? []) as { id_limpieza: number; hores: number | null }[];
+    },
+  });
+
+  const sessionHoursByLimpieza50 = useMemo(() => {
+    const m = new Map<number, number>();
+    for (const r of limpiezasRegistre50Q.data ?? []) {
+      m.set(r.id_limpieza, (m.get(r.id_limpieza) ?? 0) + Number(r.hores ?? 0));
+    }
+    return m;
+  }, [limpiezasRegistre50Q.data]);
+
+  const effectiveLimpiezas50 = useMemo(() => {
+    const out: { id_apt: number; tipo: string; sfc_montar: boolean | null; hours: number }[] = [];
+    for (const l of limpiezas50Q.data ?? []) {
+      const sessionHours = sessionHoursByLimpieza50.get(l.id_limpieza);
+      const hours = sessionHours != null ? sessionHours : diffHours(l.iniciada_en, l.finalizada_en);
+      if (hours == null) continue;
+      out.push({ id_apt: l.id_apt, tipo: l.tipo, sfc_montar: l.sfc_montar, hours });
+    }
+    return out;
+  }, [limpiezas50Q.data, sessionHoursByLimpieza50]);
+
+  const aptById = useMemo(() => {
+    const m = new Map<number, Apartamento>();
+    for (const a of aptsQ.data ?? []) m.set(a.id_apt, a);
+    return m;
+  }, [aptsQ.data]);
+
+  const avgByApt = useMemo(() => {
+    const sums = new Map<string, { total: number; count: number }>();
+    for (const l of effectiveLimpiezas50) {
+      const apt = aptById.get(l.id_apt);
+      if (!apt?.activo) continue;
+      const key = `${l.id_apt}:${bucketKey(l.tipo, l.sfc_montar)}`;
+      const cur = sums.get(key) ?? { total: 0, count: 0 };
+      cur.total += l.hours;
+      cur.count += 1;
+      sums.set(key, cur);
+    }
+    const out = new Map<string, number>();
+    for (const [k, v] of sums) out.set(k, v.total / v.count);
+    return out;
+  }, [effectiveLimpiezas50, aptById]);
+
+  const avgByTipologia = useMemo(() => {
+    const sums = new Map<string, { total: number; count: number }>();
+    for (const l of effectiveLimpiezas50) {
+      const apt = aptById.get(l.id_apt);
+      if (!apt?.activo || apt.tiempo_estandar_modo !== "compartido" || !apt.tipologia) continue;
+      const key = `${apt.tipologia}:${bucketKey(l.tipo, l.sfc_montar)}`;
+      const cur = sums.get(key) ?? { total: 0, count: 0 };
+      cur.total += l.hours;
+      cur.count += 1;
+      sums.set(key, cur);
+    }
+    const out = new Map<string, number>();
+    for (const [k, v] of sums) out.set(k, v.total / v.count);
+    return out;
+  }, [effectiveLimpiezas50, aptById]);
 
   const [editingApt, setEditingApt] = useState<Apartamento | null>(null);
   const [editingGrupo, setEditingGrupo] = useState<Grupo | null>(null);
@@ -183,6 +294,8 @@ export function ApartamentosAdmin() {
           apt={editingApt}
           prefillName={prefillName}
           grupos={gruposQ.data ?? []}
+          avgByApt={avgByApt}
+          avgByTipologia={avgByTipologia}
           onClose={() => {
             setEditingApt(null);
             setPrefillName(null);
@@ -202,35 +315,78 @@ export function ApartamentosAdmin() {
   );
 }
 
+type ApartamentoFormState = Omit<
+  Partial<Apartamento>,
+  "tiempo_estandar_std_sin_sfc" | "tiempo_estandar_std_con_sfc" | "tiempo_estandar_extra_cr"
+> & {
+  tiempo_estandar_std_sin_sfc?: string;
+  tiempo_estandar_std_con_sfc?: string;
+  tiempo_estandar_extra_cr?: string;
+};
+
 function ApartamentoDialog({
   apt,
   prefillName,
   grupos,
+  avgByApt,
+  avgByTipologia,
   onClose,
   onSaved,
 }: {
   apt: Apartamento | null;
   prefillName: string | null;
   grupos: Grupo[];
+  avgByApt: Map<string, number>;
+  avgByTipologia: Map<string, number>;
   onClose: () => void;
   onSaved: () => void;
 }) {
   const isNew = !apt;
-  const [form, setForm] = useState<Partial<Apartamento>>(
-    apt ?? {
-      nombre: prefillName ?? "",
-      id_grupo: grupos[0]?.id_grupo,
-      camas_fijas: 2,
-      tiene_sofa_cama: false,
-      requiere_limpieza_intermedia: true,
-      orden: 1,
-      activo: true,
-      notas: "",
-    },
+  const [form, setForm] = useState<ApartamentoFormState>(
+    apt
+      ? {
+          ...apt,
+          tiempo_estandar_std_sin_sfc: apt.tiempo_estandar_std_sin_sfc != null ? String(apt.tiempo_estandar_std_sin_sfc) : "",
+          tiempo_estandar_std_con_sfc: apt.tiempo_estandar_std_con_sfc != null ? String(apt.tiempo_estandar_std_con_sfc) : "",
+          tiempo_estandar_extra_cr: apt.tiempo_estandar_extra_cr != null ? String(apt.tiempo_estandar_extra_cr) : "",
+        }
+      : {
+          nombre: prefillName ?? "",
+          id_grupo: grupos[0]?.id_grupo,
+          camas_fijas: 2,
+          tiene_sofa_cama: false,
+          requiere_limpieza_intermedia: true,
+          orden: 1,
+          activo: true,
+          notas: "",
+          tiempo_estandar_modo: "individual",
+          tipologia: null,
+          tiempo_estandar_std_sin_sfc: "",
+          tiempo_estandar_std_con_sfc: "",
+          tiempo_estandar_extra_cr: "",
+        },
   );
   const [saving, setSaving] = useState(false);
 
+  const numOrNull = (s: string | undefined): number | null =>
+    s == null || s.trim() === "" ? null : Number(s);
+
+  const individualPlaceholder = (bucket: Bucket): string | undefined => {
+    if (!apt) return undefined;
+    const avg = avgByApt.get(`${apt.id_apt}:${bucket}`);
+    return avg != null ? `Sugerido: ${formatHHMM(avg)}` : undefined;
+  };
+
+  const sharedAvgText = (bucket: Bucket): string => {
+    const avg = form.tipologia ? avgByTipologia.get(`${form.tipologia}:${bucket}`) : undefined;
+    return avg != null ? formatHHMM(avg) : "Sin datos";
+  };
+
   async function save() {
+    if (form.tiempo_estandar_modo === "compartido" && !form.tipologia) {
+      toast.error("Selecciona una tipología para el modo compartido");
+      return;
+    }
     setSaving(true);
     try {
       const payload: any = {
@@ -242,6 +398,11 @@ function ApartamentoDialog({
         orden: form.orden ?? null,
         activo: !!form.activo,
         notas: form.notas ?? null,
+        tiempo_estandar_modo: form.tiempo_estandar_modo,
+        tipologia: form.tiempo_estandar_modo === "compartido" ? form.tipologia : null,
+        tiempo_estandar_std_sin_sfc: form.tiempo_estandar_modo === "individual" ? numOrNull(form.tiempo_estandar_std_sin_sfc) : null,
+        tiempo_estandar_std_con_sfc: form.tiempo_estandar_modo === "individual" ? numOrNull(form.tiempo_estandar_std_con_sfc) : null,
+        tiempo_estandar_extra_cr: form.tiempo_estandar_modo === "individual" ? numOrNull(form.tiempo_estandar_extra_cr) : null,
       };
       if (isNew) {
         const { error } = await supabase.from("apartamentos").insert(payload);
@@ -320,6 +481,74 @@ function ApartamentoDialog({
               }
             />
           </div>
+          <div className="col-span-2 space-y-1">
+            <Label className="text-xs">Modo de tiempo estándar</Label>
+            <select
+              className="w-full h-9 rounded-md border border-input bg-transparent px-3 text-sm"
+              value={form.tiempo_estandar_modo ?? "individual"}
+              onChange={(e) => setForm({ ...form, tiempo_estandar_modo: e.target.value })}
+            >
+              <option value="individual">Individual</option>
+              <option value="compartido">Compartido por tipología</option>
+            </select>
+          </div>
+          {form.tiempo_estandar_modo === "compartido" ? (
+            <>
+              <div className="col-span-2 space-y-1">
+                <Label className="text-xs">Tipología</Label>
+                <select
+                  className="w-full h-9 rounded-md border border-input bg-transparent px-3 text-sm"
+                  value={form.tipologia ?? ""}
+                  onChange={(e) => setForm({ ...form, tipologia: e.target.value || null })}
+                >
+                  <option value="" disabled>Selecciona una tipología…</option>
+                  <option value="apartamento">Apartamento</option>
+                  <option value="habitacion">Habitación</option>
+                </select>
+              </div>
+              <div className="col-span-2 space-y-1.5 rounded-md border px-3 py-2 text-xs">
+                <div>
+                  <span className="font-medium">STD sin SFC:</span> {sharedAvgText("std_sin_sfc")}{" "}
+                  <span className="text-muted-foreground">(media compartida últimos 50 días)</span>
+                </div>
+                <div>
+                  <span className="font-medium">STD con SFC:</span> {sharedAvgText("std_con_sfc")}{" "}
+                  <span className="text-muted-foreground">(media compartida últimos 50 días)</span>
+                </div>
+                <div>
+                  <span className="font-medium">Extra-CR:</span> {sharedAvgText("extra_cr")}{" "}
+                  <span className="text-muted-foreground">(media compartida últimos 50 días)</span>
+                </div>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="col-span-2 space-y-1">
+                <Label className="text-xs">Tiempo estándar (STD sin SFC)</Label>
+                <HHMMInput
+                  value={form.tiempo_estandar_std_sin_sfc ?? ""}
+                  onChange={(v) => setForm({ ...form, tiempo_estandar_std_sin_sfc: v })}
+                  placeholder={individualPlaceholder("std_sin_sfc")}
+                />
+              </div>
+              <div className="col-span-2 space-y-1">
+                <Label className="text-xs">Tiempo estándar (STD con SFC)</Label>
+                <HHMMInput
+                  value={form.tiempo_estandar_std_con_sfc ?? ""}
+                  onChange={(v) => setForm({ ...form, tiempo_estandar_std_con_sfc: v })}
+                  placeholder={individualPlaceholder("std_con_sfc")}
+                />
+              </div>
+              <div className="col-span-2 space-y-1">
+                <Label className="text-xs">Tiempo estándar (Extra-CR)</Label>
+                <HHMMInput
+                  value={form.tiempo_estandar_extra_cr ?? ""}
+                  onChange={(v) => setForm({ ...form, tiempo_estandar_extra_cr: v })}
+                  placeholder={individualPlaceholder("extra_cr")}
+                />
+              </div>
+            </>
+          )}
           <ToggleRow
             label="Tiene sofá cama"
             checked={!!form.tiene_sofa_cama}

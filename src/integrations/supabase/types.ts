@@ -25,7 +25,12 @@ export type Database = {
           notas: string | null
           orden: number
           requiere_limpieza_intermedia: boolean
+          tiempo_estandar_extra_cr: number | null
+          tiempo_estandar_modo: string
+          tiempo_estandar_std_con_sfc: number | null
+          tiempo_estandar_std_sin_sfc: number | null
           tiene_sofa_cama: boolean | null
+          tipologia: string | null
         }
         Insert: {
           activo?: boolean
@@ -37,7 +42,12 @@ export type Database = {
           notas?: string | null
           orden?: number
           requiere_limpieza_intermedia?: boolean
+          tiempo_estandar_extra_cr?: number | null
+          tiempo_estandar_modo?: string
+          tiempo_estandar_std_con_sfc?: number | null
+          tiempo_estandar_std_sin_sfc?: number | null
           tiene_sofa_cama?: boolean | null
+          tipologia?: string | null
         }
         Update: {
           activo?: boolean
@@ -49,7 +59,12 @@ export type Database = {
           notas?: string | null
           orden?: number
           requiere_limpieza_intermedia?: boolean
+          tiempo_estandar_extra_cr?: number | null
+          tiempo_estandar_modo?: string
+          tiempo_estandar_std_con_sfc?: number | null
+          tiempo_estandar_std_sin_sfc?: number | null
           tiene_sofa_cama?: boolean | null
+          tipologia?: string | null
         }
         Relationships: [
           {
