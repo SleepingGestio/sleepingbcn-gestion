@@ -526,10 +526,12 @@ function ApartamentoDialog({
                         <span className="text-muted-foreground">(media compartida últimos 50 días)</span>
                       </div>
                     )}
-                    <div>
-                      <span className="font-medium">Extra-CR:</span> {sharedAvgText("extra_cr")}{" "}
-                      <span className="text-muted-foreground">(media compartida últimos 50 días)</span>
-                    </div>
+                    {form.requiere_limpieza_intermedia !== false && (
+                      <div>
+                        <span className="font-medium">Extra-CR:</span> {sharedAvgText("extra_cr")}{" "}
+                        <span className="text-muted-foreground">(media compartida últimos 50 días)</span>
+                      </div>
+                    )}
                   </div>
                 </>
               ) : (
@@ -563,14 +565,16 @@ function ApartamentoDialog({
                       />
                     </div>
                   )}
-                  <div className="col-span-2 space-y-1">
-                    <Label className="text-xs">Tiempo estándar (Extra-CR)</Label>
-                    <HHMMInput
-                      value={form.tiempo_estandar_extra_cr ?? ""}
-                      onChange={(v) => setForm({ ...form, tiempo_estandar_extra_cr: v })}
-                      placeholder={individualPlaceholder("extra_cr")}
-                    />
-                  </div>
+                  {form.requiere_limpieza_intermedia !== false && (
+                    <div className="col-span-2 space-y-1">
+                      <Label className="text-xs">Tiempo estándar (Extra-CR)</Label>
+                      <HHMMInput
+                        value={form.tiempo_estandar_extra_cr ?? ""}
+                        onChange={(v) => setForm({ ...form, tiempo_estandar_extra_cr: v })}
+                        placeholder={individualPlaceholder("extra_cr")}
+                      />
+                    </div>
+                  )}
                 </>
               )}
             </>
