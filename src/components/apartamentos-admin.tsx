@@ -167,6 +167,12 @@ export function ApartamentosAdmin() {
     return m;
   }, [aptsQ.data]);
 
+  const categoriaNombreById = useMemo(() => {
+    const m = new Map<number, string>();
+    for (const c of categoriasQ.data ?? []) m.set(c.id_categoria, c.nombre);
+    return m;
+  }, [categoriasQ.data]);
+
   const avgByApt = useMemo(() => {
     const sums = new Map<string, { total: number; count: number }>();
     for (const l of effectiveLimpiezas50) {
@@ -297,6 +303,9 @@ export function ApartamentosAdmin() {
                       {a.camas_fijas ?? 0} pax · orden {a.orden ?? "—"}
                       {a.tiene_sofa_cama ? " · SFC" : ""}
                       {a.requiere_limpieza_intermedia === false ? " · sin intermedia" : ""}
+                      {a.id_categoria != null && categoriaNombreById.get(a.id_categoria)
+                        ? ` · ${categoriaNombreById.get(a.id_categoria)}`
+                        : ""}
                     </div>
                   </div>
                   <Button size="sm" variant="ghost" onClick={() => setEditingApt(a)}>
