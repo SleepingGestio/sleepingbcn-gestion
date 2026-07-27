@@ -20,53 +20,57 @@ export type Database = {
           camas_fijas: number | null
           creado_en: string | null
           id_apt: number
+          id_categoria: number | null
           id_grupo: number | null
           nombre: string
           notas: string | null
           orden: number
           requiere_limpieza_intermedia: boolean
           tiempo_estandar_extra_cr: number | null
-          tiempo_estandar_modo: string
           tiempo_estandar_std_con_sfc: number | null
           tiempo_estandar_std_sin_sfc: number | null
           tiene_sofa_cama: boolean | null
-          tipologia: string | null
         }
         Insert: {
           activo?: boolean
           camas_fijas?: number | null
           creado_en?: string | null
           id_apt?: number
+          id_categoria?: number | null
           id_grupo?: number | null
           nombre: string
           notas?: string | null
           orden?: number
           requiere_limpieza_intermedia?: boolean
           tiempo_estandar_extra_cr?: number | null
-          tiempo_estandar_modo?: string
           tiempo_estandar_std_con_sfc?: number | null
           tiempo_estandar_std_sin_sfc?: number | null
           tiene_sofa_cama?: boolean | null
-          tipologia?: string | null
         }
         Update: {
           activo?: boolean
           camas_fijas?: number | null
           creado_en?: string | null
           id_apt?: number
+          id_categoria?: number | null
           id_grupo?: number | null
           nombre?: string
           notas?: string | null
           orden?: number
           requiere_limpieza_intermedia?: boolean
           tiempo_estandar_extra_cr?: number | null
-          tiempo_estandar_modo?: string
           tiempo_estandar_std_con_sfc?: number | null
           tiempo_estandar_std_sin_sfc?: number | null
           tiene_sofa_cama?: boolean | null
-          tipologia?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "apartamentos_id_categoria_fkey"
+            columns: ["id_categoria"]
+            isOneToOne: false
+            referencedRelation: "tipos_categoria_apartamento"
+            referencedColumns: ["id_categoria"]
+          },
           {
             foreignKeyName: "apartamentos_id_grupo_fkey"
             columns: ["id_grupo"]
@@ -1617,6 +1621,30 @@ export type Database = {
             referencedColumns: ["id_tipologia"]
           },
         ]
+      }
+      tipos_categoria_apartamento: {
+        Row: {
+          activo: boolean
+          creado_en: string | null
+          id_categoria: number
+          nombre: string
+          orden: number | null
+        }
+        Insert: {
+          activo?: boolean
+          creado_en?: string | null
+          id_categoria?: never
+          nombre: string
+          orden?: number | null
+        }
+        Update: {
+          activo?: boolean
+          creado_en?: string | null
+          id_categoria?: never
+          nombre?: string
+          orden?: number | null
+        }
+        Relationships: []
       }
       tipos_espacio_comun: {
         Row: {

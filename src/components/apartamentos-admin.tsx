@@ -12,12 +12,19 @@ import { AlertTriangle, Pencil, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { formatHHMM } from "@/lib/utils";
 import { HHMMInput } from "@/components/hhmm-input";
+import { CategoriasApartamentoAdmin } from "@/components/tipos-categoria-apartamento-admin";
 
 type Grupo = {
   id_grupo: number;
   nombre: string;
   orden: number | null;
   mostrar_por_defecto: boolean | null;
+};
+
+type Categoria = {
+  id_categoria: number;
+  nombre: string;
+  activo: boolean | null;
 };
 
 type Apartamento = {
@@ -30,8 +37,7 @@ type Apartamento = {
   orden: number | null;
   activo: boolean;
   notas: string | null;
-  tiempo_estandar_modo: string;
-  tipologia: string | null;
+  id_categoria: number | null;
   tiempo_estandar_std_sin_sfc: number | null;
   tiempo_estandar_std_con_sfc: number | null;
   tiempo_estandar_extra_cr: number | null;
@@ -73,11 +79,24 @@ export function ApartamentosAdmin() {
       const { data, error } = await supabase
         .from("apartamentos")
         .select(
-          "id_apt,nombre,id_grupo,camas_fijas,tiene_sofa_cama,requiere_limpieza_intermedia,orden,activo,notas,tiempo_estandar_modo,tipologia,tiempo_estandar_std_sin_sfc,tiempo_estandar_std_con_sfc,tiempo_estandar_extra_cr",
+          "id_apt,nombre,id_grupo,camas_fijas,tiene_sofa_cama,requiere_limpieza_intermedia,orden,activo,notas,id_categoria,tiempo_estandar_std_sin_sfc,tiempo_estandar_std_con_sfc,tiempo_estandar_extra_cr",
         )
         .order("orden", { ascending: true });
       if (error) throw error;
       return (data ?? []) as Apartamento[];
+    },
+  });
+
+  const categoriasQ = useQuery({
+    queryKey: ["cfg-categorias-apartamento"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("tipos_categoria_apartamento")
+        .select("id_categoria, nombre, activo, orden")
+        .order("orden", { ascending: true })
+        .order("nombre", { ascending: true });
+      if (error) throw error;
+      return (data ?? []) as (Categoria & { orden: number | null })[];
     },
   });
 
@@ -164,12 +183,12 @@ export function ApartamentosAdmin() {
     return out;
   }, [effectiveLimpiezas50, aptById]);
 
-  const avgByTipologia = useMemo(() => {
+  const avgByCategoria = useMemo(() => {
     const sums = new Map<string, { total: number; count: number }>();
     for (const l of effectiveLimpiezas50) {
       const apt = aptById.get(l.id_apt);
-      if (!apt?.activo || apt.tiempo_estandar_modo !== "compartido" || !apt.tipologia) continue;
-      const key = `${apt.tipologia}:${bucketKey(l.tipo, l.sfc_montar)}`;
+      if (!apt?.activo || apt.id_categoria == null) continue;
+      const key = `${apt.id_categoria}:${bucketKey(l.tipo, l.sfc_montar)}`;
       const cur = sums.get(key) ?? { total: 0, count: 0 };
       cur.total += l.hours;
       cur.count += 1;
@@ -198,6 +217,7 @@ export function ApartamentosAdmin() {
     aptsQ.refetch();
     gruposQ.refetch();
     sinConfigQ.refetch();
+    categoriasQ.refetch();
   };
 
   const sinConfigRows = sinConfigQ.data ?? [];
@@ -289,13 +309,21 @@ export function ApartamentosAdmin() {
         );
       })}
 
+      <div className="space-y-2">
+        <div className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+          Categorías
+        </div>
+        <CategoriasApartamentoAdmin />
+      </div>
+
       {(editingApt || prefillName) && (
         <ApartamentoDialog
           apt={editingApt}
           prefillName={prefillName}
           grupos={gruposQ.data ?? []}
+          categorias={categoriasQ.data ?? []}
           avgByApt={avgByApt}
-          avgByTipologia={avgByTipologia}
+          avgByCategoria={avgByCategoria}
           onClose={() => {
             setEditingApt(null);
             setPrefillName(null);
@@ -328,16 +356,18 @@ function ApartamentoDialog({
   apt,
   prefillName,
   grupos,
+  categorias,
   avgByApt,
-  avgByTipologia,
+  avgByCategoria,
   onClose,
   onSaved,
 }: {
   apt: Apartamento | null;
   prefillName: string | null;
   grupos: Grupo[];
+  categorias: Categoria[];
   avgByApt: Map<string, number>;
-  avgByTipologia: Map<string, number>;
+  avgByCategoria: Map<string, number>;
   onClose: () => void;
   onSaved: () => void;
 }) {
@@ -359,8 +389,7 @@ function ApartamentoDialog({
           orden: 1,
           activo: true,
           notas: "",
-          tiempo_estandar_modo: "individual",
-          tipologia: null,
+          id_categoria: null,
           tiempo_estandar_std_sin_sfc: "",
           tiempo_estandar_std_con_sfc: "",
           tiempo_estandar_extra_cr: "",
@@ -371,22 +400,27 @@ function ApartamentoDialog({
   const numOrNull = (s: string | undefined): number | null =>
     s == null || s.trim() === "" ? null : Number(s);
 
-  const individualPlaceholder = (bucket: Bucket): string | undefined => {
-    if (!apt) return undefined;
+  const individualAvgText = (bucket: Bucket): string => {
+    if (!apt) return "Sin datos";
     const avg = avgByApt.get(`${apt.id_apt}:${bucket}`);
-    return avg != null ? `Sugerido: ${formatHHMM(avg)}` : undefined;
-  };
-
-  const sharedAvgText = (bucket: Bucket): string => {
-    const avg = form.tipologia ? avgByTipologia.get(`${form.tipologia}:${bucket}`) : undefined;
     return avg != null ? formatHHMM(avg) : "Sin datos";
   };
 
-  async function save() {
-    if (form.tiempo_estandar_modo === "compartido" && !form.tipologia) {
-      toast.error("Selecciona una tipología para el modo compartido");
-      return;
+  const categoriaAvgText = (bucket: Bucket): string => {
+    const avg = form.id_categoria != null ? avgByCategoria.get(`${form.id_categoria}:${bucket}`) : undefined;
+    return avg != null ? formatHHMM(avg) : "Sin datos";
+  };
+
+  const visibleCategorias = useMemo(() => {
+    const active = categorias.filter((c) => c.activo);
+    if (apt?.id_categoria != null && !active.some((c) => c.id_categoria === apt.id_categoria)) {
+      const current = categorias.find((c) => c.id_categoria === apt.id_categoria);
+      if (current) return [...active, current];
     }
+    return active;
+  }, [categorias, apt]);
+
+  async function save() {
     setSaving(true);
     try {
       const payload: any = {
@@ -398,11 +432,10 @@ function ApartamentoDialog({
         orden: form.orden ?? null,
         activo: !!form.activo,
         notas: form.notas ?? null,
-        tiempo_estandar_modo: form.tiempo_estandar_modo,
-        tipologia: form.tiempo_estandar_modo === "compartido" ? form.tipologia : null,
-        tiempo_estandar_std_sin_sfc: form.tiempo_estandar_modo === "individual" ? numOrNull(form.tiempo_estandar_std_sin_sfc) : null,
-        tiempo_estandar_std_con_sfc: form.tiempo_estandar_modo === "individual" ? numOrNull(form.tiempo_estandar_std_con_sfc) : null,
-        tiempo_estandar_extra_cr: form.tiempo_estandar_modo === "individual" ? numOrNull(form.tiempo_estandar_extra_cr) : null,
+        id_categoria: form.id_categoria ?? null,
+        tiempo_estandar_std_sin_sfc: numOrNull(form.tiempo_estandar_std_sin_sfc),
+        tiempo_estandar_std_con_sfc: numOrNull(form.tiempo_estandar_std_con_sfc),
+        tiempo_estandar_extra_cr: numOrNull(form.tiempo_estandar_extra_cr),
       };
       if (isNew) {
         const { error } = await supabase.from("apartamentos").insert(payload);
@@ -484,99 +517,91 @@ function ApartamentoDialog({
           {!!form.activo && (
             <>
               <div className="col-span-2 space-y-1">
-                <Label className="text-xs">Modo de tiempo estándar</Label>
+                <Label className="text-xs">Categoría</Label>
                 <select
                   className="w-full h-9 rounded-md border border-input bg-transparent px-3 text-sm"
-                  value={form.tiempo_estandar_modo ?? "individual"}
-                  onChange={(e) => setForm({ ...form, tiempo_estandar_modo: e.target.value })}
+                  value={form.id_categoria ?? ""}
+                  onChange={(e) =>
+                    setForm({ ...form, id_categoria: e.target.value === "" ? null : Number(e.target.value) })
+                  }
                 >
-                  <option value="individual">Individual</option>
-                  <option value="compartido">Compartido por tipología</option>
+                  <option value="">Sin categoría</option>
+                  {visibleCategorias.map((c) => (
+                    <option key={c.id_categoria} value={c.id_categoria}>
+                      {c.nombre}
+                    </option>
+                  ))}
                 </select>
               </div>
-              {form.tiempo_estandar_modo === "compartido" ? (
-                <>
-                  <div className="col-span-2 space-y-1">
-                    <Label className="text-xs">Tipología</Label>
-                    <select
-                      className="w-full h-9 rounded-md border border-input bg-transparent px-3 text-sm"
-                      value={form.tipologia ?? ""}
-                      onChange={(e) => setForm({ ...form, tipologia: e.target.value || null })}
-                    >
-                      <option value="" disabled>Selecciona una tipología…</option>
-                      <option value="apartamento">Apartamento</option>
-                      <option value="habitacion">Habitación</option>
-                    </select>
-                  </div>
-                  <div className="col-span-2 space-y-1.5 rounded-md border px-3 py-2 text-xs">
-                    {form.tiene_sofa_cama ? (
-                      <>
-                        <div>
-                          <span className="font-medium">STD sin SFC:</span> {sharedAvgText("std_sin_sfc")}{" "}
-                          <span className="text-muted-foreground">(media compartida últimos 50 días)</span>
-                        </div>
-                        <div>
-                          <span className="font-medium">STD con SFC:</span> {sharedAvgText("std_con_sfc")}{" "}
-                          <span className="text-muted-foreground">(media compartida últimos 50 días)</span>
-                        </div>
-                      </>
-                    ) : (
-                      <div>
-                        <span className="font-medium">Limpieza STD:</span> {sharedAvgText("std_sin_sfc")}{" "}
-                        <span className="text-muted-foreground">(media compartida últimos 50 días)</span>
-                      </div>
-                    )}
-                    {form.requiere_limpieza_intermedia !== false && (
-                      <div>
-                        <span className="font-medium">Extra-CR:</span> {sharedAvgText("extra_cr")}{" "}
-                        <span className="text-muted-foreground">(media compartida últimos 50 días)</span>
-                      </div>
-                    )}
-                  </div>
-                </>
-              ) : (
-                <>
-                  {form.tiene_sofa_cama ? (
-                    <>
-                      <div className="col-span-2 space-y-1">
-                        <Label className="text-xs">Tiempo estándar (STD sin SFC)</Label>
-                        <HHMMInput
-                          value={form.tiempo_estandar_std_sin_sfc ?? ""}
-                          onChange={(v) => setForm({ ...form, tiempo_estandar_std_sin_sfc: v })}
-                          placeholder={individualPlaceholder("std_sin_sfc")}
-                        />
-                      </div>
-                      <div className="col-span-2 space-y-1">
-                        <Label className="text-xs">Tiempo estándar (STD con SFC)</Label>
-                        <HHMMInput
-                          value={form.tiempo_estandar_std_con_sfc ?? ""}
-                          onChange={(v) => setForm({ ...form, tiempo_estandar_std_con_sfc: v })}
-                          placeholder={individualPlaceholder("std_con_sfc")}
-                        />
-                      </div>
-                    </>
-                  ) : (
-                    <div className="col-span-2 space-y-1">
-                      <Label className="text-xs">Tiempo estándar (Limpieza STD)</Label>
-                      <HHMMInput
-                        value={form.tiempo_estandar_std_sin_sfc ?? ""}
-                        onChange={(v) => setForm({ ...form, tiempo_estandar_std_sin_sfc: v })}
-                        placeholder={individualPlaceholder("std_sin_sfc")}
-                      />
-                    </div>
-                  )}
-                  {form.requiere_limpieza_intermedia !== false && (
-                    <div className="col-span-2 space-y-1">
-                      <Label className="text-xs">Tiempo estándar (Extra-CR)</Label>
-                      <HHMMInput
-                        value={form.tiempo_estandar_extra_cr ?? ""}
-                        onChange={(v) => setForm({ ...form, tiempo_estandar_extra_cr: v })}
-                        placeholder={individualPlaceholder("extra_cr")}
-                      />
-                    </div>
-                  )}
-                </>
-              )}
+              <div className="col-span-2 space-y-1">
+                <Label className="text-xs">Tiempo estándar de limpieza</Label>
+                <div className="rounded-md border overflow-hidden">
+                  <table className="w-full text-xs">
+                    <thead className="bg-muted/60">
+                      <tr>
+                        <th className="text-left font-medium px-2 py-1.5"></th>
+                        <th className="text-left font-medium px-2 py-1.5">STD sin SFC</th>
+                        {form.tiene_sofa_cama && (
+                          <th className="text-left font-medium px-2 py-1.5">STD con SFC</th>
+                        )}
+                        {form.requiere_limpieza_intermedia !== false && (
+                          <th className="text-left font-medium px-2 py-1.5">Extra-CR</th>
+                        )}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y">
+                      <tr>
+                        <td className="px-2 py-1.5 text-muted-foreground">Sugerido individual</td>
+                        <td className="px-2 py-1.5">{individualAvgText("std_sin_sfc")}</td>
+                        {form.tiene_sofa_cama && (
+                          <td className="px-2 py-1.5">{individualAvgText("std_con_sfc")}</td>
+                        )}
+                        {form.requiere_limpieza_intermedia !== false && (
+                          <td className="px-2 py-1.5">{individualAvgText("extra_cr")}</td>
+                        )}
+                      </tr>
+                      <tr>
+                        <td className="px-2 py-1.5 text-muted-foreground">Sugerido por categoría</td>
+                        <td className="px-2 py-1.5">{categoriaAvgText("std_sin_sfc")}</td>
+                        {form.tiene_sofa_cama && (
+                          <td className="px-2 py-1.5">{categoriaAvgText("std_con_sfc")}</td>
+                        )}
+                        {form.requiere_limpieza_intermedia !== false && (
+                          <td className="px-2 py-1.5">{categoriaAvgText("extra_cr")}</td>
+                        )}
+                      </tr>
+                      <tr>
+                        <td className="px-2 py-1.5 text-muted-foreground">Asignado manual</td>
+                        <td className="px-2 py-1.5">
+                          <HHMMInput
+                            className="h-8"
+                            value={form.tiempo_estandar_std_sin_sfc ?? ""}
+                            onChange={(v) => setForm({ ...form, tiempo_estandar_std_sin_sfc: v })}
+                          />
+                        </td>
+                        {form.tiene_sofa_cama && (
+                          <td className="px-2 py-1.5">
+                            <HHMMInput
+                              className="h-8"
+                              value={form.tiempo_estandar_std_con_sfc ?? ""}
+                              onChange={(v) => setForm({ ...form, tiempo_estandar_std_con_sfc: v })}
+                            />
+                          </td>
+                        )}
+                        {form.requiere_limpieza_intermedia !== false && (
+                          <td className="px-2 py-1.5">
+                            <HHMMInput
+                              className="h-8"
+                              value={form.tiempo_estandar_extra_cr ?? ""}
+                              onChange={(v) => setForm({ ...form, tiempo_estandar_extra_cr: v })}
+                            />
+                          </td>
+                        )}
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
             </>
           )}
           <ToggleRow
