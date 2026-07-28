@@ -10,7 +10,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { AlertTriangle, Wrench, PackageX, HelpCircle, Camera, Video, Mic, FileText, X } from "lucide-react";
-import { TIPO_STYLE, PRIORIDAD_STYLE, type IncidenciaTipo, type Prioridad } from "@/lib/mantenimiento";
+import { TIPO_STYLE, PRIORIDAD_STYLE, ESTADO_FULL_STYLE, type IncidenciaTipo, type Prioridad, type Estat } from "@/lib/mantenimiento";
 import { uploadAdjunto } from "@/lib/api/manteniment-adjuntos.functions";
 
 const TIPO_OPTIONS: { value: IncidenciaTipo; label: string; icon: typeof AlertTriangle }[] = [
@@ -79,7 +79,9 @@ export function ReportarIncidenciaSheet({
   context: ReportarIncidenciaContext;
   onSaved?: () => void;
 }) {
-  const [step, setStep] = useState<1 | 2>(1);
+  const [step, setStep] = useState<"location" | "pending" | "tipo" | "detalle">(
+    context.origen === "neteja" ? "pending" : "location",
+  );
   const [tipo, setTipo] = useState<IncidenciaTipo | null>(null);
   const [descripcion, setDescripcion] = useState("");
   const [materialRepuesto, setMaterialRepuesto] = useState(false);
@@ -113,8 +115,49 @@ export function ReportarIncidenciaSheet({
   });
   const espaciosComunes = espaciosComunesQ.data ?? [];
 
+  // Property the "pending incidents" summary is scoped to — fixed for
+  // "neteja", derived from the location step's picker otherwise.
+  const pendingScopeIdApt = context.origen === "neteja" ? context.idApt : idApt;
+  const pendingScopeIdEspacio = context.origen === "neteja" ? null : idEspacioComun;
+  const pendingScopeKnown = pendingScopeIdApt != null || pendingScopeIdEspacio != null;
+
+  const pendingIncidenciasQ = useQuery({
+    queryKey: ["reportar-incidencia-pendientes", pendingScopeIdApt, pendingScopeIdEspacio],
+    enabled: pendingScopeKnown,
+    queryFn: async (): Promise<
+      { id_incidencia: number; titol: string | null; tipus: IncidenciaTipo; estat: Estat; data_incident: string | null; creado_en: string }[]
+    > => {
+      let q = supabase
+        .from("manteniment_incidencies")
+        .select("id_incidencia, titol, tipus, estat, data_incident, creado_en")
+        .in("estat", ["pendent_validacio", "validada", "en_curs"])
+        .order("creado_en", { ascending: false });
+      q = pendingScopeIdApt != null
+        ? q.eq("id_apt", pendingScopeIdApt)
+        : q.eq("id_tipo_espacio_comun", pendingScopeIdEspacio as number);
+      const { data, error } = await q;
+      if (error) throw error;
+      return (data ?? []) as unknown as {
+        id_incidencia: number; titol: string | null; tipus: IncidenciaTipo; estat: Estat; data_incident: string | null; creado_en: string;
+      }[];
+    },
+  });
+
+  // Property name shown read-only once the location is known — reused by
+  // both the "pending" summary heading and the "detalle" step's summary box.
+  const resolvedLocationLabel =
+    context.origen === "neteja"
+      ? context.aptLabel
+      : idApt != null
+        ? context.apartamentos.find((a) => a.id_apt === idApt)?.nombre ?? "—"
+        : idEspacioComun != null
+          ? espaciosComunes.find((e) => e.id_tipo === idEspacioComun)?.nombre ?? "—"
+          : otroUbicacion
+            ? "Otro (ver descripción)"
+            : "—";
+
   function reset() {
-    setStep(1);
+    setStep(context.origen === "neteja" ? "pending" : "location");
     setTipo(null);
     setDescripcion("");
     setMaterialRepuesto(false);
@@ -236,8 +279,165 @@ export function ReportarIncidenciaSheet({
         className="rounded-t-2xl max-h-[90vh] overflow-y-auto sm:inset-0 sm:m-auto sm:h-fit sm:max-h-[85vh] sm:w-full sm:max-w-[440px] sm:rounded-2xl sm:border"
       >
         <div className="pt-2 pb-6 space-y-4">
-          {step === 1 && (
+          {step === "location" && manualLocation && (
             <>
+              <div>
+                <div className="text-lg font-semibold">Reportar incidencia</div>
+                <div className="text-xs text-muted-foreground">¿Dónde está la incidencia?</div>
+              </div>
+              <div className="space-y-3">
+                <div className="space-y-1">
+                  <Label className="text-xs">Grupo</Label>
+                  <select
+                    value={idGrupo ?? ""}
+                    onChange={(e) => {
+                      const v = e.target.value ? Number(e.target.value) : null;
+                      setIdGrupo(v);
+                      if (idApt != null) {
+                        const apt = context.apartamentos.find((a) => a.id_apt === idApt);
+                        if (v != null && apt && apt.id_grupo !== v) setIdApt(null);
+                      }
+                    }}
+                    className="w-full h-9 rounded-md border border-input bg-transparent px-3 text-sm"
+                  >
+                    <option value="">— Ninguno —</option>
+                    {context.grupos.map((g) => (
+                      <option key={g.id_grupo} value={g.id_grupo}>{g.nombre}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Ubicación *</Label>
+                  <select
+                    value={
+                      idApt != null
+                        ? `apt-${idApt}`
+                        : idEspacioComun != null
+                          ? `esp-${idEspacioComun}`
+                          : otroUbicacion
+                            ? "otro"
+                            : ""
+                    }
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setIdApt(v.startsWith("apt-") ? Number(v.slice(4)) : null);
+                      setIdEspacioComun(v.startsWith("esp-") ? Number(v.slice(4)) : null);
+                      setOtroUbicacion(v === "otro");
+                    }}
+                    className="w-full h-9 rounded-md border border-input bg-transparent px-3 text-sm"
+                  >
+                    <option value="">— Selecciona —</option>
+                    {filteredApts.length > 0 && (
+                      <optgroup label="Apartamentos">
+                        {filteredApts.map((a) => (
+                          <option key={`apt-${a.id_apt}`} value={`apt-${a.id_apt}`}>{a.nombre}</option>
+                        ))}
+                      </optgroup>
+                    )}
+                    {espaciosComunes.length > 0 && (
+                      <optgroup label="Espacios comunes">
+                        {espaciosComunes.map((esp) => (
+                          <option key={`esp-${esp.id_tipo}`} value={`esp-${esp.id_tipo}`}>{esp.nombre}</option>
+                        ))}
+                      </optgroup>
+                    )}
+                    <option value="otro">Otro (especificar en descripción)</option>
+                  </select>
+                </div>
+              </div>
+              <div className="flex gap-2 pt-2">
+                <Button variant="outline" className="flex-1 h-12" onClick={() => handleClose(false)}>
+                  Cancelar
+                </Button>
+                <Button
+                  className="flex-1 h-12 bg-[#26215C] hover:bg-[#1e1a48] text-white"
+                  disabled={idApt == null && idEspacioComun == null && !otroUbicacion}
+                  onClick={() => setStep(otroUbicacion ? "tipo" : "pending")}
+                >
+                  Continuar
+                </Button>
+              </div>
+            </>
+          )}
+
+          {step === "pending" && (
+            <>
+              <div>
+                <div className="text-lg font-semibold">Reportar incidencia</div>
+                <div className="text-xs text-muted-foreground">Incidencias pendientes en esta propiedad</div>
+              </div>
+
+              <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm">
+                <div className="text-xs text-muted-foreground uppercase tracking-wide">Ubicación</div>
+                <div className="font-medium">{resolvedLocationLabel}</div>
+              </div>
+
+              {pendingIncidenciasQ.isLoading ? (
+                <div className="text-sm text-muted-foreground text-center py-6">Cargando…</div>
+              ) : (pendingIncidenciasQ.data ?? []).length === 0 ? (
+                <div className="text-sm text-muted-foreground text-center py-6">
+                  No hay incidencias pendientes para esta propiedad
+                </div>
+              ) : (
+                <div className="space-y-2 max-h-[240px] overflow-y-auto">
+                  {(pendingIncidenciasQ.data ?? []).map((inc) => {
+                    const tipoStyle = TIPO_STYLE[inc.tipus];
+                    const estadoStyle = ESTADO_FULL_STYLE[inc.estat];
+                    return (
+                      <div key={inc.id_incidencia} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm">
+                        <div className="font-medium truncate">{inc.titol}</div>
+                        <div className="mt-1 flex items-center gap-1.5 flex-wrap">
+                          <span
+                            className="rounded px-1.5 py-0.5 text-[10px] font-semibold"
+                            style={{ backgroundColor: `${tipoStyle.bg}1A`, color: tipoStyle.bg }}
+                          >
+                            {tipoStyle.label}
+                          </span>
+                          <span
+                            className="rounded px-1.5 py-0.5 text-[10px] font-semibold"
+                            style={{ backgroundColor: `${estadoStyle.bg}1A`, color: estadoStyle.bg }}
+                          >
+                            {estadoStyle.label}
+                          </span>
+                          <span className="text-xs text-muted-foreground ml-auto">
+                            {new Date(inc.data_incident ?? inc.creado_en).toLocaleDateString()}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              <div className="flex flex-col gap-2 pt-2">
+                <Button className="w-full h-12 bg-[#26215C] hover:bg-[#1e1a48] text-white" onClick={() => setStep("tipo")}>
+                  Reportar nueva incidencia
+                </Button>
+                {manualLocation && (
+                  <button
+                    type="button"
+                    onClick={() => setStep("location")}
+                    className="text-sm text-muted-foreground hover:text-foreground"
+                  >
+                    ← Cambiar ubicación
+                  </button>
+                )}
+                <Button variant="outline" className="w-full h-11" onClick={() => handleClose(false)}>
+                  Cancelar
+                </Button>
+              </div>
+            </>
+          )}
+
+          {step === "tipo" && (
+            <>
+              <button
+                type="button"
+                onClick={() => setStep("pending")}
+                className="text-sm text-muted-foreground hover:text-foreground"
+              >
+                ← Volver
+              </button>
               <div>
                 <div className="text-lg font-semibold">Reportar incidencia</div>
                 <div className="text-xs text-muted-foreground">¿Qué tipo de incidencia quieres reportar?</div>
@@ -251,7 +451,7 @@ export function ReportarIncidenciaSheet({
                       type="button"
                       onClick={() => {
                         setTipo(o.value);
-                        setStep(2);
+                        setStep("detalle");
                       }}
                       style={{ borderColor: s.bg, backgroundColor: `${s.bg}1A`, color: s.bg }}
                       className="flex flex-col items-center gap-2 rounded-lg border px-3 py-5 text-sm font-medium transition-colors hover:opacity-80"
@@ -268,11 +468,11 @@ export function ReportarIncidenciaSheet({
             </>
           )}
 
-          {step === 2 && tipo && (
+          {step === "detalle" && tipo && (
             <>
               <button
                 type="button"
-                onClick={() => setStep(1)}
+                onClick={() => setStep("tipo")}
                 className="text-sm text-muted-foreground hover:text-foreground"
               >
                 ← Cambiar tipo
@@ -281,73 +481,10 @@ export function ReportarIncidenciaSheet({
                 {TIPO_OPTIONS.find((o) => o.value === tipo)?.label}
               </div>
 
-              {context.origen === "neteja" ? (
-                <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm">
-                  <div className="text-xs text-muted-foreground uppercase tracking-wide">Apartamento</div>
-                  <div className="font-medium">{context.aptLabel}</div>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  <div className="space-y-1">
-                    <Label className="text-xs">Grupo</Label>
-                    <select
-                      value={idGrupo ?? ""}
-                      onChange={(e) => {
-                        const v = e.target.value ? Number(e.target.value) : null;
-                        setIdGrupo(v);
-                        if (idApt != null && manualLocation) {
-                          const apt = context.apartamentos.find((a) => a.id_apt === idApt);
-                          if (v != null && apt && apt.id_grupo !== v) setIdApt(null);
-                        }
-                      }}
-                      className="w-full h-9 rounded-md border border-input bg-transparent px-3 text-sm"
-                    >
-                      <option value="">— Ninguno —</option>
-                      {context.grupos.map((g) => (
-                        <option key={g.id_grupo} value={g.id_grupo}>{g.nombre}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-xs">Ubicación *</Label>
-                    <select
-                      value={
-                        idApt != null
-                          ? `apt-${idApt}`
-                          : idEspacioComun != null
-                            ? `esp-${idEspacioComun}`
-                            : otroUbicacion
-                              ? "otro"
-                              : ""
-                      }
-                      onChange={(e) => {
-                        const v = e.target.value;
-                        setIdApt(v.startsWith("apt-") ? Number(v.slice(4)) : null);
-                        setIdEspacioComun(v.startsWith("esp-") ? Number(v.slice(4)) : null);
-                        setOtroUbicacion(v === "otro");
-                      }}
-                      className="w-full h-9 rounded-md border border-input bg-transparent px-3 text-sm"
-                    >
-                      <option value="">— Selecciona —</option>
-                      {filteredApts.length > 0 && (
-                        <optgroup label="Apartamentos">
-                          {filteredApts.map((a) => (
-                            <option key={`apt-${a.id_apt}`} value={`apt-${a.id_apt}`}>{a.nombre}</option>
-                          ))}
-                        </optgroup>
-                      )}
-                      {espaciosComunes.length > 0 && (
-                        <optgroup label="Espacios comunes">
-                          {espaciosComunes.map((esp) => (
-                            <option key={`esp-${esp.id_tipo}`} value={`esp-${esp.id_tipo}`}>{esp.nombre}</option>
-                          ))}
-                        </optgroup>
-                      )}
-                      <option value="otro">Otro (especificar en descripción)</option>
-                    </select>
-                  </div>
-                </div>
-              )}
+              <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm">
+                <div className="text-xs text-muted-foreground uppercase tracking-wide">Ubicación</div>
+                <div className="font-medium">{resolvedLocationLabel}</div>
+              </div>
 
               {context.origen === "gestor" && (
                 <div className="space-y-1">
