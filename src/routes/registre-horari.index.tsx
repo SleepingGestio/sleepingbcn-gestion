@@ -248,6 +248,74 @@ function RegistreHorariPage() {
     },
   });
 
+  const pendientesQ = useQuery({
+    queryKey: ["reg-horari-pendientes", start, end, workerIds.join(",")],
+    enabled: workerIds.length > 0,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("limpiezas")
+        .select("worker, id_apt, tipo, sfc_montar")
+        .in("worker", workerIds)
+        .in("estado", ["comunicada", "aceptada", "en_curso"])
+        .gte("fecha_limpieza", start)
+        .lte("fecha_limpieza", end);
+      if (error) throw error;
+      return (data ?? []) as { worker: number | null; id_apt: number; tipo: string | null; sfc_montar: boolean | null }[];
+    },
+  });
+
+  const pendientesAptIds = useMemo(() => {
+    const s = new Set<number>();
+    for (const p of pendientesQ.data ?? []) s.add(p.id_apt);
+    return Array.from(s);
+  }, [pendientesQ.data]);
+
+  const aptStdQ = useQuery({
+    queryKey: ["reg-horari-apt-std", pendientesAptIds.join(",")],
+    enabled: pendientesAptIds.length > 0,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("apartamentos")
+        .select("id_apt, tiempo_estandar_std_sin_sfc, tiempo_estandar_std_con_sfc, tiempo_estandar_extra_cr")
+        .in("id_apt", pendientesAptIds);
+      if (error) throw error;
+      return (data ?? []) as {
+        id_apt: number;
+        tiempo_estandar_std_sin_sfc: number | null;
+        tiempo_estandar_std_con_sfc: number | null;
+        tiempo_estandar_extra_cr: number | null;
+      }[];
+    },
+  });
+
+  const aptStdById = useMemo(() => {
+    const m = new Map<number, { sin_sfc: number | null; con_sfc: number | null; extra_cr: number | null }>();
+    for (const a of aptStdQ.data ?? []) {
+      m.set(a.id_apt, {
+        sin_sfc: a.tiempo_estandar_std_sin_sfc,
+        con_sfc: a.tiempo_estandar_std_con_sfc,
+        extra_cr: a.tiempo_estandar_extra_cr,
+      });
+    }
+    return m;
+  }, [aptStdQ.data]);
+
+  const scheduledPendingByWorker = useMemo(() => {
+    const map = new Map<number, number>();
+    for (const p of pendientesQ.data ?? []) {
+      if (p.worker == null) continue;
+      const std = aptStdById.get(p.id_apt);
+      if (!std) continue;
+      const value = p.tipo === "intermedia"
+        ? std.extra_cr
+        : p.sfc_montar
+          ? std.con_sfc
+          : std.sin_sfc;
+      if (value != null) map.set(p.worker, (map.get(p.worker) ?? 0) + value);
+    }
+    return map;
+  }, [pendientesQ.data, aptStdById]);
+
   const hoursByWorker = useMemo(() => {
     const map = new Map<number, number>();
     const limpiezasConSesiones = new Set((limpiezasRegistreQ.data ?? []).map((r) => r.id_limpieza));
@@ -298,10 +366,11 @@ function RegistreHorariPage() {
     for (const w of workers) {
       const actual = hoursByWorker.get(w.id_persona) ?? 0;
       const obj = objectiveForWorker(w) ?? 0;
-      m = Math.max(m, actual, obj);
+      const pending = scheduledPendingByWorker.get(w.id_persona) ?? 0;
+      m = Math.max(m, actual + pending, obj);
     }
     return m || 1;
-  }, [workers, hoursByWorker, activeObjectiveByWorker]);
+  }, [workers, hoursByWorker, activeObjectiveByWorker, scheduledPendingByWorker]);
 
   const loading = workersQ.isLoading || limpiezasQ.isLoading || limpiezasRegistreQ.isLoading || genericQ.isLoading || ajustosQ.isLoading || mantenimentQ.isLoading || reduccionesQ.isLoading || activePeriodsQ.isLoading;
 
@@ -349,6 +418,7 @@ function RegistreHorariPage() {
                   reduction={reductionsByWorker.get(w.id_persona) ?? 0}
                   maxScale={maxScale}
                   showGrip={canEditDashboard}
+                  scheduledPending={scheduledPendingByWorker.get(w.id_persona) ?? 0}
                 />
               </div>
             ))}
@@ -360,8 +430,16 @@ function RegistreHorariPage() {
   );
 }
 
-const BAR_MAX_PX = 240;
+const BAR_MAX_PX = 340;
 const LABEL_SPACE_PX = 40;
+
+function hexToRgba(hex: string, alpha: number): string {
+  const clean = hex.replace("#", "");
+  const r = parseInt(clean.substring(0, 2), 16);
+  const g = parseInt(clean.substring(2, 4), 16);
+  const b = parseInt(clean.substring(4, 6), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
 
 function WorkerColumn({
   worker,
@@ -370,6 +448,7 @@ function WorkerColumn({
   reduction,
   maxScale,
   showGrip,
+  scheduledPending,
 }: {
   worker: Persona;
   actual: number;
@@ -377,6 +456,7 @@ function WorkerColumn({
   reduction: number;
   maxScale: number;
   showGrip: boolean;
+  scheduledPending: number;
 }) {
   const isAutonom = worker.tipo_contrato === "autonomo";
   const hasObjective = !isAutonom && objective != null && objective > 0;
@@ -393,6 +473,7 @@ function WorkerColumn({
   }
 
   const actualPx = Math.round((actual / maxScale) * BAR_MAX_PX);
+  const scheduledPx = Math.round((scheduledPending / maxScale) * BAR_MAX_PX);
   const objPx = hasObjective ? Math.round(((objective as number) / maxScale) * BAR_MAX_PX) : 0;
   const effPx =
     hasObjective && reduction !== 0 && effectiveObjective != null
@@ -479,6 +560,18 @@ function WorkerColumn({
             style={{ height: `${actualPx}px`, backgroundColor: color }}
             title={`Reales: ${fmtHours(actual)}`}
           />
+          {scheduledPending > 0 && (
+            <div
+              className="absolute w-8 rounded-t"
+              style={{
+                bottom: `${actualPx}px`,
+                left: 0,
+                height: `${scheduledPx}px`,
+                backgroundColor: hexToRgba(color, 0.35),
+              }}
+              title={`Programadas: ${fmtHours(scheduledPending)}`}
+            />
+          )}
         </div>
       </div>
       <div className="mt-3 text-center">
