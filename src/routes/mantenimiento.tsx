@@ -42,7 +42,7 @@ import {
   type Registre,
   type PersonaLite,
 } from "@/lib/mantenimiento";
-import { Home, Plus, RotateCcw } from "lucide-react";
+import { Home, Plus, RotateCcw, Camera, Video, Mic, FileText } from "lucide-react";
 
 export const Route = createFileRoute("/mantenimiento")({
   component: MantenimientoPage,
@@ -51,6 +51,13 @@ export const Route = createFileRoute("/mantenimiento")({
 type TareasFilter = "asignadas_curso" | "en_curso" | "finalizadas" | "rechazadas" | "todas";
 type SortKey = "prioridad" | "fecha_prevista" | "fecha_inicio" | "fecha_fin" | "titulo" | "ubicacion" | "operario";
 type UbicacionFilter = "todos" | `apt-${number}` | `esp-${number}`;
+
+const ADJUNTO_TIPO_ICONS: { tipo: string; Icon: typeof Camera; title: string }[] = [
+  { tipo: "foto", Icon: Camera, title: "Tiene fotos" },
+  { tipo: "video", Icon: Video, title: "Tiene vídeos" },
+  { tipo: "nota_veu", Icon: Mic, title: "Tiene notas de voz" },
+  { tipo: "document", Icon: FileText, title: "Tiene documentos" },
+];
 
 function MantenimientoPage() {
   const { canEdit } = usePermissions();
@@ -118,6 +125,30 @@ function MantenimientoPage() {
     }
     return m;
   }, [registreQ.data]);
+
+  const adjuntoTiposQ = useQuery({
+    queryKey: ["mantenimiento-adjunto-tipos", tareaIdsKey],
+    enabled: tareaIds.length > 0,
+    queryFn: async (): Promise<{ id_incidencia: number; tipus: string | null }[]> => {
+      const { data, error } = await supabase
+        .from("manteniment_adjunts")
+        .select("id_incidencia, tipus")
+        .in("id_incidencia", tareaIds);
+      if (error) throw error;
+      return (data ?? []) as { id_incidencia: number; tipus: string | null }[];
+    },
+  });
+
+  const adjuntoTiposByIncidencia = useMemo(() => {
+    const m = new Map<number, Set<string>>();
+    for (const a of adjuntoTiposQ.data ?? []) {
+      if (!a.tipus) continue;
+      const set = m.get(a.id_incidencia) ?? new Set<string>();
+      set.add(a.tipus);
+      m.set(a.id_incidencia, set);
+    }
+    return m;
+  }, [adjuntoTiposQ.data]);
 
   const personalQ = usePersonalLite();
   const personaById = useMemo(
@@ -362,6 +393,7 @@ function MantenimientoPage() {
                 location={resolveLocation(t, aptById, espacioById, grupoById)}
                 worker={t.id_assignat != null ? personaById.get(t.id_assignat) : null}
                 personaById={personaById}
+                adjuntoTipos={adjuntoTiposByIncidencia.get(t.id_incidencia) ?? new Set()}
                 editable={editable}
                 onOpenDetail={() => setDetailId(t.id_incidencia)}
                 onIniciar={() => actions.iniciar(t, t.id_assignat)}
@@ -472,6 +504,7 @@ function TareaRow({
   location,
   worker,
   personaById,
+  adjuntoTipos,
   editable,
   onOpenDetail,
   onIniciar,
@@ -484,6 +517,7 @@ function TareaRow({
   location: string;
   worker: PersonaLite | null | undefined;
   personaById: Map<number, PersonaLite>;
+  adjuntoTipos: Set<string>;
   editable: boolean;
   onOpenDetail: () => void;
   onIniciar: () => void;
@@ -516,6 +550,15 @@ function TareaRow({
               <span>{location}</span>
               <span>·</span>
               <span>{worker ? (worker.codigo ?? fullName(worker)) : "Sin asignar"}</span>
+              {adjuntoTipos.size > 0 && (
+                <span className="flex items-center gap-1 text-muted-foreground">
+                  {ADJUNTO_TIPO_ICONS.filter((o) => adjuntoTipos.has(o.tipo)).map((o) => (
+                    <span key={o.tipo} title={o.title}>
+                      <o.Icon className="h-3 w-3" />
+                    </span>
+                  ))}
+                </span>
+              )}
             </div>
           </div>
           {inc.descripcio && (

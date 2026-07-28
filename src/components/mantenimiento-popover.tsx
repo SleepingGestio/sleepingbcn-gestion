@@ -334,25 +334,35 @@ export function MantenimientoPopover({
 
                 <section>
                   <Label className="text-xs uppercase tracking-wide text-muted-foreground">Adjuntos</Label>
-                  <div className="mt-1.5">
+                  <div className="mt-1.5 space-y-2">
                     {adjuntos.length === 0 ? (
                       <div className="text-sm text-muted-foreground italic">Sin adjuntos</div>
-                    ) : (
-                      <ul className="space-y-1">
-                        {adjuntos.map((a, i) => {
+                    ) : (() => {
+                        const groups = new Map<string, { a: Adjunto; idx: number }[]>();
+                        adjuntos.forEach((a, idx) => {
+                          const tipus = (a.tipus as string | undefined) ?? "otro";
+                          const arr = groups.get(tipus) ?? [];
+                          arr.push({ a, idx });
+                          groups.set(tipus, arr);
+                        });
+                        const distinctTypeCount = groups.size;
+                        const TYPE_LABELS: Record<string, string> = {
+                          video: "Vídeos",
+                          nota_veu: "Notas de voz",
+                          document: "Documentos",
+                        };
+                        const fotos = groups.get("foto") ?? [];
+                        const otherTypes = (["video", "nota_veu", "document"] as const).filter(
+                          (t) => (groups.get(t) ?? []).length > 0,
+                        );
+
+                        function renderLinkItem({ a, idx }: { a: Adjunto; idx: number }) {
                           const label =
                             (a.nom_fitxer as string | undefined) ??
                             (a.tipus as string | undefined) ??
-                            `Adjunto ${i + 1}`;
-                          const idAdjunto = (a.id_adjunt as number | undefined) ?? i;
+                            `Adjunto ${idx + 1}`;
+                          const idAdjunto = (a.id_adjunt as number | undefined) ?? idx;
                           const url = a.url as string | undefined;
-                          if (a.tipus === "foto" && url) {
-                            return (
-                              <li key={idAdjunto} className="text-sm">
-                                <AdjuntoThumbnail idAdjunto={idAdjunto} url={url} label={label} />
-                              </li>
-                            );
-                          }
                           return (
                             <li key={idAdjunto} className="text-sm">
                               <button
@@ -366,9 +376,39 @@ export function MantenimientoPopover({
                               </button>
                             </li>
                           );
-                        })}
-                      </ul>
-                    )}
+                        }
+
+                        return (
+                          <>
+                            {fotos.length > 0 && (
+                              <div className="flex flex-wrap gap-2">
+                                {fotos.map(({ a, idx }) => {
+                                  const label = (a.nom_fitxer as string | undefined) ?? "foto";
+                                  const idAdjunto = (a.id_adjunt as number | undefined) ?? idx;
+                                  const url = a.url as string | undefined;
+                                  return url ? (
+                                    <AdjuntoThumbnail key={idAdjunto} idAdjunto={idAdjunto} url={url} label={label} />
+                                  ) : (
+                                    <span key={idAdjunto} className="text-sm text-muted-foreground">{label}</span>
+                                  );
+                                })}
+                              </div>
+                            )}
+                            {otherTypes.map((tipus) => (
+                              <div key={tipus}>
+                                {distinctTypeCount > 1 && (
+                                  <div className="text-[11px] uppercase tracking-wide text-muted-foreground mb-0.5">
+                                    {TYPE_LABELS[tipus]}
+                                  </div>
+                                )}
+                                <ul className="space-y-1">
+                                  {(groups.get(tipus) ?? []).map((item) => renderLinkItem(item))}
+                                </ul>
+                              </div>
+                            ))}
+                          </>
+                        );
+                      })()}
                   </div>
                 </section>
 

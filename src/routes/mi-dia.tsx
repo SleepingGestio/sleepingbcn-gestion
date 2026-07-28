@@ -27,7 +27,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { PasswordInput } from "@/components/ui/password-input";
 import { Label } from "@/components/ui/label";
-import { Zap, Sofa, LogOut, Clock, ArrowLeft, Check, X, Play, Pause, Menu, UserCircle2, KeyRound, Square, ClipboardList, Plus, LayoutDashboard, AlertTriangle, Wrench, Home, RotateCcw } from "lucide-react";
+import { Zap, Sofa, LogOut, Clock, ArrowLeft, Check, X, Play, Pause, Menu, UserCircle2, KeyRound, Square, ClipboardList, Plus, LayoutDashboard, AlertTriangle, Wrench, Home, RotateCcw, Camera, Video, Mic, FileText } from "lucide-react";
 import { ReportarIncidenciaSheet, type ReportarIncidenciaContext } from "@/components/reportar-incidencia";
 import { MantenimientoPopover } from "@/components/mantenimiento-popover";
 import { ApartamentoOcupacionCalendario } from "@/components/apartamento-ocupacion-calendario";
@@ -206,6 +206,13 @@ function workerCode(id: number | null, workers: { id_persona: number; codigo: st
 }
 
 const VISIBLE_STATES = ["comunicada", "aceptada", "en_curso", "finalizada"] as const;
+
+const ADJUNTO_TIPO_ICONS: { tipo: string; Icon: typeof Camera; title: string }[] = [
+  { tipo: "foto", Icon: Camera, title: "Tiene fotos" },
+  { tipo: "video", Icon: Video, title: "Tiene vídeos" },
+  { tipo: "nota_veu", Icon: Mic, title: "Tiene notas de voz" },
+  { tipo: "document", Icon: FileText, title: "Tiene documentos" },
+];
 
 function MiDiaPage() {
   const { persona, loading: loadingPersona } = useCurrentPersonal();
@@ -835,6 +842,30 @@ function WorkerView({
     return m;
   }, [mantMisSesionesQ.data]);
 
+  const mantAdjuntoTiposQ = useQuery({
+    queryKey: ["mi-dia-mant-adjunto-tipos", mantIncIdsKey],
+    enabled: mantIncIds.length > 0,
+    queryFn: async (): Promise<{ id_incidencia: number; tipus: string | null }[]> => {
+      const { data, error } = await supabase
+        .from("manteniment_adjunts")
+        .select("id_incidencia, tipus")
+        .in("id_incidencia", mantIncIds);
+      if (error) throw error;
+      return (data ?? []) as { id_incidencia: number; tipus: string | null }[];
+    },
+  });
+
+  const adjuntoTiposByIncidencia = useMemo(() => {
+    const m = new Map<number, Set<string>>();
+    for (const a of mantAdjuntoTiposQ.data ?? []) {
+      if (!a.tipus) continue;
+      const set = m.get(a.id_incidencia) ?? new Set<string>();
+      set.add(a.tipus);
+      m.set(a.id_incidencia, set);
+    }
+    return m;
+  }, [mantAdjuntoTiposQ.data]);
+
   // Names aren't broadly readable via RLS (same reason "Equipo trabajando este
   // día" below uses a codigo-only RPC instead of a direct personal select) —
   // "Asignado a" shows the worker's código for the same reason.
@@ -1211,6 +1242,7 @@ function WorkerView({
                       location={resolveLocation(inc, mantAptById, mantEspacioById, mantGrupoById)}
                       asignadoCodigo={workerCode(inc.id_assignat, mantAssignatCodigosQ.data ?? [])}
                       misSesiones={mantMisSesionesByIncidencia.get(inc.id_incidencia) ?? []}
+                      adjuntoTipos={adjuntoTiposByIncidencia.get(inc.id_incidencia) ?? new Set()}
                       disabled={disabled}
                       onIniciar={() => mantActions.iniciar(inc, personalId)}
                       onFinParcial={() =>
@@ -1357,6 +1389,7 @@ function WorkerView({
               location={resolveLocation(inc, mantAptById, mantEspacioById, mantGrupoById)}
               asignadoCodigo={workerCode(inc.id_assignat, mantAssignatCodigosQ.data ?? [])}
               misSesiones={mantMisSesionesByIncidencia.get(inc.id_incidencia) ?? []}
+              adjuntoTipos={adjuntoTiposByIncidencia.get(inc.id_incidencia) ?? new Set()}
               disabled={disabled}
               onIniciar={() => mantActions.iniciar(inc, personalId)}
               onFinParcial={() =>
@@ -1842,6 +1875,7 @@ function MantenimientoTaskCard({
   location,
   asignadoCodigo,
   misSesiones,
+  adjuntoTipos,
   disabled,
   onIniciar,
   onFinParcial,
@@ -1854,6 +1888,7 @@ function MantenimientoTaskCard({
   location: string;
   asignadoCodigo: string;
   misSesiones: Registre[];
+  adjuntoTipos: Set<string>;
   disabled: boolean;
   onIniciar: () => Promise<void> | void;
   onFinParcial: () => Promise<void> | void;
@@ -1897,6 +1932,15 @@ function MantenimientoTaskCard({
         )}
         <div className="text-xs text-slate-600 flex items-center gap-1">
           <Home className="h-3 w-3 shrink-0" /> {location}
+          {adjuntoTipos.size > 0 && (
+            <span className="flex items-center gap-1 ml-1 text-slate-500">
+              {ADJUNTO_TIPO_ICONS.filter((o) => adjuntoTipos.has(o.tipo)).map((o) => (
+                <span key={o.tipo} title={o.title}>
+                  <o.Icon className="h-3 w-3" />
+                </span>
+              ))}
+            </span>
+          )}
         </div>
         <div className="text-xs text-slate-600">Asignado a: {asignadoCodigo}</div>
         {inc.data_prevista && (
