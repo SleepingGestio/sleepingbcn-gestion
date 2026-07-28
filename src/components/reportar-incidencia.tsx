@@ -125,11 +125,11 @@ export function ReportarIncidenciaSheet({
     queryKey: ["reportar-incidencia-pendientes", pendingScopeIdApt, pendingScopeIdEspacio],
     enabled: pendingScopeKnown,
     queryFn: async (): Promise<
-      { id_incidencia: number; titol: string | null; tipus: IncidenciaTipo; estat: Estat; data_incident: string | null; creado_en: string }[]
+      { id_incidencia: number; titol: string | null; descripcio: string | null; tipus: IncidenciaTipo; estat: Estat; data_incident: string | null; creado_en: string }[]
     > => {
       let q = supabase
         .from("manteniment_incidencies")
-        .select("id_incidencia, titol, tipus, estat, data_incident, creado_en")
+        .select("id_incidencia, titol, descripcio, tipus, estat, data_incident, creado_en")
         .in("estat", ["pendent_validacio", "validada", "en_curs"])
         .order("creado_en", { ascending: false });
       q = pendingScopeIdApt != null
@@ -138,7 +138,7 @@ export function ReportarIncidenciaSheet({
       const { data, error } = await q;
       if (error) throw error;
       return (data ?? []) as unknown as {
-        id_incidencia: number; titol: string | null; tipus: IncidenciaTipo; estat: Estat; data_incident: string | null; creado_en: string;
+        id_incidencia: number; titol: string | null; descripcio: string | null; tipus: IncidenciaTipo; estat: Estat; data_incident: string | null; creado_en: string;
       }[];
     },
   });
@@ -364,12 +364,7 @@ export function ReportarIncidenciaSheet({
             <>
               <div>
                 <div className="text-lg font-semibold">Reportar incidencia</div>
-                <div className="text-xs text-muted-foreground">Incidencias pendientes en esta propiedad</div>
-              </div>
-
-              <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm">
-                <div className="text-xs text-muted-foreground uppercase tracking-wide">Ubicación</div>
-                <div className="font-medium">{resolvedLocationLabel}</div>
+                <div className="text-xs text-muted-foreground">Incidencias pendientes en {resolvedLocationLabel}</div>
               </div>
 
               {pendingIncidenciasQ.isLoading ? (
@@ -385,7 +380,7 @@ export function ReportarIncidenciaSheet({
                     const estadoStyle = ESTADO_FULL_STYLE[inc.estat];
                     return (
                       <div key={inc.id_incidencia} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm">
-                        <div className="font-medium truncate">{inc.titol}</div>
+                        {inc.descripcio && <div className="text-sm text-slate-700 line-clamp-2">{inc.descripcio}</div>}
                         <div className="mt-1 flex items-center gap-1.5 flex-wrap">
                           <span
                             className="rounded px-1.5 py-0.5 text-[10px] font-semibold"
