@@ -205,6 +205,21 @@ function DetallPage() {
     },
   });
 
+  const pendientesQ = useQuery({
+    queryKey: ["reg-horari-det-pendientes", idPersona, start, end],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("limpiezas")
+        .select("id_apt, tipo, sfc_montar")
+        .eq("worker", idPersona)
+        .in("estado", ["comunicada", "aceptada", "en_curso"])
+        .gte("fecha_limpieza", start)
+        .lte("fecha_limpieza", end);
+      if (error) throw error;
+      return (data ?? []) as Array<{ id_apt: number; tipo: string | null; sfc_montar: boolean | null }>;
+    },
+  });
+
   const limpiezasRegistreQ = useQuery({
     queryKey: ["reg-horari-det-limpiezas-registre", idPersona, start, end],
     queryFn: async () => {
@@ -322,8 +337,9 @@ function DetallPage() {
     for (const l of limpiezasQ.data ?? []) s.add(l.id_apt);
     for (const r of limpiezasRegistreQ.data ?? []) if (r.limpiezas?.id_apt != null) s.add(r.limpiezas.id_apt);
     for (const r of genericQ.data ?? []) if (r.id_apt != null) s.add(r.id_apt);
+    for (const p of pendientesQ.data ?? []) s.add(p.id_apt);
     return Array.from(s);
-  }, [limpiezasQ.data, limpiezasRegistreQ.data, genericQ.data]);
+  }, [limpiezasQ.data, limpiezasRegistreQ.data, genericQ.data, pendientesQ.data]);
 
   const aptsQ = useQuery({
     queryKey: ["reg-horari-det-apts", aptIds.join(",")],
@@ -331,10 +347,15 @@ function DetallPage() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("apartamentos")
-        .select("id_apt, nombre")
+        .select("id_apt, nombre, tiempo_estandar_std_sin_sfc, tiempo_estandar_std_con_sfc, tiempo_estandar_extra_cr")
         .in("id_apt", aptIds);
       if (error) throw error;
-      return (data ?? []) as Array<{ id_apt: number; nombre: string | null }>;
+      return (data ?? []) as Array<{
+        id_apt: number; nombre: string | null;
+        tiempo_estandar_std_sin_sfc: number | null;
+        tiempo_estandar_std_con_sfc: number | null;
+        tiempo_estandar_extra_cr: number | null;
+      }>;
     },
   });
 
@@ -343,6 +364,33 @@ function DetallPage() {
     for (const a of aptsQ.data ?? []) m.set(a.id_apt, a.nombre ?? `Apt #${a.id_apt}`);
     return m;
   }, [aptsQ.data]);
+
+  const aptStdById = useMemo(() => {
+    const m = new Map<number, { sin_sfc: number | null; con_sfc: number | null; extra_cr: number | null }>();
+    for (const a of aptsQ.data ?? []) {
+      m.set(a.id_apt, {
+        sin_sfc: a.tiempo_estandar_std_sin_sfc,
+        con_sfc: a.tiempo_estandar_std_con_sfc,
+        extra_cr: a.tiempo_estandar_extra_cr,
+      });
+    }
+    return m;
+  }, [aptsQ.data]);
+
+  const scheduledPendingHours = useMemo(() => {
+    let total = 0;
+    for (const p of pendientesQ.data ?? []) {
+      const std = aptStdById.get(p.id_apt);
+      if (!std) continue;
+      const value = p.tipo === "intermedia"
+        ? std.extra_cr
+        : p.sfc_montar
+          ? std.con_sfc
+          : std.sin_sfc;
+      if (value != null) total += value;
+    }
+    return total;
+  }, [pendientesQ.data, aptStdById]);
 
   const rows = useMemo<Row[]>(() => {
     const out: Row[] = [];
@@ -565,6 +613,7 @@ function DetallPage() {
           effectiveObjective={totals.effectiveObjective}
           saldo={totals.saldo}
           isAutonom={totals.isAutonom}
+          scheduledPending={scheduledPendingHours}
         />
 
         <div className="flex flex-wrap items-center gap-3 mb-3">
@@ -767,12 +816,21 @@ function DetailPopoverDialog({ row, onClose }: { row: Row | null; onClose: () =>
   );
 }
 
+function hexToRgba(hex: string, alpha: number): string {
+  const clean = hex.replace("#", "");
+  const r = parseInt(clean.substring(0, 2), 16);
+  const g = parseInt(clean.substring(2, 4), 16);
+  const b = parseInt(clean.substring(4, 6), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
 function HoresProgress({
   worked, adjustments, reductions, reductionTipo,
-  baseObjective, effectiveObjective, saldo, isAutonom,
+  baseObjective, effectiveObjective, saldo, isAutonom, scheduledPending,
 }: {
   worked: number; adjustments: number; reductions: number; reductionTipo: string | null;
   baseObjective: number | null; effectiveObjective: number | null; saldo: number; isAutonom: boolean;
+  scheduledPending: number;
 }) {
   const BASE_PCT = 80;
   const hasObjective = baseObjective != null && baseObjective > 0 && effectiveObjective != null;
@@ -781,6 +839,9 @@ function HoresProgress({
   // Positions relative to bar container width (%). Base objective sits at 80%.
   const effPct = hasObjective ? (effectiveObjective! / baseObjective!) * BASE_PCT : 0;
   const workedPct = hasObjective ? Math.min(100, (total / baseObjective!) * BASE_PCT) : 0;
+  const scheduledPendingPct = hasObjective
+    ? Math.min(100 - workedPct, (scheduledPending / baseObjective!) * BASE_PCT)
+    : 0;
 
   // Progress bar color
   let workedColor = "#1D9E75";
@@ -849,6 +910,19 @@ function HoresProgress({
             >
               {workedPct > 8 ? fmtHours(worked) : ""}
             </div>
+            {scheduledPending > 0 && (
+              <div
+                className="absolute inset-y-0 flex items-center justify-end pr-2 text-xs font-semibold"
+                style={{
+                  left: `${workedPct}%`,
+                  width: `${scheduledPendingPct}%`,
+                  background: hexToRgba(workedColor, 0.35),
+                  color: "#1F2937",
+                }}
+              >
+                {scheduledPendingPct > 8 ? `+${fmtHours(scheduledPending)}` : ""}
+              </div>
+            )}
           </div>
           {/* Vertical marker at effectiveObjective */}
           {hasObjective && (
