@@ -253,6 +253,32 @@ function CambioBadge({ tipo }: { tipo: string }) {
   );
 }
 
+const MANT_PRIORIDAD_RANK: Record<string, number> = { alta: 0, normal: 1, baixa: 2 };
+
+function mantPriorityRank(inc: Incidencia): number {
+  const p = inc.prioritat_confirmada ?? inc.prioritat_proposta;
+  return MANT_PRIORIDAD_RANK[p ?? ""] ?? 3;
+}
+
+// Distinct from PendienteAtrasadaBadge (cleaning-only) and the RotateCcw
+// "reprogramada por operario" icon already on this card — own visual so the
+// three don't get confused with each other.
+function MantAtrasadaBadge() {
+  return (
+    <span className="rounded-full px-2 py-0.5 text-[10px] font-semibold border bg-orange-100 text-orange-900 border-orange-300">
+      Atrasada
+    </span>
+  );
+}
+
+function MantSinProgramarBadge() {
+  return (
+    <span className="rounded-full px-2 py-0.5 text-[10px] font-semibold border bg-slate-100 text-slate-700 border-slate-300">
+      Sin fecha programada
+    </span>
+  );
+}
+
 function MiDiaPage() {
   const { persona, loading: loadingPersona } = useCurrentPersonal();
   const { canView, canEdit, isAdmin } = usePermissions();
@@ -986,6 +1012,51 @@ function WorkerView({
 
   const mantActions = useMantenimientoActions(refetchMant);
 
+  // ---- Mantenimiento "mías" grouped by day (mirrors daysWithTasks' spirit
+  // for cleanings, but kept as a separate parallel structure — cleanings and
+  // maintenance stay visually separate sections, both driven by activeDay).
+  // Explicit id_assignat/estat filter for safety even though mantIncidenciasQ
+  // is already scoped to "mias" whenever this data actually gets read below
+  // (isMantenimiento + mantFiltro==="mias", or the always-mías non-Mantenimiento path).
+  const mantMiasIncidencias = useMemo(
+    () =>
+      (mantIncidenciasQ.data ?? []).filter(
+        (i) => i.id_assignat === personalId && (i.estat === "validada" || i.estat === "en_curs"),
+      ),
+    [mantIncidenciasQ.data, personalId],
+  );
+
+  const { mantDaysMap, mantOverdueIds, mantUnscheduledIds } = useMemo(() => {
+    const byDate = new Map<string, Incidencia[]>();
+    const overdue: Incidencia[] = [];
+    const unscheduled: Incidencia[] = [];
+    for (const inc of mantMiasIncidencias) {
+      const fecha = inc.data_prevista;
+      if (fecha == null) {
+        unscheduled.push(inc);
+      } else if (fecha < todayISO) {
+        overdue.push(inc);
+      } else {
+        const arr = byDate.get(fecha) ?? [];
+        arr.push(inc);
+        byDate.set(fecha, arr);
+      }
+    }
+    overdue.sort((a, b) => (a.data_prevista ?? "").localeCompare(b.data_prevista ?? ""));
+    unscheduled.sort((a, b) => mantPriorityRank(a) - mantPriorityRank(b));
+    for (const arr of byDate.values()) arr.sort((a, b) => mantPriorityRank(a) - mantPriorityRank(b));
+
+    const todaysOwn = byDate.get(todayISO) ?? [];
+    const map = new Map(byDate);
+    map.set(todayISO, [...overdue, ...todaysOwn, ...unscheduled]);
+
+    return {
+      mantDaysMap: map,
+      mantOverdueIds: new Set(overdue.map((i) => i.id_incidencia)),
+      mantUnscheduledIds: new Set(unscheduled.map((i) => i.id_incidencia)),
+    };
+  }, [mantMiasIncidencias, todayISO]);
+
   const startGenericInFlightRef = useRef(false);
 
   async function startGeneric(
@@ -1090,6 +1161,17 @@ function WorkerView({
         hasPending: tasks.some((t) => t.estado === "comunicada"),
       }));
   }, [tasksQ.data, todayISO]);
+
+  // Union of cleaning days and mías-maintenance-only days, so a worker can
+  // navigate to a future day that only has a maintenance task assigned and
+  // no cleaning. todayISO is always included, even if both sources are empty
+  // for it — mantDaysMap already guarantees a (possibly empty) todayISO key.
+  const tabDates = useMemo(() => {
+    const s = new Set<string>([todayISO]);
+    for (const d of daysWithTasks) s.add(d.fecha);
+    for (const fecha of mantDaysMap.keys()) s.add(fecha);
+    return Array.from(s).sort((a, b) => a.localeCompare(b));
+  }, [daysWithTasks, mantDaysMap, todayISO]);
 
   // Default day: first available if today has none
   useEffect(() => {
@@ -1354,7 +1436,7 @@ function WorkerView({
                       </div>
                     </div>
                   ))
-                : (mantIncidenciasQ.data ?? []).map((inc) => (
+                : (mantFiltro === "mias" ? mantDaysMap.get(activeDay) ?? [] : mantIncidenciasQ.data ?? []).map((inc) => (
                     <MantenimientoTaskCard
                       key={inc.id_incidencia}
                       inc={inc}
@@ -1363,6 +1445,8 @@ function WorkerView({
                       misSesiones={mantMisSesionesByIncidencia.get(inc.id_incidencia) ?? []}
                       adjuntoTipos={adjuntoTiposByIncidencia.get(inc.id_incidencia) ?? new Set()}
                       notifTipo={notifByReferencia.get(inc.id_incidencia)?.slice(-1)[0]?.tipo}
+                      esAtrasada={mantOverdueIds.has(inc.id_incidencia)}
+                      sinProgramar={mantUnscheduledIds.has(inc.id_incidencia)}
                       disabled={disabled}
                       onIniciar={() => mantActions.iniciar(inc, personalId)}
                       onFinParcial={() =>
@@ -1405,7 +1489,7 @@ function WorkerView({
             </>
           )}
         </div>
-      ) : daysWithTasks.length === 0 ? (
+      ) : daysWithTasks.length === 0 && tabDates.length <= 1 ? (
         <div className="p-3 text-center">
           <p className="text-xs text-muted-foreground mb-3">
             No tienes limpiezas asignadas hoy, pero sí tareas de mantenimiento arriba.
@@ -1424,13 +1508,14 @@ function WorkerView({
         <>
           <div className={cn("sticky z-20 bg-slate-200 border-b", previewing ? "top-[96px]" : "top-[60px]")}>
             <div className="flex gap-2 overflow-x-auto px-3 py-2">
-              {daysWithTasks.map((d) => {
-                const active = d.fecha === activeDay;
+              {tabDates.map((fecha) => {
+                const active = fecha === activeDay;
+                const hasPending = daysWithTasks.find((d) => d.fecha === fecha)?.hasPending ?? false;
                 return (
                   <button
-                    key={d.fecha}
+                    key={fecha}
                     type="button"
-                    onClick={() => setActiveDay(d.fecha)}
+                    onClick={() => setActiveDay(fecha)}
                     className={cn(
                       "relative shrink-0 rounded-full px-4 h-11 text-sm font-medium transition-colors min-w-[88px]",
                       active
@@ -1438,8 +1523,8 @@ function WorkerView({
                         : "bg-white text-slate-700 border border-slate-200",
                     )}
                   >
-                    {tabLabel(d.fecha, todayISO, tomorrowISO)}
-                    {d.hasPending && (
+                    {tabLabel(fecha, todayISO, tomorrowISO)}
+                    {hasPending && (
                       <span className="absolute -bottom-0.5 left-1/2 -translate-x-1/2 h-1.5 w-1.5 rounded-full bg-amber-400" />
                     )}
                   </button>
@@ -1503,7 +1588,7 @@ function WorkerView({
           toggle UI, so mantIncidenciasQ is already scoped to just their own. */}
       {!isMantenimiento && (mantIncidenciasQ.data ?? []).length > 0 && (
         <div className="px-3 mt-3 flex flex-col gap-3">
-          {(mantIncidenciasQ.data ?? []).map((inc) => (
+          {(mantDaysMap.get(activeDay) ?? []).map((inc) => (
             <MantenimientoTaskCard
               key={inc.id_incidencia}
               inc={inc}
@@ -1512,6 +1597,8 @@ function WorkerView({
               misSesiones={mantMisSesionesByIncidencia.get(inc.id_incidencia) ?? []}
               adjuntoTipos={adjuntoTiposByIncidencia.get(inc.id_incidencia) ?? new Set()}
               notifTipo={notifByReferencia.get(inc.id_incidencia)?.slice(-1)[0]?.tipo}
+              esAtrasada={mantOverdueIds.has(inc.id_incidencia)}
+              sinProgramar={mantUnscheduledIds.has(inc.id_incidencia)}
               disabled={disabled}
               onIniciar={() => mantActions.iniciar(inc, personalId)}
               onFinParcial={() =>
@@ -2001,6 +2088,8 @@ function MantenimientoTaskCard({
   misSesiones,
   adjuntoTipos,
   notifTipo,
+  esAtrasada,
+  sinProgramar,
   disabled,
   onIniciar,
   onFinParcial,
@@ -2015,6 +2104,8 @@ function MantenimientoTaskCard({
   misSesiones: Registre[];
   adjuntoTipos: Set<string>;
   notifTipo?: string;
+  esAtrasada?: boolean;
+  sinProgramar?: boolean;
   disabled: boolean;
   onIniciar: () => Promise<void> | void;
   onFinParcial: () => Promise<void> | void;
@@ -2053,6 +2144,8 @@ function MantenimientoTaskCard({
           <TipoBadge tipus={inc.tipus} />
           <PrioridadPill prioridad={inc.prioritat_confirmada ?? inc.prioritat_proposta} />
           {notifTipo && <CambioBadge tipo={notifTipo} />}
+          {esAtrasada && <MantAtrasadaBadge />}
+          {sinProgramar && <MantSinProgramarBadge />}
         </div>
         {inc.descripcio && (
           <div className="text-sm text-foreground font-medium line-clamp-2">{inc.descripcio}</div>
