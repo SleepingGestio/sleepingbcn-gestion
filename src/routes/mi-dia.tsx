@@ -727,6 +727,9 @@ function WorkerView({
     id_tipus: number;
     inici: string;
     notes: string | null;
+    id_apt: number | null;
+    id_grupo: number | null;
+    id_tipo_espacio_comun: number | null;
     tipos_tarea_generica: { nombre: string } | null;
   };
   type TipoGen = { id_tipus: number; nombre: string; orden: number | null };
@@ -753,7 +756,7 @@ function WorkerView({
     queryFn: async (): Promise<ActiveGen | null> => {
       const { data, error } = await supabase
         .from("registre_temps_generic")
-        .select("id_registre, id_tipus, inici, notes, tipos_tarea_generica(nombre)")
+        .select("id_registre, id_tipus, inici, notes, id_apt, id_grupo, id_tipo_espacio_comun, tipos_tarea_generica(nombre)")
         .eq("id_persona", personalId)
         .is("fi", null)
         .order("inici", { ascending: false })
@@ -1103,7 +1106,7 @@ function WorkerView({
     }
   }
 
-  async function finishGeneric() {
+  async function finishGeneric(openEndSheet: boolean = true) {
     if (disabled || !activeGen) return;
     const nowIso = new Date().toISOString();
     const hores = diffHoursMinutes(activeGen.inici, nowIso);
@@ -1113,8 +1116,91 @@ function WorkerView({
       .eq("id_registre", activeGen.id_registre);
     if (error) { toast.error("Error: " + error.message); return; }
     toast.success("Tarea finalizada");
-    setEndSheetOpen(true);
+    if (openEndSheet) setEndSheetOpen(true);
     refetchJornada();
+  }
+
+  // ---- Starting a maintenance incidencia while a tarea genérica is open ----
+  // Out of scope: the reverse (starting a generic task while an incidencia is
+  // open) and any broader "only one active thing" rule — this only covers
+  // Iniciar-on-incidencia-while-activeGen, and the matching Fin Total/Fin
+  // Parcial afterward on that SAME incidencia.
+  type PendingReopenGen = {
+    id_tipus: number;
+    nombre: string;
+    idGrupo: number | null;
+    idApt: number | null;
+    idEspacioComun: number | null;
+    notes: string | null;
+    triggerIncidenciaId: number;
+  };
+  const [confirmCloseGenInc, setConfirmCloseGenInc] = useState<Incidencia | null>(null);
+  const [pendingReopenGen, setPendingReopenGen] = useState<PendingReopenGen | null>(null);
+  const [reopenGenDialogOpen, setReopenGenDialogOpen] = useState(false);
+
+  function activeGenNombre(gen: NonNullable<typeof activeGen>): string {
+    return (
+      tiposQ.data?.find((t) => t.id_tipus === gen.id_tipus)?.nombre ??
+      gen.tipos_tarea_generica?.nombre ??
+      "Tarea genérica"
+    );
+  }
+
+  function handleIniciarIncidencia(inc: Incidencia) {
+    if (activeGen) {
+      setConfirmCloseGenInc(inc);
+    } else {
+      mantActions.iniciar(inc, personalId);
+    }
+  }
+
+  async function confirmCloseGenAndIniciar() {
+    const inc = confirmCloseGenInc;
+    setConfirmCloseGenInc(null);
+    if (!inc) return;
+    if (activeGen) {
+      setPendingReopenGen({
+        id_tipus: activeGen.id_tipus,
+        nombre: activeGenNombre(activeGen),
+        idGrupo: activeGen.id_grupo,
+        idApt: activeGen.id_apt,
+        idEspacioComun: activeGen.id_tipo_espacio_comun,
+        notes: activeGen.notes,
+        triggerIncidenciaId: inc.id_incidencia,
+      });
+      await finishGeneric(false);
+    }
+    await mantActions.iniciar(inc, personalId);
+    mantIncidenciasQ.refetch();
+  }
+
+  async function handleMantFinTotal(inc: Incidencia) {
+    const ok = await mantActions.finTotal(inc);
+    if (ok && pendingReopenGen?.triggerIncidenciaId === inc.id_incidencia) {
+      setReopenGenDialogOpen(true);
+    }
+  }
+
+  async function handleMantFinParcial(inc: Incidencia, sesiones: Registre[]) {
+    const ok = await mantActions.finParcial(inc, personalId, sesiones);
+    if (ok && pendingReopenGen?.triggerIncidenciaId === inc.id_incidencia) {
+      setReopenGenDialogOpen(true);
+    }
+  }
+
+  async function confirmReopenGen() {
+    const p = pendingReopenGen;
+    setReopenGenDialogOpen(false);
+    setPendingReopenGen(null);
+    if (!p) return;
+    await startGeneric(p.id_tipus, p.notes ?? "", p.idGrupo, p.idApt, p.idEspacioComun);
+  }
+
+  function declineReopenGen() {
+    setReopenGenDialogOpen(false);
+    setPendingReopenGen(null);
+    setDetailId(null);
+    setMantDetailId(null);
   }
 
   async function tancarJornada() {
@@ -1448,11 +1534,11 @@ function WorkerView({
                       esAtrasada={mantOverdueIds.has(inc.id_incidencia)}
                       sinProgramar={mantUnscheduledIds.has(inc.id_incidencia)}
                       disabled={disabled}
-                      onIniciar={() => mantActions.iniciar(inc, personalId)}
+                      onIniciar={() => handleIniciarIncidencia(inc)}
                       onFinParcial={() =>
-                        mantActions.finParcial(inc, personalId, mantMisSesionesByIncidencia.get(inc.id_incidencia) ?? [])
+                        handleMantFinParcial(inc, mantMisSesionesByIncidencia.get(inc.id_incidencia) ?? [])
                       }
-                      onFinTotal={() => mantActions.finTotal(inc)}
+                      onFinTotal={() => handleMantFinTotal(inc)}
                       onOpenDetail={() => setMantDetailId(inc.id_incidencia)}
                       onReprogramar={(nuevaFecha) => mantActions.reprogramar(inc, nuevaFecha)}
                       todayISO={todayISO}
@@ -1600,11 +1686,11 @@ function WorkerView({
               esAtrasada={mantOverdueIds.has(inc.id_incidencia)}
               sinProgramar={mantUnscheduledIds.has(inc.id_incidencia)}
               disabled={disabled}
-              onIniciar={() => mantActions.iniciar(inc, personalId)}
+              onIniciar={() => handleIniciarIncidencia(inc)}
               onFinParcial={() =>
-                mantActions.finParcial(inc, personalId, mantMisSesionesByIncidencia.get(inc.id_incidencia) ?? [])
+                handleMantFinParcial(inc, mantMisSesionesByIncidencia.get(inc.id_incidencia) ?? [])
               }
-              onFinTotal={() => mantActions.finTotal(inc)}
+              onFinTotal={() => handleMantFinTotal(inc)}
               onOpenDetail={() => setMantDetailId(inc.id_incidencia)}
               onReprogramar={(nuevaFecha) => mantActions.reprogramar(inc, nuevaFecha)}
               todayISO={todayISO}
@@ -1641,6 +1727,48 @@ function WorkerView({
       </Sheet>
 
       <ChangePasswordDialog open={pwOpen} onOpenChange={setPwOpen} />
+
+      {/* Confirm closing the open tarea genérica to start an incidencia */}
+      <Dialog open={!!confirmCloseGenInc} onOpenChange={(o) => { if (!o) setConfirmCloseGenInc(null); }}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Tarea genérica abierta</DialogTitle>
+            <DialogDescription>
+              Tienes la tarea genérica '{activeGen ? activeGenNombre(activeGen) : ""}' abierta. ¿Quieres cerrarla e
+              iniciar esta incidencia?
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirmCloseGenInc(null)}>
+              No, volver
+            </Button>
+            <Button className="bg-[#26215C] hover:bg-[#1e1a48] text-white" onClick={confirmCloseGenAndIniciar}>
+              Sí, cerrar e iniciar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Offer to reopen the tarea genérica closed earlier, once the
+          triggering incidencia is finished/paused */}
+      <Dialog open={reopenGenDialogOpen} onOpenChange={(o) => { if (!o) declineReopenGen(); }}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Reabrir tarea genérica</DialogTitle>
+            <DialogDescription>
+              ¿Quieres reabrir la tarea genérica '{pendingReopenGen?.nombre ?? ""}' que cerraste antes?
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={declineReopenGen}>
+              No
+            </Button>
+            <Button className="bg-[#26215C] hover:bg-[#1e1a48] text-white" onClick={confirmReopenGen}>
+              Sí
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Start jornada / generic task sheet */}
       <Sheet open={startSheetOpen} onOpenChange={setStartSheetOpen}>

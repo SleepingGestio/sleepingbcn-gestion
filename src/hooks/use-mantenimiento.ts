@@ -207,6 +207,7 @@ export function useMantenimientoActions(onMutated?: () => void) {
     }
     toast.success("Sesión pausada");
     onMutated?.();
+    return true;
   }
 
   // Finalizing definitively closes the incidencia — it must not leave another
@@ -244,6 +245,7 @@ export function useMantenimientoActions(onMutated?: () => void) {
     }
     toast.success("Tarea finalizada");
     onMutated?.();
+    return true;
   }
 
   async function guardarNota(inc: Pick<Incidencia, "id_incidencia">, nota: string) {
