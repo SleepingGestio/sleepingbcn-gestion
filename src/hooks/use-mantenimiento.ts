@@ -262,7 +262,7 @@ export function useMantenimientoActions(onMutated?: () => void) {
   async function guardarDescripcio(inc: Pick<Incidencia, "id_incidencia">, descripcio: string) {
     const { error } = await supabase
       .from("manteniment_incidencies")
-      .update({ descripcio: descripcio.trim() || null })
+      .update({ descripcio: descripcio || null })
       .eq("id_incidencia", inc.id_incidencia);
     if (error) {
       toast.error("Error: " + error.message);
