@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { fmtDate, fmtDateTime } from "@/lib/format";
-import { formatHHMM } from "@/lib/utils";
+import { cn, formatHHMM } from "@/lib/utils";
 import { fullName } from "@/lib/types";
 import { usePermissions } from "@/hooks/use-permissions";
 import {
@@ -236,7 +236,16 @@ export function MantenimientoPopover({
                   <div className="flex items-center justify-between gap-2">
                     <Label className="text-xs uppercase tracking-wide text-muted-foreground">Descripción</Label>
                     {editable && (
-                      <Button size="sm" variant="outline" className="h-6 px-2 text-xs" disabled={!descripcioDirty} onClick={() => actions.guardarDescripcio(inc, descripcio)}>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className={cn(
+                          "h-6 px-2 text-xs",
+                          descripcioDirty && "bg-red-600 hover:bg-red-700 text-white border-red-600",
+                        )}
+                        disabled={!descripcioDirty}
+                        onClick={() => actions.guardarDescripcio(inc, descripcio)}
+                      >
                         Guardar
                       </Button>
                     )}
@@ -324,7 +333,16 @@ export function MantenimientoPopover({
                   <div className="flex items-center justify-between gap-2">
                     <Label className="text-xs uppercase tracking-wide text-muted-foreground">Notas del gestor</Label>
                     {editable && (
-                      <Button size="sm" variant="outline" className="h-6 px-2 text-xs" disabled={!notaDirty} onClick={() => actions.guardarNota(inc, nota)}>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className={cn(
+                          "h-6 px-2 text-xs",
+                          notaDirty && "bg-red-600 hover:bg-red-700 text-white border-red-600",
+                        )}
+                        disabled={!notaDirty}
+                        onClick={() => actions.guardarNota(inc, nota)}
+                      >
                         Guardar
                       </Button>
                     )}
