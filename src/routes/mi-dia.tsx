@@ -27,7 +27,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { PasswordInput } from "@/components/ui/password-input";
 import { Label } from "@/components/ui/label";
-import { Zap, Sofa, LogOut, Clock, ArrowLeft, Check, X, Play, Pause, Menu, UserCircle2, KeyRound, Square, ClipboardList, Plus, LayoutDashboard, AlertTriangle, Wrench, Home, RotateCcw, Camera, Video, Mic, FileText } from "lucide-react";
+import { Zap, Sofa, LogOut, Clock, ArrowLeft, Check, X, Play, Pause, Menu, UserCircle2, KeyRound, Square, ClipboardList, Plus, LayoutDashboard, AlertTriangle, Wrench, Home, RotateCcw, Camera, Video, Mic, FileText, Bell } from "lucide-react";
 import { ReportarIncidenciaSheet, type ReportarIncidenciaContext } from "@/components/reportar-incidencia";
 import { MantenimientoPopover } from "@/components/mantenimiento-popover";
 import { ApartamentoOcupacionCalendario } from "@/components/apartamento-ocupacion-calendario";
@@ -95,6 +95,16 @@ type LimpiezaDia = Limpieza & { esPendienteAtrasada?: boolean };
 type Apartamento = { id_apt: number; nombre: string };
 type ResvLite = { Número: string; "Check in": string | null; "Check-out": string | null; "Huéspedes": number | null };
 type ComDia = { worker: number; fecha: string; observaciones: string | null };
+type MiDiaNotificacion = {
+  id_notificacion: number;
+  id_persona: number;
+  tipo: string;
+  referencia_id: number | null;
+  mensaje: string | null;
+  fecha_afectada: string | null;
+  creado_en: string | null;
+  visto: boolean;
+};
 
 function toISO(d: Date): string {
   const tz = d.getTimezoneOffset() * 60000;
@@ -118,6 +128,17 @@ function localHM(s: string | null | undefined): string | null {
 }
 function startOfMonth(d: Date) { return new Date(d.getFullYear(), d.getMonth(), 1); }
 function endOfMonth(d: Date) { return new Date(d.getFullYear(), d.getMonth() + 1, 0); }
+
+const DOW_FULL = ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"];
+
+function notifDayLabel(iso: string, todayISO: string, tomorrowISO: string): string {
+  if (iso === todayISO) return "hoy";
+  if (iso === tomorrowISO) return "mañana";
+  const d = fromISO(iso);
+  const dd = String(d.getDate()).padStart(2, "0");
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  return `${DOW_FULL[d.getDay()]} ${dd}/${mm}`;
+}
 
 function tabLabel(iso: string, todayISO: string, tomorrowISO: string): string {
   const d = fromISO(iso);
@@ -213,6 +234,24 @@ const ADJUNTO_TIPO_ICONS: { tipo: string; Icon: typeof Camera; title: string }[]
   { tipo: "nota_veu", Icon: Mic, title: "Tiene notas de voz" },
   { tipo: "document", Icon: FileText, title: "Tiene documentos" },
 ];
+
+// Small badge shown on task/incidencia cards affected by a pending
+// mi_dia_notificaciones row — consistent red accent matching the banner,
+// "nueva" gets a distinct color since it's a new assignment, not a change.
+function CambioBadge({ tipo }: { tipo: string }) {
+  const isNueva = tipo.endsWith("_nueva");
+  return (
+    <span
+      className={cn(
+        "inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold",
+        isNueva && "bg-blue-100 text-blue-900",
+      )}
+      style={!isNueva ? { backgroundColor: "#FCEBEB", color: "#791F1F" } : undefined}
+    >
+      {isNueva ? "Nueva" : "Reprogramada"}
+    </span>
+  );
+}
 
 function MiDiaPage() {
   const { persona, loading: loadingPersona } = useCurrentPersonal();
@@ -431,6 +470,59 @@ function WorkerView({
       return (data as ComDia | null) ?? null;
     },
   });
+
+  // ---- Mi Día change notifications (unread only) ----
+  const notificacionesQ = useQuery({
+    queryKey: ["mi-dia-notificaciones", personalId],
+    queryFn: async (): Promise<MiDiaNotificacion[]> => {
+      const { data, error } = await supabase
+        .from("mi_dia_notificaciones")
+        .select("*")
+        .eq("id_persona", personalId)
+        .eq("visto", false)
+        .order("creado_en", { ascending: true });
+      if (error) throw error;
+      return (data ?? []) as MiDiaNotificacion[];
+    },
+  });
+
+  const notifByFecha = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const n of notificacionesQ.data ?? []) {
+      const f = n.fecha_afectada ?? "—";
+      m.set(f, (m.get(f) ?? 0) + 1);
+    }
+    return Array.from(m.entries()).sort(([a], [b]) => a.localeCompare(b));
+  }, [notificacionesQ.data]);
+
+  const notifByReferencia = useMemo(() => {
+    const m = new Map<number, { tipo: string }[]>();
+    for (const n of notificacionesQ.data ?? []) {
+      if (n.referencia_id == null) continue;
+      const arr = m.get(n.referencia_id) ?? [];
+      arr.push({ tipo: n.tipo });
+      m.set(n.referencia_id, arr);
+    }
+    return m;
+  }, [notificacionesQ.data]);
+
+  const notifSummary = useMemo(() => {
+    if (notifByFecha.length === 0) return "";
+    const parts = notifByFecha.map(([fecha, count]) => `${notifDayLabel(fecha, todayISO, tomorrowISO)} (${count})`);
+    if (parts.length === 1) return `Cambios: ${parts[0]}`;
+    return `Cambios: ${parts.slice(0, -1).join(", ")} y ${parts[parts.length - 1]}`;
+  }, [notifByFecha, todayISO, tomorrowISO]);
+
+  async function marcarNotificacionesVistas() {
+    const ids = (notificacionesQ.data ?? []).map((n) => n.id_notificacion);
+    if (ids.length === 0) return;
+    const { error } = await supabase
+      .from("mi_dia_notificaciones")
+      .update({ visto: true })
+      .in("id_notificacion", ids);
+    if (error) { toast.error("Error: " + error.message); return; }
+    notificacionesQ.refetch();
+  }
 
   // Month hours
   const monthTasksQ = useQuery({
@@ -1129,6 +1221,33 @@ function WorkerView({
         </div>
       </header>
 
+      {/* Change notifications banner — never auto-dismissed on mount, only on
+          explicit "Ver" / close interaction (marks all currently-fetched rows visto). */}
+      {(notificacionesQ.data ?? []).length > 0 && (
+        <div
+          className="mx-3 mt-3 rounded-lg px-3 py-2.5 flex items-center gap-2"
+          style={{ backgroundColor: "#FCEBEB", color: "#791F1F" }}
+        >
+          <Bell className="h-5 w-5 shrink-0 notif-bell-pulse" />
+          <div className="flex-1 text-sm font-semibold">{notifSummary}</div>
+          <button
+            type="button"
+            className="shrink-0 text-sm font-semibold underline underline-offset-2"
+            onClick={marcarNotificacionesVistas}
+          >
+            Ver
+          </button>
+          <button
+            type="button"
+            className="shrink-0 rounded-full p-1 hover:bg-black/5"
+            aria-label="Cerrar aviso"
+            onClick={marcarNotificacionesVistas}
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      )}
+
       {/* Persistent entry point for Mantenimiento workers — no active cleaning required */}
       {isMantenimiento && (
         <div className="px-3 mt-3">
@@ -1243,6 +1362,7 @@ function WorkerView({
                       asignadoCodigo={workerCode(inc.id_assignat, mantAssignatCodigosQ.data ?? [])}
                       misSesiones={mantMisSesionesByIncidencia.get(inc.id_incidencia) ?? []}
                       adjuntoTipos={adjuntoTiposByIncidencia.get(inc.id_incidencia) ?? new Set()}
+                      notifTipo={notifByReferencia.get(inc.id_incidencia)?.slice(-1)[0]?.tipo}
                       disabled={disabled}
                       onIniciar={() => mantActions.iniciar(inc, personalId)}
                       onFinParcial={() =>
@@ -1343,6 +1463,7 @@ function WorkerView({
                 t={t}
                 apt={aptById.get(t.id_apt)}
                 resv={resvQ.data ?? new Map()}
+                notifTipo={notifByReferencia.get(t.id_limpieza)?.slice(-1)[0]?.tipo}
                 disabled={disabled}
                 onChanged={refetchAll}
                 onOpenDetail={() => setDetailId(t.id_limpieza)}
@@ -1390,6 +1511,7 @@ function WorkerView({
               asignadoCodigo={workerCode(inc.id_assignat, mantAssignatCodigosQ.data ?? [])}
               misSesiones={mantMisSesionesByIncidencia.get(inc.id_incidencia) ?? []}
               adjuntoTipos={adjuntoTiposByIncidencia.get(inc.id_incidencia) ?? new Set()}
+              notifTipo={notifByReferencia.get(inc.id_incidencia)?.slice(-1)[0]?.tipo}
               disabled={disabled}
               onIniciar={() => mantActions.iniciar(inc, personalId)}
               onFinParcial={() =>
@@ -1618,11 +1740,12 @@ function TimeChip({ time, informed }: { time: string | null; informed: boolean |
 }
 
 function TaskCard({
-  t, apt, resv, disabled, onChanged, onOpenDetail, onFinish, onReportIncidencia,
+  t, apt, resv, notifTipo, disabled, onChanged, onOpenDetail, onFinish, onReportIncidencia,
 }: {
   t: LimpiezaDia;
   apt: Apartamento | undefined;
   resv: Map<string, ResvLite>;
+  notifTipo?: string;
   disabled: boolean;
   onChanged: () => void;
   onOpenDetail: () => void;
@@ -1730,6 +1853,7 @@ function TaskCard({
           </div>
           <div className="flex items-center gap-1.5 shrink-0">
             {t.esPendienteAtrasada && <PendienteAtrasadaBadge />}
+            {notifTipo && <CambioBadge tipo={notifTipo} />}
             <StateBadge estado={t.estado} />
           </div>
         </div>
@@ -1876,6 +2000,7 @@ function MantenimientoTaskCard({
   asignadoCodigo,
   misSesiones,
   adjuntoTipos,
+  notifTipo,
   disabled,
   onIniciar,
   onFinParcial,
@@ -1889,6 +2014,7 @@ function MantenimientoTaskCard({
   asignadoCodigo: string;
   misSesiones: Registre[];
   adjuntoTipos: Set<string>;
+  notifTipo?: string;
   disabled: boolean;
   onIniciar: () => Promise<void> | void;
   onFinParcial: () => Promise<void> | void;
@@ -1926,6 +2052,7 @@ function MantenimientoTaskCard({
         <div className="flex items-center gap-1.5 flex-wrap">
           <TipoBadge tipus={inc.tipus} />
           <PrioridadPill prioridad={inc.prioritat_confirmada ?? inc.prioritat_proposta} />
+          {notifTipo && <CambioBadge tipo={notifTipo} />}
         </div>
         {inc.descripcio && (
           <div className="text-sm text-foreground font-medium line-clamp-2">{inc.descripcio}</div>

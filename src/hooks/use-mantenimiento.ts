@@ -92,7 +92,7 @@ export function useMantenimientoActions(onMutated?: () => void) {
   }
 
   async function confirmarAsignacion(
-    inc: Pick<Incidencia, "id_incidencia">,
+    inc: Pick<Incidencia, "id_incidencia" | "titol">,
     workerId: number,
     fecha: string | null,
     prioridad: Prioridad,
@@ -114,6 +114,20 @@ export function useMantenimientoActions(onMutated?: () => void) {
       return;
     }
     toast.success("Incidencia asignada");
+    // Best-effort — a notification failure must never undo the assignment
+    // that already succeeded above.
+    try {
+      const { error: notifError } = await supabase.from("mi_dia_notificaciones").insert({
+        id_persona: workerId,
+        tipo: "mantenimiento_nueva",
+        referencia_id: inc.id_incidencia,
+        fecha_afectada: fecha,
+        mensaje: inc.titol ? `Nueva incidencia asignada: ${inc.titol}` : "Nueva incidencia asignada",
+      });
+      if (notifError) console.warn("No se pudo crear la notificación:", notifError.message);
+    } catch (e) {
+      console.warn("No se pudo crear la notificación:", e);
+    }
     onMutated?.();
   }
 
@@ -258,7 +272,7 @@ export function useMantenimientoActions(onMutated?: () => void) {
     onMutated?.();
   }
 
-  async function reprogramar(inc: Pick<Incidencia, "id_incidencia">, nuevaFecha: string) {
+  async function reprogramar(inc: Pick<Incidencia, "id_incidencia" | "id_assignat">, nuevaFecha: string) {
     const { error } = await supabase
       .from("manteniment_incidencies")
       .update({ data_prevista: nuevaFecha, data_reprogramada_por_operario: true })
@@ -268,6 +282,22 @@ export function useMantenimientoActions(onMutated?: () => void) {
       return;
     }
     toast.success("Fecha reprogramada");
+    // Best-effort — a notification failure must never undo the reschedule
+    // that already succeeded above.
+    if (inc.id_assignat != null) {
+      try {
+        const { error: notifError } = await supabase.from("mi_dia_notificaciones").insert({
+          id_persona: inc.id_assignat,
+          tipo: "mantenimiento_reprogramada",
+          referencia_id: inc.id_incidencia,
+          fecha_afectada: nuevaFecha,
+          mensaje: `Incidencia reprogramada a ${nuevaFecha}`,
+        });
+        if (notifError) console.warn("No se pudo crear la notificación:", notifError.message);
+      } catch (e) {
+        console.warn("No se pudo crear la notificación:", e);
+      }
+    }
     onMutated?.();
   }
 

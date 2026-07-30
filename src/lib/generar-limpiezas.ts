@@ -17,6 +17,7 @@ type ResVw = {
 type Apt = {
   id_apt: number;
   id_grupo: number | null;
+  nombre: string;
   camas_fijas: number | null;
   tiene_sofa_cama: boolean | null;
   requiere_limpieza_intermedia: boolean | null;
@@ -44,6 +45,16 @@ type ExistingLimp = {
   affected_by_kb_change?: boolean | null;
   affected_reason?: string | null;
   estado?: string | null;
+  worker?: number | null;
+};
+
+const REASON_LABELS: Record<string, string> = {
+  fechas: "cambio de fechas",
+  horario: "cambio de horario",
+  apartamento: "cambio de apartamento",
+  huespedes: "cambio de ocupación",
+  proxima_reserva: "cambio de reserva",
+  cancelada: "cancelación de reserva",
 };
 
 // The normal reservation lifecycle is Confirmada → Check-in realizado →
@@ -132,7 +143,7 @@ export async function generarLimpiezas(fromISO: string, toISO: string): Promise<
     aptIds.length
       ? supabase
           .from("apartamentos")
-          .select("id_apt, id_grupo, camas_fijas, tiene_sofa_cama, requiere_limpieza_intermedia")
+          .select("id_apt, id_grupo, nombre, camas_fijas, tiene_sofa_cama, requiere_limpieza_intermedia")
           .in("id_apt", aptIds)
       : Promise.resolve({ data: [] as Apt[], error: null }),
     supabase.from("grupos_apartamentos").select("id_grupo, mostrar_por_defecto"),
@@ -158,7 +169,7 @@ export async function generarLimpiezas(fromISO: string, toISO: string): Promise<
     ? await supabase
         .from("limpiezas")
         .select(
-          "id_limpieza, numero_reserva, id_apt, fecha_limpieza, tipo, hora_out_time, hora_in_time, hora_in_informed, sfc_montar, sfc_montar_manual, sfc_desmontar, sfc_desmontar_manual, proxima_reserva_numero, affected_by_kb_change, affected_reason, estado",
+          "id_limpieza, numero_reserva, id_apt, fecha_limpieza, tipo, hora_out_time, hora_in_time, hora_in_informed, sfc_montar, sfc_montar_manual, sfc_desmontar, sfc_desmontar_manual, proxima_reserva_numero, affected_by_kb_change, affected_reason, estado, worker",
         )
         .in("numero_reserva", numeros)
     : { data: [], error: null };
@@ -211,7 +222,7 @@ export async function generarLimpiezas(fromISO: string, toISO: string): Promise<
     if (extraAptIds.length) {
       const { data: extraApts } = await supabase
         .from("apartamentos")
-        .select("id_apt, camas_fijas, tiene_sofa_cama, requiere_limpieza_intermedia")
+        .select("id_apt, nombre, camas_fijas, tiene_sofa_cama, requiere_limpieza_intermedia")
         .in("id_apt", extraAptIds);
       for (const a of ((extraApts ?? []) as Apt[])) aptMap.set(a.id_apt, a);
     }
@@ -222,6 +233,13 @@ export async function generarLimpiezas(fromISO: string, toISO: string): Promise<
       proxima_reserva_numero?: string | null;
     };
     const updates: { id: number; payload: UpdatePayload }[] = [];
+    const notifications: {
+      id_persona: number;
+      tipo: string;
+      referencia_id: number;
+      fecha_afectada: string;
+      mensaje: string;
+    }[] = [];
 
     for (const l of salidaExisting) {
       const numero = l.numero_reserva!;
@@ -319,6 +337,19 @@ export async function generarLimpiezas(fromISO: string, toISO: string): Promise<
         if (needsBackfill) payload.proxima_reserva_numero = freshNextNumero;
         updates.push({ id: l.id_limpieza, payload });
       }
+
+      if (!l.affected_by_kb_change && isAffected && l.worker != null) {
+        const aptName = aptMap.get(cur?.id_apt ?? l.id_apt)?.nombre ?? `Apt #${cur?.id_apt ?? l.id_apt}`;
+        const reasonLabel = REASON_LABELS[reason!] ?? reason!;
+        const fechaAfectada = reason === "fechas" ? baseCo : l.fecha_limpieza;
+        notifications.push({
+          id_persona: l.worker,
+          tipo: "limpieza_reprogramada",
+          referencia_id: l.id_limpieza,
+          fecha_afectada: fechaAfectada,
+          mensaje: `${aptName}: ${reasonLabel}`,
+        });
+      }
     }
 
     for (const u of updates) {
@@ -326,6 +357,11 @@ export async function generarLimpiezas(fromISO: string, toISO: string): Promise<
         .from("limpiezas")
         .update(u.payload)
         .eq("id_limpieza", u.id);
+      if (error) throw error;
+    }
+
+    if (notifications.length) {
+      const { error } = await supabase.from("mi_dia_notificaciones").insert(notifications);
       if (error) throw error;
     }
   }

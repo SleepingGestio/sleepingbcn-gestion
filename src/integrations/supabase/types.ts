@@ -897,6 +897,39 @@ export type Database = {
         }
         Relationships: []
       }
+      mi_dia_notificaciones: {
+        Row: {
+          creado_en: string | null
+          fecha_afectada: string | null
+          id_notificacion: number
+          id_persona: number
+          mensaje: string | null
+          referencia_id: number | null
+          tipo: string
+          visto: boolean
+        }
+        Insert: {
+          creado_en?: string | null
+          fecha_afectada?: string | null
+          id_notificacion?: never
+          id_persona: number
+          mensaje?: string | null
+          referencia_id?: number | null
+          tipo: string
+          visto?: boolean
+        }
+        Update: {
+          creado_en?: string | null
+          fecha_afectada?: string | null
+          id_notificacion?: never
+          id_persona?: number
+          mensaje?: string | null
+          referencia_id?: number | null
+          tipo?: string
+          visto?: boolean
+        }
+        Relationships: []
+      }
       personal: {
         Row: {
           activo: boolean | null
