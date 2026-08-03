@@ -963,6 +963,28 @@ function WorkerView({
     return m;
   }, [mantMisSesionesQ.data]);
 
+  // Worker's own open manteniment_registre session, regardless of estat/id_assignat
+  // or which mantFiltro tab is currently loaded — mirrors activeGenQ's "what is this
+  // worker doing right now" role but for mantenimiento instead of tareas genéricas.
+  type ActiveMantSession = Registre & { manteniment_incidencies: { titol: string } | null };
+  const activeMantSessionQ = useQuery({
+    queryKey: ["mi-dia-active-mant-session", personalId],
+    queryFn: async (): Promise<ActiveMantSession | null> => {
+      const { data, error } = await supabase
+        .from("manteniment_registre")
+        .select(`${REGISTRE_COLUMNS},manteniment_incidencies(titol)`)
+        .eq("id_persona", personalId)
+        .is("fi", null)
+        .order("inici", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (error) throw error;
+      return (data as unknown as ActiveMantSession | null) ?? null;
+    },
+    refetchInterval: 60_000,
+  });
+  const activeMantSession = activeMantSessionQ.data ?? null;
+
   const mantAdjuntoTiposQ = useQuery({
     queryKey: ["mi-dia-mant-adjunto-tipos", mantIncIdsKey],
     enabled: mantIncIds.length > 0,
@@ -1011,6 +1033,7 @@ function WorkerView({
   function refetchMant() {
     mantIncidenciasQ.refetch();
     mantMisSesionesQ.refetch();
+    activeMantSessionQ.refetch();
   }
 
   const mantActions = useMantenimientoActions(refetchMant);
@@ -1068,8 +1091,8 @@ function WorkerView({
     idGrupo: number | null,
     idApt: number | null,
     idEspacioComun: number | null,
-  ) {
-    if (disabled || startGenericInFlightRef.current) return;
+  ): Promise<number | null> {
+    if (disabled || startGenericInFlightRef.current) return null;
     startGenericInFlightRef.current = true;
     try {
       const nowIso = new Date().toISOString();
@@ -1081,7 +1104,7 @@ function WorkerView({
           .insert({ id_persona: personalId, fecha: todayISO, hora_entrada: nowIso })
           .select("id_fichaje")
           .single();
-        if (fErr) { toast.error("Error fichaje: " + fErr.message); return; }
+        if (fErr) { toast.error("Error fichaje: " + fErr.message); return null; }
         fichajeId = (f as { id_fichaje: number }).id_fichaje;
       }
       // 2. Insert registre genèric
@@ -1094,13 +1117,16 @@ function WorkerView({
       if (idApt != null) payload.id_apt = idApt;
       if (idGrupo != null) payload.id_grupo = idGrupo;
       if (idEspacioComun != null) payload.id_tipo_espacio_comun = idEspacioComun;
-      const { error: rErr } = await supabase
+      const { data: inserted, error: rErr } = await supabase
         .from("registre_temps_generic")
-        .insert(payload);
-      if (rErr) { toast.error("Error: " + rErr.message); return; }
+        .insert(payload)
+        .select("id_registre")
+        .single();
+      if (rErr) { toast.error("Error: " + rErr.message); return null; }
       toast.success("Tarea iniciada");
       setStartSheetOpen(false);
       refetchJornada();
+      return (inserted as { id_registre: number }).id_registre;
     } finally {
       startGenericInFlightRef.current = false;
     }
@@ -1116,7 +1142,17 @@ function WorkerView({
       .eq("id_registre", activeGen.id_registre);
     if (error) { toast.error("Error: " + error.message); return; }
     toast.success("Tarea finalizada");
-    if (openEndSheet) setEndSheetOpen(true);
+    if (openEndSheet) {
+      // Case 4: this finish is the SECOND genérica that was started by pausing an
+      // earlier one — offer to reopen the earlier one instead of the normal
+      // end-of-task sheet. openEndSheet=false (the internal auto-close used while
+      // pausing) never reaches this branch, so it can't misfire mid-interrupt.
+      if (pendingReopenGen?.trigger.kind === "generic" && pendingReopenGen.trigger.id === activeGen.id_registre) {
+        setReopenGenDialogOpen(true);
+      } else {
+        setEndSheetOpen(true);
+      }
+    }
     refetchJornada();
   }
 
@@ -1125,6 +1161,9 @@ function WorkerView({
   // open) and any broader "only one active thing" rule — this only covers
   // Iniciar-on-incidencia-while-activeGen, and the matching Fin Total/Fin
   // Parcial afterward on that SAME incidencia.
+  type PendingReopenGenTrigger =
+    | { kind: "incidencia"; id: number }
+    | { kind: "generic"; id: number };
   type PendingReopenGen = {
     id_tipus: number;
     nombre: string;
@@ -1132,9 +1171,27 @@ function WorkerView({
     idApt: number | null;
     idEspacioComun: number | null;
     notes: string | null;
-    triggerIncidenciaId: number;
+    trigger: PendingReopenGenTrigger;
   };
-  const [confirmCloseGenInc, setConfirmCloseGenInc] = useState<Incidencia | null>(null);
+  // Case 1 (genérica activa → iniciar incidencia) and Case 4 (genérica activa →
+  // iniciar OTRA genérica) both interrupt the current tarea genérica and offer
+  // Pausar (sets up pendingReopenGen) vs Cerrar definitivamente (no reopen offer).
+  type PendingGenInterrupt =
+    | { kind: "incidencia"; inc: Incidencia }
+    | {
+        kind: "generic-start";
+        idTipus: number;
+        notes: string;
+        idGrupo: number | null;
+        idApt: number | null;
+        idEspacioComun: number | null;
+      };
+  // Case 2 (incidencia activa → iniciar OTRA incidencia) and Case 3 (incidencia
+  // activa → iniciar tarea genérica) — pause the active incidencia (finParcial) and
+  // proceed. No reopen offer: finParcial already returns it to "validada".
+  type PendingMantInterrupt = { kind: "incidencia"; inc: Incidencia } | { kind: "generic-start" };
+  const [confirmCloseGenInterrupt, setConfirmCloseGenInterrupt] = useState<PendingGenInterrupt | null>(null);
+  const [confirmPauseMant, setConfirmPauseMant] = useState<PendingMantInterrupt | null>(null);
   const [pendingReopenGen, setPendingReopenGen] = useState<PendingReopenGen | null>(null);
   const [reopenGenDialogOpen, setReopenGenDialogOpen] = useState(false);
 
@@ -1148,42 +1205,118 @@ function WorkerView({
 
   function handleIniciarIncidencia(inc: Incidencia) {
     if (activeGen) {
-      setConfirmCloseGenInc(inc);
+      setConfirmCloseGenInterrupt({ kind: "incidencia", inc });
+      return;
+    }
+    if (activeMantSession && activeMantSession.id_incidencia !== inc.id_incidencia) {
+      setConfirmPauseMant({ kind: "incidencia", inc });
+      return;
+    }
+    mantActions.iniciar(inc, personalId);
+  }
+
+  // Case 3: clicking any "Iniciar tarea genérica" entry point. If an incidencia is
+  // active it's paused first (Case 3's confirm dialog); otherwise the sheet opens
+  // directly. Case 4 (genérica already active) is handled later, inside
+  // handleStartGenericSubmit, once the user has actually picked the new task's
+  // type/notes in the sheet.
+  function handleClickIniciarGenerica() {
+    if (activeMantSession) {
+      setConfirmPauseMant({ kind: "generic-start" });
+      return;
+    }
+    setStartSheetOpen(true);
+  }
+
+  async function handleStartGenericSubmit(
+    idTipus: number,
+    notes: string,
+    idGrupo: number | null,
+    idApt: number | null,
+    idEspacioComun: number | null,
+  ) {
+    if (activeGen) {
+      setStartSheetOpen(false);
+      setConfirmCloseGenInterrupt({ kind: "generic-start", idTipus, notes, idGrupo, idApt, idEspacioComun });
+      return;
+    }
+    await startGeneric(idTipus, notes, idGrupo, idApt, idEspacioComun);
+  }
+
+  // Note: neither branch below needs an explicit mantIncidenciasQ.refetch() after
+  // mantActions.iniciar() — that call already triggers onMutated (refetchMant),
+  // which refetches mantIncidenciasQ/mantMisSesionesQ/activeMantSessionQ internally.
+  async function confirmCloseGenPausar() {
+    const target = confirmCloseGenInterrupt;
+    setConfirmCloseGenInterrupt(null);
+    if (!target || !activeGen) return;
+    const snapshot = {
+      id_tipus: activeGen.id_tipus,
+      nombre: activeGenNombre(activeGen),
+      idGrupo: activeGen.id_grupo,
+      idApt: activeGen.id_apt,
+      idEspacioComun: activeGen.id_tipo_espacio_comun,
+      notes: activeGen.notes,
+    };
+    await finishGeneric(false);
+    if (target.kind === "incidencia") {
+      setPendingReopenGen({ ...snapshot, trigger: { kind: "incidencia", id: target.inc.id_incidencia } });
+      await mantActions.iniciar(target.inc, personalId);
     } else {
-      mantActions.iniciar(inc, personalId);
+      const newId = await startGeneric(target.idTipus, target.notes, target.idGrupo, target.idApt, target.idEspacioComun);
+      if (newId != null) {
+        setPendingReopenGen({ ...snapshot, trigger: { kind: "generic", id: newId } });
+      }
     }
   }
 
-  async function confirmCloseGenAndIniciar() {
-    const inc = confirmCloseGenInc;
-    setConfirmCloseGenInc(null);
-    if (!inc) return;
-    if (activeGen) {
-      setPendingReopenGen({
-        id_tipus: activeGen.id_tipus,
-        nombre: activeGenNombre(activeGen),
-        idGrupo: activeGen.id_grupo,
-        idApt: activeGen.id_apt,
-        idEspacioComun: activeGen.id_tipo_espacio_comun,
-        notes: activeGen.notes,
-        triggerIncidenciaId: inc.id_incidencia,
-      });
-      await finishGeneric(false);
+  async function confirmCloseGenDefinitiva() {
+    const target = confirmCloseGenInterrupt;
+    setConfirmCloseGenInterrupt(null);
+    if (!target) return;
+    await finishGeneric(false);
+    if (target.kind === "incidencia") {
+      await mantActions.iniciar(target.inc, personalId);
+    } else {
+      await startGeneric(target.idTipus, target.notes, target.idGrupo, target.idApt, target.idEspacioComun);
     }
-    await mantActions.iniciar(inc, personalId);
-    mantIncidenciasQ.refetch();
+  }
+
+  async function confirmPauseMantAndProceed() {
+    const target = confirmPauseMant;
+    setConfirmPauseMant(null);
+    if (!target || !activeMantSession) return;
+    const sesiones: Registre[] = [
+      {
+        id_registre: activeMantSession.id_registre,
+        id_incidencia: activeMantSession.id_incidencia,
+        id_persona: activeMantSession.id_persona,
+        inici: activeMantSession.inici,
+        fi: activeMantSession.fi,
+        hores: activeMantSession.hores,
+        notas: activeMantSession.notas,
+        cost_materials: activeMantSession.cost_materials,
+        desc_materials: activeMantSession.desc_materials,
+      },
+    ];
+    await mantActions.finParcial({ id_incidencia: activeMantSession.id_incidencia }, personalId, sesiones);
+    if (target.kind === "incidencia") {
+      await mantActions.iniciar(target.inc, personalId);
+    } else {
+      setStartSheetOpen(true);
+    }
   }
 
   async function handleMantFinTotal(inc: Incidencia) {
     const ok = await mantActions.finTotal(inc);
-    if (ok && pendingReopenGen?.triggerIncidenciaId === inc.id_incidencia) {
+    if (ok && pendingReopenGen?.trigger.kind === "incidencia" && pendingReopenGen.trigger.id === inc.id_incidencia) {
       setReopenGenDialogOpen(true);
     }
   }
 
   async function handleMantFinParcial(inc: Incidencia, sesiones: Registre[]) {
     const ok = await mantActions.finParcial(inc, personalId, sesiones);
-    if (ok && pendingReopenGen?.triggerIncidenciaId === inc.id_incidencia) {
+    if (ok && pendingReopenGen?.trigger.kind === "incidencia" && pendingReopenGen.trigger.id === inc.id_incidencia) {
       setReopenGenDialogOpen(true);
     }
   }
@@ -1197,10 +1330,16 @@ function WorkerView({
   }
 
   function declineReopenGen() {
+    const p = pendingReopenGen;
     setReopenGenDialogOpen(false);
     setPendingReopenGen(null);
-    setDetailId(null);
-    setMantDetailId(null);
+    // Only close the detail panel that matches what triggered this reopen offer —
+    // an unrelated detail panel the user has open must not be closed as a side effect.
+    // Tareas genéricas have no detail panel of their own, so a "generic" trigger has
+    // nothing to close here.
+    if (p?.trigger.kind === "incidencia" && mantDetailId === p.trigger.id) {
+      setMantDetailId(null);
+    }
   }
 
   async function tancarJornada() {
@@ -1568,7 +1707,7 @@ function WorkerView({
                 size="lg"
                 className="h-14 px-6 bg-[#26215C] hover:bg-[#1e1a48] text-white text-base"
                 disabled={disabled}
-                onClick={() => setStartSheetOpen(true)}
+                onClick={handleClickIniciarGenerica}
               >
                 <Play className="h-5 w-5" /> Iniciar jornada
               </Button>
@@ -1580,15 +1719,13 @@ function WorkerView({
           <p className="text-xs text-muted-foreground mb-3">
             No tienes limpiezas asignadas hoy, pero sí tareas de mantenimiento arriba.
           </p>
-          {!activeGen && (
-            <Button
-              className="w-full h-12 bg-[#26215C] hover:bg-[#1e1a48] text-white"
-              disabled={disabled}
-              onClick={() => setStartSheetOpen(true)}
-            >
-              <ClipboardList className="h-4 w-4" /> Iniciar tarea genérica
-            </Button>
-          )}
+          <Button
+            className="w-full h-12 bg-[#26215C] hover:bg-[#1e1a48] text-white"
+            disabled={disabled}
+            onClick={handleClickIniciarGenerica}
+          >
+            <ClipboardList className="h-4 w-4" /> Iniciar tarea genérica
+          </Button>
         </div>
       ) : (
         <>
@@ -1652,18 +1789,19 @@ function WorkerView({
             </div>
           )}
 
-          {/* Extra CTA: also let workers start a generic task on days they have assignments */}
-          {!activeGen && (
-            <div className="px-3 mt-4">
-              <Button
-                className="w-full h-12 bg-[#26215C] hover:bg-[#1e1a48] text-white"
-                disabled={disabled}
-                onClick={() => setStartSheetOpen(true)}
-              >
-                <ClipboardList className="h-4 w-4" /> Iniciar tarea genérica
-              </Button>
-            </div>
-          )}
+          {/* Extra CTA: also let workers start a generic task on days they have
+              assignments. Not gated on activeGen — starting a second genérica while
+              one is already active is Case 4 of the interrupt flow, handled in
+              handleStartGenericSubmit once the user picks the new task in the sheet. */}
+          <div className="px-3 mt-4">
+            <Button
+              className="w-full h-12 bg-[#26215C] hover:bg-[#1e1a48] text-white"
+              disabled={disabled}
+              onClick={handleClickIniciarGenerica}
+            >
+              <ClipboardList className="h-4 w-4" /> Iniciar tarea genérica
+            </Button>
+          </div>
         </>
       )}
 
@@ -1728,22 +1866,51 @@ function WorkerView({
 
       <ChangePasswordDialog open={pwOpen} onOpenChange={setPwOpen} />
 
-      {/* Confirm closing the open tarea genérica to start an incidencia */}
-      <Dialog open={!!confirmCloseGenInc} onOpenChange={(o) => { if (!o) setConfirmCloseGenInc(null); }}>
+      {/* Case 1 & 4: a tarea genérica is open and the user wants to start something
+          else (an incidencia, or another tarea genérica) — offer Pausar (remember it
+          for a later reopen offer) vs Cerrar definitivamente (no reopen offer). */}
+      <Dialog open={!!confirmCloseGenInterrupt} onOpenChange={(o) => { if (!o) setConfirmCloseGenInterrupt(null); }}>
         <DialogContent className="sm:max-w-sm">
           <DialogHeader>
             <DialogTitle>Tarea genérica abierta</DialogTitle>
             <DialogDescription>
-              Tienes la tarea genérica '{activeGen ? activeGenNombre(activeGen) : ""}' abierta. ¿Quieres cerrarla e
-              iniciar esta incidencia?
+              Tienes la tarea genérica '{activeGen ? activeGenNombre(activeGen) : ""}' abierta. ¿Quieres pausarla
+              (te la ofreceremos de nuevo más tarde) o cerrarla definitivamente?
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="flex-col sm:flex-col gap-2">
+            <Button className="w-full bg-[#26215C] hover:bg-[#1e1a48] text-white" onClick={confirmCloseGenPausar}>
+              Pausar e iniciar
+            </Button>
+            <Button className="w-full" variant="outline" onClick={confirmCloseGenDefinitiva}>
+              Cerrar definitivamente e iniciar
+            </Button>
+            <Button className="w-full" variant="ghost" onClick={() => setConfirmCloseGenInterrupt(null)}>
+              No, volver
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Case 2 & 3: an incidencia is already active and the user wants to start a
+          different incidencia, or a tarea genérica — pause the active incidencia
+          (finParcial) and proceed. No reopen offer: finParcial already returns it to
+          "validada" with its own "Iniciar" button. */}
+      <Dialog open={!!confirmPauseMant} onOpenChange={(o) => { if (!o) setConfirmPauseMant(null); }}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Incidencia en curso</DialogTitle>
+            <DialogDescription>
+              Tienes '{activeMantSession?.manteniment_incidencies?.titol ?? "una incidencia"}' en curso. ¿Quieres
+              pausarla e iniciar {confirmPauseMant?.kind === "incidencia" ? "esta incidencia" : "la tarea genérica"}?
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setConfirmCloseGenInc(null)}>
+            <Button variant="outline" onClick={() => setConfirmPauseMant(null)}>
               No, volver
             </Button>
-            <Button className="bg-[#26215C] hover:bg-[#1e1a48] text-white" onClick={confirmCloseGenAndIniciar}>
-              Sí, cerrar e iniciar
+            <Button className="bg-[#26215C] hover:bg-[#1e1a48] text-white" onClick={confirmPauseMantAndProceed}>
+              Sí, pausar e iniciar
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1779,7 +1946,7 @@ function WorkerView({
             apartamentos={aptsAllQ.data ?? []}
             espaciosComunes={espaciosComunesQ.data ?? []}
             disabled={disabled}
-            onStart={startGeneric}
+            onStart={handleStartGenericSubmit}
             onCancel={() => setStartSheetOpen(false)}
             onCreateType={async (nombre) => {
               const cleanName = nombre.toUpperCase().trim();
@@ -1816,7 +1983,7 @@ function WorkerView({
           <EndTaskPanel
             hasPending={todayHasTasks && todayPendingAssigned > 0}
             disabled={disabled}
-            onNewGeneric={() => { setEndSheetOpen(false); setStartSheetOpen(true); }}
+            onNewGeneric={() => { setEndSheetOpen(false); handleClickIniciarGenerica(); }}
             onViewTasks={() => setEndSheetOpen(false)}
             onClose={tancarJornada}
           />
