@@ -4,6 +4,8 @@ import type { TablesUpdate } from "@/integrations/supabase/types";
 import { toast } from "sonner";
 import { fetchActivePersonal } from "@/lib/catalogos";
 import { useCurrentPersonal } from "@/hooks/use-current-personal";
+import { uploadAdjunto } from "@/lib/api/manteniment-adjuntos.functions";
+import type { AdjuntoTipo } from "@/components/reportar-incidencia";
 import { findOpenSession, type AptLite, type EspacioLite, type GrupoLite, type Incidencia, type PersonaLite, type Prioridad, type Registre } from "@/lib/mantenimiento";
 
 function diffHours(a: string, b: string): number {
@@ -278,6 +280,37 @@ export function useMantenimientoActions(onMutated?: () => void) {
     onMutated?.();
   }
 
+  // Shared by MantenimientoPopover's and mi-dia.tsx's own "Fin total" optional
+  // extras dialog — both let the user attach fotos/vídeos/etc. to an incidencia
+  // right after closing it, reusing the exact same upload + manteniment_adjunts
+  // insert flow ReportarIncidenciaSheet uses when creating a new incidencia.
+  // Errors are surfaced per-file (toast) but never thrown — one failed upload
+  // must not abort the rest, this always follows an already-successful finTotal.
+  async function subirAdjuntosIncidencia(
+    idIncidencia: number,
+    adjuntos: { tipo: AdjuntoTipo; file: File }[],
+    creadoPor: number | null,
+  ) {
+    for (const a of adjuntos) {
+      try {
+        const fd = new FormData();
+        fd.set("file", a.file);
+        fd.set("id_incidencia", String(idIncidencia));
+        const result = await uploadAdjunto({ data: fd });
+        await supabase.from("manteniment_adjunts").insert({
+          id_incidencia: idIncidencia,
+          tipus: a.tipo,
+          nom_fitxer: result.nombreOriginal,
+          url: result.key,
+          creado_per: creadoPor,
+        });
+      } catch (e) {
+        console.error("[subirAdjuntosIncidencia] adjunto upload failed:", e);
+        toast.error(`No se pudo subir el adjunto "${a.file.name}"`);
+      }
+    }
+  }
+
   async function guardarDescripcio(inc: Pick<Incidencia, "id_incidencia">, descripcio: string) {
     const { error } = await supabase
       .from("manteniment_incidencies")
@@ -328,6 +361,7 @@ export function useMantenimientoActions(onMutated?: () => void) {
     finTotal,
     guardarNotaGestion,
     guardarNotaFinalizacion,
+    subirAdjuntosIncidencia,
     guardarDescripcio,
     reprogramar,
   };

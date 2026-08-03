@@ -28,7 +28,7 @@ import { Input } from "@/components/ui/input";
 import { PasswordInput } from "@/components/ui/password-input";
 import { Label } from "@/components/ui/label";
 import { Zap, Sofa, LogOut, Clock, ArrowLeft, Check, X, Play, Pause, Menu, UserCircle2, KeyRound, Square, ClipboardList, Plus, LayoutDashboard, AlertTriangle, Wrench, Home, RotateCcw, Camera, Video, Mic, FileText, Bell } from "lucide-react";
-import { ReportarIncidenciaSheet, type ReportarIncidenciaContext } from "@/components/reportar-incidencia";
+import { ReportarIncidenciaSheet, AdjuntoPicker, type ReportarIncidenciaContext, type AdjuntoTipo } from "@/components/reportar-incidencia";
 import { MantenimientoPopover } from "@/components/mantenimiento-popover";
 import { ApartamentoOcupacionCalendario } from "@/components/apartamento-ocupacion-calendario";
 import { cn, formatHHMM } from "@/lib/utils";
@@ -131,7 +131,13 @@ function endOfMonth(d: Date) { return new Date(d.getFullYear(), d.getMonth() + 1
 
 const DOW_FULL = ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"];
 
+// Sentinel for notifications with no fecha_afectada (e.g. an "asignada" notification
+// for an incidencia with no data_prevista set yet) — never a valid ISO date, so it
+// can't collide with a real ISO date key and can be special-cased before parsing.
+const NOTIF_SIN_FECHA = "__sin_fecha__";
+
 function notifDayLabel(iso: string, todayISO: string, tomorrowISO: string): string {
+  if (iso === NOTIF_SIN_FECHA) return "sin fecha";
   if (iso === todayISO) return "hoy";
   if (iso === tomorrowISO) return "mañana";
   const d = fromISO(iso);
@@ -515,10 +521,14 @@ function WorkerView({
   const notifByFecha = useMemo(() => {
     const m = new Map<string, number>();
     for (const n of notificacionesQ.data ?? []) {
-      const f = n.fecha_afectada ?? "—";
+      const f = n.fecha_afectada ?? NOTIF_SIN_FECHA;
       m.set(f, (m.get(f) ?? 0) + 1);
     }
-    return Array.from(m.entries()).sort(([a], [b]) => a.localeCompare(b));
+    return Array.from(m.entries()).sort(([a], [b]) => {
+      if (a === NOTIF_SIN_FECHA) return b === NOTIF_SIN_FECHA ? 0 : 1;
+      if (b === NOTIF_SIN_FECHA) return -1;
+      return a.localeCompare(b);
+    });
   }, [notificacionesQ.data]);
 
   const notifByReferencia = useMemo(() => {
@@ -541,6 +551,10 @@ function WorkerView({
 
   async function marcarNotificacionesVistas() {
     const ids = (notificacionesQ.data ?? []).map((n) => n.id_notificacion);
+    await marcarNotificacionesVistasIds(ids);
+  }
+
+  async function marcarNotificacionesVistasIds(ids: number[]) {
     if (ids.length === 0) return;
     const { error } = await supabase
       .from("mi_dia_notificaciones")
@@ -548,6 +562,107 @@ function WorkerView({
       .in("id_notificacion", ids);
     if (error) { toast.error("Error: " + error.message); return; }
     notificacionesQ.refetch();
+  }
+
+  function handleDismissAllNotifications() {
+    marcarNotificacionesVistas();
+    // A dismiss-all makes any in-progress "Ver" sequence moot — its remaining
+    // steps' notifIds are about to be marked visto anyway, and there's nothing
+    // left to sequence through.
+    setVerQueue(null);
+    setVerQueueIndex(0);
+  }
+
+  // ---- Sequential "Ver" review of pending notifications ----
+  type VerQueueItem = { kind: "incidencia" | "limpieza"; id: number; fecha: string | null; notifIds: number[] };
+  const [verQueue, setVerQueue] = useState<VerQueueItem[] | null>(null);
+  const [verQueueIndex, setVerQueueIndex] = useState(0);
+
+  // Groups unread notifications by the underlying item they're about (an
+  // incidencia or a limpieza), keeping the most recent one's fecha_afectada as
+  // the representative but collecting every id_notificacion in the group — all
+  // of them get marked visto together once the group's item is opened. Sorted by
+  // fecha_afectada ascending, unscheduled last.
+  function buildVerQueue(): VerQueueItem[] {
+    const groups = new Map<
+      string,
+      { kind: "incidencia" | "limpieza"; id: number; fecha: string | null; notifIds: number[]; latestCreado: string }
+    >();
+    for (const n of notificacionesQ.data ?? []) {
+      if (n.referencia_id == null) continue;
+      const kind: "incidencia" | "limpieza" | null = n.tipo.startsWith("mantenimiento_")
+        ? "incidencia"
+        : n.tipo.startsWith("limpieza_")
+          ? "limpieza"
+          : null;
+      if (!kind) continue;
+      const key = `${kind}-${n.referencia_id}`;
+      const creado = n.creado_en ?? "";
+      const existing = groups.get(key);
+      if (existing) {
+        existing.notifIds.push(n.id_notificacion);
+        if (creado >= existing.latestCreado) {
+          existing.fecha = n.fecha_afectada;
+          existing.latestCreado = creado;
+        }
+      } else {
+        groups.set(key, { kind, id: n.referencia_id, fecha: n.fecha_afectada, notifIds: [n.id_notificacion], latestCreado: creado });
+      }
+    }
+    return Array.from(groups.values())
+      .sort((a, b) => {
+        const fa = a.fecha ?? NOTIF_SIN_FECHA;
+        const fb = b.fecha ?? NOTIF_SIN_FECHA;
+        if (fa === NOTIF_SIN_FECHA) return fb === NOTIF_SIN_FECHA ? 0 : 1;
+        if (fb === NOTIF_SIN_FECHA) return -1;
+        return fa.localeCompare(fb);
+      })
+      .map(({ kind, id, fecha, notifIds }) => ({ kind, id, fecha, notifIds }));
+  }
+
+  function openVerStep(item: VerQueueItem) {
+    marcarNotificacionesVistasIds(item.notifIds);
+    // Close whichever detail overlay isn't relevant to this step, so it can't
+    // fight the one we're about to open (Sheet for limpiezas, Dialog for
+    // incidencias — never both should be open at once).
+    if (item.kind === "incidencia") {
+      setDetailId(null);
+      // Every "mantenimiento_*" notification is sent to id_persona = the incidencia's
+      // own id_assignat at the time it was created (see confirmarAsignacion/
+      // reprogramar in use-mantenimiento.ts) — so "mias" is always the right tab.
+      setMantFiltro("mias");
+      setActiveDay(item.fecha ?? todayISO);
+      setMantDetailId(item.id);
+    } else {
+      setMantDetailId(null);
+      if (item.fecha) setActiveDay(item.fecha);
+      setDetailId(item.id);
+    }
+  }
+
+  function handleVerClick() {
+    const queue = buildVerQueue();
+    if (queue.length === 0) return;
+    setVerQueue(queue);
+    setVerQueueIndex(0);
+    openVerStep(queue[0]);
+  }
+
+  function handleVerSiguiente() {
+    if (!verQueue) return;
+    const nextIndex = verQueueIndex + 1;
+    if (nextIndex >= verQueue.length) {
+      setVerQueue(null);
+      setVerQueueIndex(0);
+      return;
+    }
+    setVerQueueIndex(nextIndex);
+    openVerStep(verQueue[nextIndex]);
+  }
+
+  function handleCancelVerQueue() {
+    setVerQueue(null);
+    setVerQueueIndex(0);
   }
 
   // Month hours
@@ -1195,6 +1310,16 @@ function WorkerView({
   const [pendingReopenGen, setPendingReopenGen] = useState<PendingReopenGen | null>(null);
   const [reopenGenDialogOpen, setReopenGenDialogOpen] = useState(false);
 
+  // Optional, skippable "add adjuntos + nota de finalización" follow-up after the
+  // list card's own "Fin total" button — same dialog MantenimientoPopover already
+  // has for its own Fin total button, replicated here for the two
+  // MantenimientoTaskCard usages in this file's own rendering.
+  const [finTotalExtrasOpen, setFinTotalExtrasOpen] = useState(false);
+  const [finTotalExtrasInc, setFinTotalExtrasInc] = useState<Incidencia | null>(null);
+  const [finTotalExtrasAdjuntos, setFinTotalExtrasAdjuntos] = useState<{ tipo: AdjuntoTipo; file: File }[]>([]);
+  const [finTotalExtrasNota, setFinTotalExtrasNota] = useState("");
+  const [finTotalExtrasSaving, setFinTotalExtrasSaving] = useState(false);
+
   function activeGenNombre(gen: NonNullable<typeof activeGen>): string {
     return (
       tiposQ.data?.find((t) => t.id_tipus === gen.id_tipus)?.nombre ??
@@ -1307,11 +1432,48 @@ function WorkerView({
     }
   }
 
+  // The extras dialog is offered first (it's about the incidencia just closed);
+  // the pendingReopenGen check (Case 2/3's existing rule) only runs once the user
+  // resolves it via Guardar or Omitir — see closeFinTotalExtras.
   async function handleMantFinTotal(inc: Incidencia) {
     const ok = await mantActions.finTotal(inc);
-    if (ok && pendingReopenGen?.trigger.kind === "incidencia" && pendingReopenGen.trigger.id === inc.id_incidencia) {
+    if (ok) {
+      setFinTotalExtrasInc(inc);
+      setFinTotalExtrasOpen(true);
+    }
+  }
+
+  function closeFinTotalExtras() {
+    const inc = finTotalExtrasInc;
+    setFinTotalExtrasOpen(false);
+    setFinTotalExtrasAdjuntos([]);
+    setFinTotalExtrasNota("");
+    setFinTotalExtrasInc(null);
+    if (inc && pendingReopenGen?.trigger.kind === "incidencia" && pendingReopenGen.trigger.id === inc.id_incidencia) {
       setReopenGenDialogOpen(true);
     }
+  }
+
+  async function handleGuardarFinTotalExtras() {
+    const inc = finTotalExtrasInc;
+    if (!inc) return;
+    setFinTotalExtrasSaving(true);
+    if (finTotalExtrasAdjuntos.length > 0) {
+      await mantActions.subirAdjuntosIncidencia(inc.id_incidencia, finTotalExtrasAdjuntos, personalId);
+      // Not covered by refetchMant/guardarNotaFinalizacion's onMutated below — this
+      // is the query that drives the list cards' adjunto-type icons.
+      mantAdjuntoTiposQ.refetch();
+    }
+    const notaTrim = finTotalExtrasNota.trim();
+    if (notaTrim) {
+      // guardarNotaFinalizacion's onMutated already refetches mantIncidenciasQ/
+      // mantMisSesionesQ/activeMantSessionQ via refetchMant.
+      await mantActions.guardarNotaFinalizacion(inc, notaTrim);
+    } else if (finTotalExtrasAdjuntos.length > 0) {
+      refetchMant();
+    }
+    setFinTotalExtrasSaving(false);
+    closeFinTotalExtras();
   }
 
   async function handleMantFinParcial(inc: Incidencia, sesiones: Registre[]) {
@@ -1540,7 +1702,7 @@ function WorkerView({
           <button
             type="button"
             className="shrink-0 text-sm font-semibold underline underline-offset-2"
-            onClick={marcarNotificacionesVistas}
+            onClick={handleVerClick}
           >
             Ver
           </button>
@@ -1548,7 +1710,33 @@ function WorkerView({
             type="button"
             className="shrink-0 rounded-full p-1 hover:bg-black/5"
             aria-label="Cerrar aviso"
-            onClick={marcarNotificacionesVistas}
+            onClick={handleDismissAllNotifications}
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      )}
+
+      {/* Sequential "Ver" review progress — floating, distinct from the red
+          banner above so both can coexist while the banner naturally shrinks
+          as each step's notifications get marked visto. */}
+      {verQueue != null && (
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 rounded-full bg-slate-900 text-white pl-4 pr-2 py-2 shadow-lg">
+          <span className="text-sm font-medium whitespace-nowrap">
+            {verQueueIndex + 1} de {verQueue.length} cambios
+          </span>
+          <Button
+            size="sm"
+            className="h-8 px-3 bg-white/15 hover:bg-white/25 text-white"
+            onClick={handleVerSiguiente}
+          >
+            {verQueueIndex + 1 >= verQueue.length ? "Finalizar" : "Ver siguiente"}
+          </Button>
+          <button
+            type="button"
+            className="h-8 w-8 shrink-0 grid place-items-center rounded-full hover:bg-white/15"
+            aria-label="Cancelar revisión"
+            onClick={handleCancelVerQueue}
           >
             <X className="h-4 w-4" />
           </button>
@@ -1932,6 +2120,45 @@ function WorkerView({
             </Button>
             <Button className="bg-[#26215C] hover:bg-[#1e1a48] text-white" onClick={confirmReopenGen}>
               Sí
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Optional, skippable follow-up after Fin total (list card's own button) —
+          the incidencia is already closed by the time this appears, Omitir just
+          discards this extra step. Same pattern as MantenimientoPopover's own
+          version of this dialog. */}
+      <Dialog open={finTotalExtrasOpen} onOpenChange={(o) => { if (!o) closeFinTotalExtras(); }}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Incidencia finalizada</DialogTitle>
+            <DialogDescription>
+              ¿Quieres añadir fotos, vídeos u otros adjuntos y una nota de finalización antes de cerrar?
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <AdjuntoPicker adjuntos={finTotalExtrasAdjuntos} onChange={setFinTotalExtrasAdjuntos} />
+            <div className="space-y-1">
+              <Label className="text-xs">Notas de finalización</Label>
+              <Textarea
+                rows={3}
+                value={finTotalExtrasNota}
+                onChange={(e) => setFinTotalExtrasNota(e.target.value)}
+                placeholder="Describe cómo quedó resuelta la incidencia…"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" disabled={finTotalExtrasSaving} onClick={closeFinTotalExtras}>
+              Omitir
+            </Button>
+            <Button
+              className="bg-[#26215C] hover:bg-[#1e1a48] text-white"
+              disabled={finTotalExtrasSaving}
+              onClick={handleGuardarFinTotalExtras}
+            >
+              {finTotalExtrasSaving ? "Guardando…" : "Guardar"}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { getAdjunto, uploadAdjunto } from "@/lib/api/manteniment-adjuntos.functions";
+import { getAdjunto } from "@/lib/api/manteniment-adjuntos.functions";
 import { AdjuntoPicker, type AdjuntoTipo } from "@/components/reportar-incidencia";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -240,23 +240,8 @@ export function MantenimientoPopover({
   async function handleGuardarFinTotalExtras() {
     if (!inc) return;
     setFinTotalExtrasSaving(true);
-    for (const a of finTotalExtrasAdjuntos) {
-      try {
-        const fd = new FormData();
-        fd.set("file", a.file);
-        fd.set("id_incidencia", String(inc.id_incidencia));
-        const result = await uploadAdjunto({ data: fd });
-        await supabase.from("manteniment_adjunts").insert({
-          id_incidencia: inc.id_incidencia,
-          tipus: a.tipo,
-          nom_fitxer: result.nombreOriginal,
-          url: result.key,
-          creado_per: selfAssignId ?? null,
-        });
-      } catch (e) {
-        console.error("[MantenimientoPopover] adjunto upload failed:", e);
-        toast.error(`No se pudo subir el adjunto "${a.file.name}"`);
-      }
+    if (finTotalExtrasAdjuntos.length > 0) {
+      await actions.subirAdjuntosIncidencia(inc.id_incidencia, finTotalExtrasAdjuntos, selfAssignId ?? null);
     }
     const notaTrim = finTotalExtrasNota.trim();
     if (notaTrim) {
