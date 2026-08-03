@@ -686,6 +686,7 @@ export type Database = {
           id_tipo_espacio_comun: number | null
           iniciat_en: string | null
           material_reposat: boolean | null
+          notas_finalizacion: string | null
           notas_gestor: string | null
           numero_reserva: string | null
           origen: string
@@ -714,6 +715,7 @@ export type Database = {
           id_tipo_espacio_comun?: number | null
           iniciat_en?: string | null
           material_reposat?: boolean | null
+          notas_finalizacion?: string | null
           notas_gestor?: string | null
           numero_reserva?: string | null
           origen: string
@@ -742,6 +744,7 @@ export type Database = {
           id_tipo_espacio_comun?: number | null
           iniciat_en?: string | null
           material_reposat?: boolean | null
+          notas_finalizacion?: string | null
           notas_gestor?: string | null
           numero_reserva?: string | null
           origen?: string
@@ -2003,6 +2006,14 @@ export type Database = {
       can_edit_menu: { Args: { p_menu: string }; Returns: boolean }
       complete_own_onboarding: { Args: never; Returns: undefined }
       current_id_persona: { Args: never; Returns: number }
+      guardar_notas_finalizacion: {
+        Args: { p_id_incidencia: number; p_nota: string }
+        Returns: undefined
+      }
+      guardar_notas_gestion: {
+        Args: { p_id_incidencia: number; p_nota: string }
+        Returns: undefined
+      }
       is_gestor_or_admin: { Args: never; Returns: boolean }
       personal_codigos_by_ids: {
         Args: { p_ids: number[] }
