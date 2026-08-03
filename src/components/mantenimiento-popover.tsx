@@ -2,7 +2,8 @@ import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { getAdjunto } from "@/lib/api/manteniment-adjuntos.functions";
+import { getAdjunto, uploadAdjunto } from "@/lib/api/manteniment-adjuntos.functions";
+import { AdjuntoPicker, type AdjuntoTipo } from "@/components/reportar-incidencia";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -97,6 +98,12 @@ export function MantenimientoPopover({
   const [descripcio, setDescripcio] = useState("");
   const [descripcioLoadedFor, setDescripcioLoadedFor] = useState<number | null>(null);
   const [loadingAdjunto, setLoadingAdjunto] = useState<number | null>(null);
+  const [notaFinalizacion, setNotaFinalizacion] = useState("");
+  const [notaFinalizacionLoadedFor, setNotaFinalizacionLoadedFor] = useState<number | null>(null);
+  const [finTotalExtrasOpen, setFinTotalExtrasOpen] = useState(false);
+  const [finTotalExtrasAdjuntos, setFinTotalExtrasAdjuntos] = useState<{ tipo: AdjuntoTipo; file: File }[]>([]);
+  const [finTotalExtrasNota, setFinTotalExtrasNota] = useState("");
+  const [finTotalExtrasSaving, setFinTotalExtrasSaving] = useState(false);
 
   async function verAdjunto(idAdjunto: number, key: string) {
     const newWindow = window.open("", "_blank");
@@ -170,6 +177,7 @@ export function MantenimientoPopover({
   function refetchAll() {
     detailQ.refetch();
     sesionesQ.refetch();
+    adjuntosQ.refetch();
     onSaved();
   }
 
@@ -193,12 +201,73 @@ export function MantenimientoPopover({
     }
   }, [inc, descripcioLoadedFor]);
 
+  useEffect(() => {
+    if (inc && notaFinalizacionLoadedFor !== inc.id_incidencia) {
+      setNotaFinalizacion(inc.notas_finalizacion ?? "");
+      setNotaFinalizacionLoadedFor(inc.id_incidencia);
+    }
+  }, [inc, notaFinalizacionLoadedFor]);
+
   const open = idIncidencia != null;
   const closedSessions = sesiones.filter((s) => s.fi != null);
   const totalHoras = closedSessions.reduce((sum, s) => sum + (s.hores ?? 0), 0);
   const hasOpenSession = inc != null && sesiones.some((s) => s.fi == null && s.id_persona === inc.id_assignat);
+  // Notas de gestión/finalización: writable by anyone with edit access on the
+  // module, OR anyone who has ever had a manteniment_registre session on THIS
+  // incidencia — narrower than `editable`, which still gates Descripción and the
+  // whole footer action bar. The guardar_notas_* RPCs enforce the same rule
+  // server-side; this is only a UX convenience, not the authorization boundary.
+  const puedeEditarNotasGestion =
+    editable || (selfAssignId != null && sesiones.some((s) => s.id_persona === selfAssignId));
   const notaDirty = inc != null && nota !== (inc.notas_gestor ?? "");
   const descripcioDirty = inc != null && descripcio !== (inc.descripcio ?? "");
+  const notaFinalizacionDirty = inc != null && notaFinalizacion !== (inc.notas_finalizacion ?? "");
+
+  // Fin total already closes the incidencia — this dialog is a purely optional,
+  // skippable follow-up. Skipping it (Omitir) must never undo or block the closure
+  // that already happened.
+  async function handleFinTotalWithExtras(target: Incidencia) {
+    const ok = await actions.finTotal(target);
+    if (ok) setFinTotalExtrasOpen(true);
+  }
+
+  function closeFinTotalExtras() {
+    setFinTotalExtrasOpen(false);
+    setFinTotalExtrasAdjuntos([]);
+    setFinTotalExtrasNota("");
+  }
+
+  async function handleGuardarFinTotalExtras() {
+    if (!inc) return;
+    setFinTotalExtrasSaving(true);
+    for (const a of finTotalExtrasAdjuntos) {
+      try {
+        const fd = new FormData();
+        fd.set("file", a.file);
+        fd.set("id_incidencia", String(inc.id_incidencia));
+        const result = await uploadAdjunto({ data: fd });
+        await supabase.from("manteniment_adjunts").insert({
+          id_incidencia: inc.id_incidencia,
+          tipus: a.tipo,
+          nom_fitxer: result.nombreOriginal,
+          url: result.key,
+          creado_per: selfAssignId ?? null,
+        });
+      } catch (e) {
+        console.error("[MantenimientoPopover] adjunto upload failed:", e);
+        toast.error(`No se pudo subir el adjunto "${a.file.name}"`);
+      }
+    }
+    const notaTrim = finTotalExtrasNota.trim();
+    if (notaTrim) {
+      // guardarNotaFinalizacion's onMutated already refetches detail/sesiones/adjuntos.
+      await actions.guardarNotaFinalizacion(inc, notaTrim);
+    } else if (finTotalExtrasAdjuntos.length > 0) {
+      refetchAll();
+    }
+    setFinTotalExtrasSaving(false);
+    closeFinTotalExtras();
+  }
 
   return (
     <>
@@ -331,8 +400,8 @@ export function MantenimientoPopover({
 
                 <section>
                   <div className="flex items-center justify-between gap-2">
-                    <Label className="text-xs uppercase tracking-wide text-muted-foreground">Notas del gestor</Label>
-                    {editable && (
+                    <Label className="text-xs uppercase tracking-wide text-muted-foreground">NOTAS DE GESTIÓN</Label>
+                    {puedeEditarNotasGestion && (
                       <Button
                         size="sm"
                         variant="outline"
@@ -341,13 +410,13 @@ export function MantenimientoPopover({
                           notaDirty && "bg-red-600 hover:bg-red-700 text-white border-red-600",
                         )}
                         disabled={!notaDirty}
-                        onClick={() => actions.guardarNota(inc, nota)}
+                        onClick={() => actions.guardarNotaGestion(inc, nota)}
                       >
                         Guardar
                       </Button>
                     )}
                   </div>
-                  <Textarea rows={3} className="mt-1" placeholder="Añade notas internas…" value={nota} onChange={(e) => setNota(e.target.value)} disabled={!editable} />
+                  <Textarea rows={3} className="mt-1" placeholder="Añade notas internas…" value={nota} onChange={(e) => setNota(e.target.value)} disabled={!puedeEditarNotasGestion} />
                 </section>
 
                 <section>
@@ -468,6 +537,35 @@ export function MantenimientoPopover({
                     )}
                   </div>
                 </section>
+
+                {inc.notas_finalizacion && inc.notas_finalizacion.trim() && (
+                  <section>
+                    <div className="flex items-center justify-between gap-2">
+                      <Label className="text-xs uppercase tracking-wide text-muted-foreground">NOTAS DE FINALIZACIÓN</Label>
+                      {puedeEditarNotasGestion && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className={cn(
+                            "h-6 px-2 text-xs",
+                            notaFinalizacionDirty && "bg-red-600 hover:bg-red-700 text-white border-red-600",
+                          )}
+                          disabled={!notaFinalizacionDirty}
+                          onClick={() => actions.guardarNotaFinalizacion(inc, notaFinalizacion)}
+                        >
+                          Guardar
+                        </Button>
+                      )}
+                    </div>
+                    <Textarea
+                      rows={3}
+                      className="mt-1"
+                      value={notaFinalizacion}
+                      onChange={(e) => setNotaFinalizacion(e.target.value)}
+                      disabled={!puedeEditarNotasGestion}
+                    />
+                  </section>
+                )}
               </>
             )}
           </div>
@@ -519,7 +617,7 @@ export function MantenimientoPopover({
                   </Button>
                   <Button
                     className="bg-emerald-600 hover:bg-emerald-700 text-white"
-                    onClick={() => actions.finTotal(inc)}
+                    onClick={() => handleFinTotalWithExtras(inc)}
                   >
                     Fin total
                   </Button>
@@ -544,6 +642,43 @@ export function MantenimientoPopover({
           setAssignOpen(false);
         }}
       />
+
+      {/* Optional, skippable follow-up after Fin total — the incidencia is already
+          closed by the time this appears, Omitir just discards this extra step. */}
+      <Dialog open={finTotalExtrasOpen} onOpenChange={(o) => { if (!o) closeFinTotalExtras(); }}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Incidencia finalizada</DialogTitle>
+            <DialogDescription>
+              ¿Quieres añadir fotos, vídeos u otros adjuntos y una nota de finalización antes de cerrar?
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <AdjuntoPicker adjuntos={finTotalExtrasAdjuntos} onChange={setFinTotalExtrasAdjuntos} />
+            <div className="space-y-1">
+              <Label className="text-xs">Notas de finalización</Label>
+              <Textarea
+                rows={3}
+                value={finTotalExtrasNota}
+                onChange={(e) => setFinTotalExtrasNota(e.target.value)}
+                placeholder="Describe cómo quedó resuelta la incidencia…"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" disabled={finTotalExtrasSaving} onClick={closeFinTotalExtras}>
+              Omitir
+            </Button>
+            <Button
+              className="bg-[#26215C] hover:bg-[#1e1a48] text-white"
+              disabled={finTotalExtrasSaving}
+              onClick={handleGuardarFinTotalExtras}
+            >
+              {finTotalExtrasSaving ? "Guardando…" : "Guardar"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

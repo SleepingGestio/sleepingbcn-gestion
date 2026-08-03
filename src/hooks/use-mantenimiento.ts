@@ -248,11 +248,28 @@ export function useMantenimientoActions(onMutated?: () => void) {
     return true;
   }
 
-  async function guardarNota(inc: Pick<Incidencia, "id_incidencia">, nota: string) {
-    const { error } = await supabase
-      .from("manteniment_incidencies")
-      .update({ notas_gestor: nota || null })
-      .eq("id_incidencia", inc.id_incidencia);
+  // Both notas RPCs check server-side (is_gestor_or_admin() OR an existing
+  // manteniment_registre session by current_id_persona() on that incidencia)
+  // instead of via a table-level RLS policy change — the RPC is the real
+  // authorization boundary, client-side gating is only a UX convenience.
+  async function guardarNotaGestion(inc: Pick<Incidencia, "id_incidencia">, nota: string) {
+    const { error } = await supabase.rpc("guardar_notas_gestion", {
+      p_id_incidencia: inc.id_incidencia,
+      p_nota: nota.trim(),
+    });
+    if (error) {
+      toast.error("Error: " + error.message);
+      return;
+    }
+    toast.success("Nota guardada");
+    onMutated?.();
+  }
+
+  async function guardarNotaFinalizacion(inc: Pick<Incidencia, "id_incidencia">, nota: string) {
+    const { error } = await supabase.rpc("guardar_notas_finalizacion", {
+      p_id_incidencia: inc.id_incidencia,
+      p_nota: nota.trim(),
+    });
     if (error) {
       toast.error("Error: " + error.message);
       return;
@@ -303,5 +320,15 @@ export function useMantenimientoActions(onMutated?: () => void) {
     onMutated?.();
   }
 
-  return { rechazar, confirmarAsignacion, iniciar, finParcial, finTotal, guardarNota, guardarDescripcio, reprogramar };
+  return {
+    rechazar,
+    confirmarAsignacion,
+    iniciar,
+    finParcial,
+    finTotal,
+    guardarNotaGestion,
+    guardarNotaFinalizacion,
+    guardarDescripcio,
+    reprogramar,
+  };
 }

@@ -22,7 +22,7 @@ const TIPO_OPTIONS: { value: IncidenciaTipo; label: string; icon: typeof AlertTr
 
 const PRIORIDAD_OPTIONS: Prioridad[] = ["alta", "normal", "baixa"];
 
-type AdjuntoTipo = "foto" | "video" | "nota_veu" | "document";
+export type AdjuntoTipo = "foto" | "video" | "nota_veu" | "document";
 
 const ADJUNTO_OPTIONS: { tipo: AdjuntoTipo; label: string; icon: typeof Camera; accept: string; capture?: "environment" | "user" }[] = [
   { tipo: "foto", label: "Foto", icon: Camera, accept: "image/*", capture: "environment" },
@@ -30,6 +30,67 @@ const ADJUNTO_OPTIONS: { tipo: AdjuntoTipo; label: string; icon: typeof Camera; 
   { tipo: "nota_veu", label: "Nota de voz", icon: Mic, accept: "audio/*", capture: "user" },
   { tipo: "document", label: "Documento", icon: FileText, accept: ".pdf,.doc,.docx" },
 ];
+
+// Controlled attachment picker — file/photo/video/document selection UI, shared by
+// ReportarIncidenciaSheet (new incidencia) and MantenimientoPopover's post-"Fin
+// total" optional-extras dialog. Upload + manteniment_adjunts insert stays with each
+// caller (they differ: creado_per is the reporter vs the worker closing the task).
+export function AdjuntoPicker({
+  adjuntos,
+  onChange,
+}: {
+  adjuntos: { tipo: AdjuntoTipo; file: File }[];
+  onChange: (adjuntos: { tipo: AdjuntoTipo; file: File }[]) => void;
+}) {
+  function addAdjunto(tipoAdj: AdjuntoTipo, file: File | null) {
+    if (!file) return;
+    onChange([...adjuntos, { tipo: tipoAdj, file }]);
+  }
+  function removeAdjunto(i: number) {
+    onChange(adjuntos.filter((_, idx) => idx !== i));
+  }
+  return (
+    <div className="space-y-2">
+      <Label className="text-xs">Adjuntar</Label>
+      <div className="grid grid-cols-4 gap-2">
+        {ADJUNTO_OPTIONS.map((o) => (
+          <label
+            key={o.tipo}
+            className="flex flex-col items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 py-3 text-xs font-medium text-slate-700 hover:bg-slate-50 cursor-pointer"
+          >
+            <o.icon className="h-5 w-5" />
+            {o.label}
+            <input
+              type="file"
+              accept={o.accept}
+              capture={o.capture}
+              className="hidden"
+              onChange={(e) => {
+                addAdjunto(o.tipo, e.target.files?.[0] ?? null);
+                e.target.value = "";
+              }}
+            />
+          </label>
+        ))}
+      </div>
+      {adjuntos.length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          {adjuntos.map((a, i) => (
+            <span
+              key={i}
+              className="inline-flex items-center gap-1 rounded bg-slate-100 px-2 py-1 text-xs text-slate-700"
+            >
+              {a.file.name}
+              <button type="button" onClick={() => removeAdjunto(i)}>
+                <X className="h-3 w-3" />
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 /**
  * Context the sheet is opened from. "neteja" = launched from an active
@@ -175,13 +236,6 @@ export function ReportarIncidenciaSheet({
   function handleClose(o: boolean) {
     if (!o) reset();
     onOpenChange(o);
-  }
-
-  function addAdjunto(tipoAdj: AdjuntoTipo, file: File | null) {
-    if (!file) return;
-    // Files are held in memory here and actually uploaded on submit(),
-    // once we have the incidencia's id.
-    setAdjuntos((prev) => [...prev, { tipo: tipoAdj, file }]);
   }
 
   const filteredApts = manualLocation
@@ -507,48 +561,7 @@ export function ReportarIncidenciaSheet({
                 />
               </div>
 
-              <div className="space-y-2">
-                <Label className="text-xs">Adjuntar</Label>
-                <div className="grid grid-cols-4 gap-2">
-                  {ADJUNTO_OPTIONS.map((o) => (
-                    <label
-                      key={o.tipo}
-                      className="flex flex-col items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 py-3 text-xs font-medium text-slate-700 hover:bg-slate-50 cursor-pointer"
-                    >
-                      <o.icon className="h-5 w-5" />
-                      {o.label}
-                      <input
-                        type="file"
-                        accept={o.accept}
-                        capture={o.capture}
-                        className="hidden"
-                        onChange={(e) => {
-                          addAdjunto(o.tipo, e.target.files?.[0] ?? null);
-                          e.target.value = "";
-                        }}
-                      />
-                    </label>
-                  ))}
-                </div>
-                {adjuntos.length > 0 && (
-                  <div className="flex flex-wrap gap-1.5">
-                    {adjuntos.map((a, i) => (
-                      <span
-                        key={i}
-                        className="inline-flex items-center gap-1 rounded bg-slate-100 px-2 py-1 text-xs text-slate-700"
-                      >
-                        {a.file.name}
-                        <button
-                          type="button"
-                          onClick={() => setAdjuntos((prev) => prev.filter((_, idx) => idx !== i))}
-                        >
-                          <X className="h-3 w-3" />
-                        </button>
-                      </span>
-                    ))}
-                  </div>
-                )}
-              </div>
+              <AdjuntoPicker adjuntos={adjuntos} onChange={setAdjuntos} />
 
               <div className="space-y-1.5">
                 <Label className="text-xs">Prioridad</Label>
