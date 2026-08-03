@@ -627,6 +627,7 @@ export type Database = {
         Row: {
           creado_en: string | null
           creado_per: number | null
+          fase: string
           id_adjunt: number
           id_incidencia: number
           nom_fitxer: string | null
@@ -636,6 +637,7 @@ export type Database = {
         Insert: {
           creado_en?: string | null
           creado_per?: number | null
+          fase?: string
           id_adjunt?: number
           id_incidencia: number
           nom_fitxer?: string | null
@@ -645,6 +647,7 @@ export type Database = {
         Update: {
           creado_en?: string | null
           creado_per?: number | null
+          fase?: string
           id_adjunt?: number
           id_incidencia?: number
           nom_fitxer?: string | null
