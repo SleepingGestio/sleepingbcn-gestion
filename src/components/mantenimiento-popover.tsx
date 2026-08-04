@@ -48,6 +48,94 @@ function dataUrlToBlobUrl(dataUrl: string): string {
   return URL.createObjectURL(blob);
 }
 
+// Grouping-by-tipo (fotos as thumbnails, video/nota_veu/document as link lists)
+// shared by both the "Adjuntos" (fase 'apertura') and "Adjuntos de cierre" (fase
+// 'cierre') sections below — same rendering, just a pre-filtered adjuntos array.
+function AdjuntosGroup({
+  adjuntos,
+  loadingAdjunto,
+  onVer,
+}: {
+  adjuntos: Adjunto[];
+  loadingAdjunto: number | null;
+  onVer: (idAdjunto: number, url: string) => void;
+}) {
+  if (adjuntos.length === 0) {
+    return <div className="text-sm text-muted-foreground italic">Sin adjuntos</div>;
+  }
+
+  const groups = new Map<string, { a: Adjunto; idx: number }[]>();
+  adjuntos.forEach((a, idx) => {
+    const tipus = (a.tipus as string | undefined) ?? "otro";
+    const arr = groups.get(tipus) ?? [];
+    arr.push({ a, idx });
+    groups.set(tipus, arr);
+  });
+  const distinctTypeCount = groups.size;
+  const TYPE_LABELS: Record<string, string> = {
+    video: "Vídeos",
+    nota_veu: "Notas de voz",
+    document: "Documentos",
+  };
+  const fotos = groups.get("foto") ?? [];
+  const otherTypes = (["video", "nota_veu", "document"] as const).filter(
+    (t) => (groups.get(t) ?? []).length > 0,
+  );
+
+  function renderLinkItem({ a, idx }: { a: Adjunto; idx: number }) {
+    const label =
+      (a.nom_fitxer as string | undefined) ??
+      (a.tipus as string | undefined) ??
+      `Adjunto ${idx + 1}`;
+    const idAdjunto = (a.id_adjunt as number | undefined) ?? idx;
+    const url = a.url as string | undefined;
+    return (
+      <li key={idAdjunto} className="text-sm">
+        <button
+          type="button"
+          disabled={!url || loadingAdjunto === idAdjunto}
+          onClick={() => url && onVer(idAdjunto, url)}
+          className="flex items-center gap-1.5 text-primary underline decoration-dotted underline-offset-2 hover:text-primary/80 disabled:opacity-50 disabled:no-underline"
+        >
+          {loadingAdjunto === idAdjunto && <Loader2 className="h-3 w-3 animate-spin" />}
+          {label}
+        </button>
+      </li>
+    );
+  }
+
+  return (
+    <>
+      {fotos.length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          {fotos.map(({ a, idx }) => {
+            const label = (a.nom_fitxer as string | undefined) ?? "foto";
+            const idAdjunto = (a.id_adjunt as number | undefined) ?? idx;
+            const url = a.url as string | undefined;
+            return url ? (
+              <AdjuntoThumbnail key={idAdjunto} idAdjunto={idAdjunto} url={url} label={label} />
+            ) : (
+              <span key={idAdjunto} className="text-sm text-muted-foreground">{label}</span>
+            );
+          })}
+        </div>
+      )}
+      {otherTypes.map((tipus) => (
+        <div key={tipus}>
+          {distinctTypeCount > 1 && (
+            <div className="text-[11px] uppercase tracking-wide text-muted-foreground mb-0.5">
+              {TYPE_LABELS[tipus]}
+            </div>
+          )}
+          <ul className="space-y-1">
+            {(groups.get(tipus) ?? []).map((item) => renderLinkItem(item))}
+          </ul>
+        </div>
+      ))}
+    </>
+  );
+}
+
 function AdjuntoThumbnail({ idAdjunto, url, label }: { idAdjunto: number; url: string; label: string }) {
   const thumbQ = useQuery({
     queryKey: ["adjunto-thumb", idAdjunto],
@@ -186,6 +274,10 @@ export function MantenimientoPopover({
   const inc = detailQ.data ?? null;
   const sesiones = sesionesQ.data ?? [];
   const adjuntos = adjuntosQ.data ?? [];
+  // Legacy rows predating the `fase` column have it null/undefined — treat those
+  // as 'apertura' rather than splitting them into a section that never existed.
+  const adjuntosApertura = adjuntos.filter((a) => (a.fase as string | undefined) !== "cierre");
+  const adjuntosCierre = adjuntos.filter((a) => (a.fase as string | undefined) === "cierre");
 
   useEffect(() => {
     if (inc && notaLoadedFor !== inc.id_incidencia) {
@@ -241,7 +333,7 @@ export function MantenimientoPopover({
     if (!inc) return;
     setFinTotalExtrasSaving(true);
     if (finTotalExtrasAdjuntos.length > 0) {
-      await actions.subirAdjuntosIncidencia(inc.id_incidencia, finTotalExtrasAdjuntos, selfAssignId ?? null);
+      await actions.subirAdjuntosIncidencia(inc.id_incidencia, finTotalExtrasAdjuntos, selfAssignId ?? null, "cierre");
     }
     const notaTrim = finTotalExtrasNota.trim();
     if (notaTrim) {
@@ -407,80 +499,7 @@ export function MantenimientoPopover({
                 <section>
                   <Label className="text-xs uppercase tracking-wide text-muted-foreground">Adjuntos</Label>
                   <div className="mt-1.5 space-y-2">
-                    {adjuntos.length === 0 ? (
-                      <div className="text-sm text-muted-foreground italic">Sin adjuntos</div>
-                    ) : (() => {
-                        const groups = new Map<string, { a: Adjunto; idx: number }[]>();
-                        adjuntos.forEach((a, idx) => {
-                          const tipus = (a.tipus as string | undefined) ?? "otro";
-                          const arr = groups.get(tipus) ?? [];
-                          arr.push({ a, idx });
-                          groups.set(tipus, arr);
-                        });
-                        const distinctTypeCount = groups.size;
-                        const TYPE_LABELS: Record<string, string> = {
-                          video: "Vídeos",
-                          nota_veu: "Notas de voz",
-                          document: "Documentos",
-                        };
-                        const fotos = groups.get("foto") ?? [];
-                        const otherTypes = (["video", "nota_veu", "document"] as const).filter(
-                          (t) => (groups.get(t) ?? []).length > 0,
-                        );
-
-                        function renderLinkItem({ a, idx }: { a: Adjunto; idx: number }) {
-                          const label =
-                            (a.nom_fitxer as string | undefined) ??
-                            (a.tipus as string | undefined) ??
-                            `Adjunto ${idx + 1}`;
-                          const idAdjunto = (a.id_adjunt as number | undefined) ?? idx;
-                          const url = a.url as string | undefined;
-                          return (
-                            <li key={idAdjunto} className="text-sm">
-                              <button
-                                type="button"
-                                disabled={!url || loadingAdjunto === idAdjunto}
-                                onClick={() => url && verAdjunto(idAdjunto, url)}
-                                className="flex items-center gap-1.5 text-primary underline decoration-dotted underline-offset-2 hover:text-primary/80 disabled:opacity-50 disabled:no-underline"
-                              >
-                                {loadingAdjunto === idAdjunto && <Loader2 className="h-3 w-3 animate-spin" />}
-                                {label}
-                              </button>
-                            </li>
-                          );
-                        }
-
-                        return (
-                          <>
-                            {fotos.length > 0 && (
-                              <div className="flex flex-wrap gap-2">
-                                {fotos.map(({ a, idx }) => {
-                                  const label = (a.nom_fitxer as string | undefined) ?? "foto";
-                                  const idAdjunto = (a.id_adjunt as number | undefined) ?? idx;
-                                  const url = a.url as string | undefined;
-                                  return url ? (
-                                    <AdjuntoThumbnail key={idAdjunto} idAdjunto={idAdjunto} url={url} label={label} />
-                                  ) : (
-                                    <span key={idAdjunto} className="text-sm text-muted-foreground">{label}</span>
-                                  );
-                                })}
-                              </div>
-                            )}
-                            {otherTypes.map((tipus) => (
-                              <div key={tipus}>
-                                {distinctTypeCount > 1 && (
-                                  <div className="text-[11px] uppercase tracking-wide text-muted-foreground mb-0.5">
-                                    {TYPE_LABELS[tipus]}
-                                  </div>
-                                )}
-                                <ul className="space-y-1">
-                                  {(groups.get(tipus) ?? []).map((item) => renderLinkItem(item))}
-                                </ul>
-                              </div>
-                            ))}
-                          </>
-                        );
-                      })()}
+                    <AdjuntosGroup adjuntos={adjuntosApertura} loadingAdjunto={loadingAdjunto} onVer={verAdjunto} />
                   </div>
                 </section>
 
@@ -549,6 +568,15 @@ export function MantenimientoPopover({
                       onChange={(e) => setNotaFinalizacion(e.target.value)}
                       disabled={!puedeEditarNotasGestion}
                     />
+                  </section>
+                )}
+
+                {adjuntosCierre.length > 0 && (
+                  <section>
+                    <Label className="text-xs uppercase tracking-wide text-muted-foreground">ADJUNTOS DE CIERRE</Label>
+                    <div className="mt-1.5 space-y-2">
+                      <AdjuntosGroup adjuntos={adjuntosCierre} loadingAdjunto={loadingAdjunto} onVer={verAdjunto} />
+                    </div>
                   </section>
                 )}
               </>

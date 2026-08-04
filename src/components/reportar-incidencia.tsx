@@ -313,6 +313,7 @@ export function ReportarIncidenciaSheet({
             nom_fitxer: result.nombreOriginal,
             url: result.key,
             creado_per: reporterId,
+            fase: "apertura",
           });
         } catch (e) {
           console.error("[ReportarIncidenciaSheet] adjunto upload failed:", e);

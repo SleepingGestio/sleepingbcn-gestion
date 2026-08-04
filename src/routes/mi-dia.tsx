@@ -1459,7 +1459,7 @@ function WorkerView({
     if (!inc) return;
     setFinTotalExtrasSaving(true);
     if (finTotalExtrasAdjuntos.length > 0) {
-      await mantActions.subirAdjuntosIncidencia(inc.id_incidencia, finTotalExtrasAdjuntos, personalId);
+      await mantActions.subirAdjuntosIncidencia(inc.id_incidencia, finTotalExtrasAdjuntos, personalId, "cierre");
       // Not covered by refetchMant/guardarNotaFinalizacion's onMutated below — this
       // is the query that drives the list cards' adjunto-type icons.
       mantAdjuntoTiposQ.refetch();

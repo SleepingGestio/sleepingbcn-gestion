@@ -290,6 +290,7 @@ export function useMantenimientoActions(onMutated?: () => void) {
     idIncidencia: number,
     adjuntos: { tipo: AdjuntoTipo; file: File }[],
     creadoPor: number | null,
+    fase: "apertura" | "cierre",
   ) {
     for (const a of adjuntos) {
       try {
@@ -303,6 +304,7 @@ export function useMantenimientoActions(onMutated?: () => void) {
           nom_fitxer: result.nombreOriginal,
           url: result.key,
           creado_per: creadoPor,
+          fase,
         });
       } catch (e) {
         console.error("[subirAdjuntosIncidencia] adjunto upload failed:", e);
