@@ -727,6 +727,21 @@ function WorkerView({
     },
   });
 
+  const monthAjustosQ = useQuery({
+    queryKey: ["mi-dia-month-ajustos", personalId, monthStart, monthEnd],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("personal_ajustos_hores")
+        .select("id_ajuste, fecha, horas, tipo")
+        .eq("id_persona", personalId)
+        .or("tipo.is.null,tipo.neq.vacaciones")
+        .gte("fecha", monthStart)
+        .lte("fecha", monthEnd);
+      if (error) throw error;
+      return (data ?? []) as { id_ajuste: number; fecha: string; horas: number; tipo: string | null }[];
+    },
+  });
+
   const monthDayHours = useMemo(() => {
     const m = new Map<string, number>();
     const fechaByLimpieza = new Map<number, string>();
@@ -753,8 +768,12 @@ function WorkerView({
       const fecha = g.inici.slice(0, 10);
       m.set(fecha, (m.get(fecha) ?? 0) + h);
     }
+    for (const a of monthAjustosQ.data ?? []) {
+      const h = Number(a.horas ?? 0);
+      m.set(a.fecha, (m.get(a.fecha) ?? 0) + h);
+    }
     return m;
-  }, [monthTasksQ.data, monthLimpiezasRegistreQ.data, monthMantQ.data, monthGenericQ.data]);
+  }, [monthTasksQ.data, monthLimpiezasRegistreQ.data, monthMantQ.data, monthGenericQ.data, monthAjustosQ.data]);
 
   const monthHours = useMemo(() => {
     let total = 0;
@@ -1603,6 +1622,7 @@ function WorkerView({
     monthLimpiezasRegistreQ.refetch();
     monthMantQ.refetch();
     monthGenericQ.refetch();
+    monthAjustosQ.refetch();
   };
 
   const detailTask = detailId != null ? (tasksQ.data ?? []).find((t) => t.id_limpieza === detailId) ?? null : null;
