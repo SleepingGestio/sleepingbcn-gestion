@@ -147,12 +147,18 @@ function DetallPage() {
       return;
     }
     if (r.kind === "checkout" || r.kind === "extra_cr") {
-      const raw = r.raw as { id_limpieza: number; id_apt: number };
+      const raw = r.raw as {
+        id_limpieza: number;
+        id_apt?: number;
+        limpiezas?: { id_apt: number } | null;
+      };
+      const idApt = raw.id_apt ?? raw.limpiezas?.id_apt;
+      if (idApt == null) { toast.error("Apartamento no encontrado"); return; }
       const [{ data: apt }, { data: full }] = await Promise.all([
         supabase
           .from("apartamentos")
           .select("id_apt, nombre, camas_fijas, tiene_sofa_cama")
-          .eq("id_apt", raw.id_apt)
+          .eq("id_apt", idApt)
           .maybeSingle(),
         supabase.from("limpiezas").select("*").eq("id_limpieza", raw.id_limpieza).maybeSingle(),
       ]);
