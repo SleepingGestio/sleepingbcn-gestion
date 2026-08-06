@@ -29,9 +29,10 @@ import { fmtDate } from "@/lib/format";
 import { formatHHMM as fmtHours } from "@/lib/utils";
 import { toast } from "sonner";
 import { LimpiezaPopover, type Limpieza } from "@/components/limpieza-popover";
+import { MantenimientoPopover } from "@/components/mantenimiento-popover";
 import { useCurrentPersonal } from "@/hooks/use-current-personal";
 import { HHMMInput } from "@/components/hhmm-input";
-import { useApartamentosLite, useEspaciosLite, useGruposLite } from "@/hooks/use-mantenimiento";
+import { useApartamentosLite, useEspaciosLite, useGruposLite, usePersonalLite } from "@/hooks/use-mantenimiento";
 import { resolveLocation, TIPO_STYLE, type IncidenciaTipo } from "@/lib/mantenimiento";
 
 export const Route = createFileRoute("/registre-horari/$id")({
@@ -136,8 +137,15 @@ function DetallPage() {
     fecha: string;
     existing: Limpieza | null;
   }>(null);
+  const [mantDetailId, setMantDetailId] = useState<number | null>(null);
+  const mantWorkersQ = usePersonalLite();
 
   async function openRow(r: Row) {
+    if (r.kind === "manteniment") {
+      const raw = r.raw as { id_incidencia: number };
+      setMantDetailId(raw.id_incidencia);
+      return;
+    }
     if (r.kind === "checkout" || r.kind === "extra_cr") {
       const raw = r.raw as { id_limpieza: number; id_apt: number };
       const [{ data: apt }, { data: full }] = await Promise.all([
@@ -725,6 +733,18 @@ function DetallPage() {
             }}
           />
         )}
+
+        <MantenimientoPopover
+          idIncidencia={mantDetailId}
+          onOpenChange={(o) => {
+            if (!o) setMantDetailId(null);
+          }}
+          onSaved={() => {
+            qc.invalidateQueries({ queryKey: ["reg-horari-det-manteniment", idPersona] });
+          }}
+          workers={mantWorkersQ.data ?? []}
+          selfAssignId={idPersona}
+        />
 
         <AjustModal
           open={ajustOpen}
