@@ -72,7 +72,7 @@ function fmtAjustSigned(h: number): { text: string; className: string } {
 function ajustCellText(r: { kind: RowKind; hores: number; tipus_computa?: "treballades" | "objectiu" | "ajust" | null }): string {
   if (r.kind !== "ajust") return fmtHours(r.hores);
   const tc = r.tipus_computa ?? "ajust";
-  if (tc === "treballades") return `+${fmtHours(Math.abs(r.hores))}`;
+  if (tc === "treballades") return fmtAjustSigned(r.hores).text;
   if (tc === "objectiu") return `−${fmtHours(Math.abs(r.hores))} obj.`;
   return fmtAjustSigned(r.hores).text;
 }
@@ -80,7 +80,7 @@ function ajustCellText(r: { kind: RowKind; hores: number; tipus_computa?: "treba
 function ajustCellClass(r: { kind: RowKind; hores: number; tipus_computa?: "treballades" | "objectiu" | "ajust" | null }): string {
   if (r.kind !== "ajust") return "";
   const tc = r.tipus_computa ?? "ajust";
-  if (tc === "treballades") return "text-emerald-600";
+  if (tc === "treballades") return fmtAjustSigned(r.hores).className;
   if (tc === "objectiu") return "text-amber-600";
   return fmtAjustSigned(r.hores).className;
 }
@@ -1043,9 +1043,7 @@ function AjustModal({
   const isRangeTipo = RANGE_TIPOS.has(tipo);
 
   async function save() {
-    console.log("[AjustModal] horas state:", horas);
     const h = Number(horas);
-    console.log("[AjustModal] parsed h:", h, "typeof:", typeof h);
 
     if (isRangeTipo) {
       if (!fecha || !fechaFin || !isFinite(h) || h === 0) {
@@ -1072,7 +1070,6 @@ function AjustModal({
         notas: notas.trim() || null,
         tipus_computa: tipusComputa,
       }));
-      console.log("[AjustModal] INSERT PAYLOAD:", JSON.stringify(rows));
       const { error } = await supabase.from("personal_ajustos_hores").insert(rows as never);
       setSaving(false);
       if (error) {
@@ -1090,10 +1087,6 @@ function AjustModal({
       return;
     }
     setSaving(true);
-    console.log("[AjustModal] INSERT PAYLOAD:", JSON.stringify({
-      id_persona: idPersona, fecha, tipo, horas: h, notas: notas.trim() || null,
-      tipus_computa: tipusComputa,
-    }));
     const { error } = await supabase.from("personal_ajustos_hores").insert({
       id_persona: idPersona, fecha, tipo, horas: h, notas: notas.trim() || null,
       tipus_computa: tipusComputa,
