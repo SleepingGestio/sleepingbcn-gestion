@@ -1591,29 +1591,40 @@ function WorkerView({
   const pendingCount = activeTasks.filter((t) => t.estado === "comunicada").length;
   const dayNote = (comDiaQ.data?.observaciones ?? "").trim();
 
+  const finishTaskInFlightRef = useRef(false);
+  const [finishingTask, setFinishingTask] = useState(false);
+
   async function finishTask(task: Limpieza) {
     if (disabled) return;
-    const nowIso = new Date().toISOString();
-    const { data: openSessions, error: eSel } = await supabase
-      .from("limpiezas_registre")
-      .select("id_registre, inici")
-      .eq("id_limpieza", task.id_limpieza)
-      .is("fi", null);
-    if (eSel) { toast.error("Error: " + eSel.message); return; }
-    for (const s of openSessions ?? []) {
-      const { error: eUpd } = await supabase
+    if (finishTaskInFlightRef.current) return;
+    finishTaskInFlightRef.current = true;
+    setFinishingTask(true);
+    try {
+      const nowIso = new Date().toISOString();
+      const { data: openSessions, error: eSel } = await supabase
         .from("limpiezas_registre")
-        .update({ fi: nowIso, hores: diffHoursMinutes(s.inici, nowIso) })
-        .eq("id_registre", s.id_registre);
-      if (eUpd) { toast.error("Error: " + eUpd.message); return; }
+        .select("id_registre, inici")
+        .eq("id_limpieza", task.id_limpieza)
+        .is("fi", null);
+      if (eSel) { toast.error("Error: " + eSel.message); return; }
+      for (const s of openSessions ?? []) {
+        const { error: eUpd } = await supabase
+          .from("limpiezas_registre")
+          .update({ fi: nowIso, hores: diffHoursMinutes(s.inici, nowIso) })
+          .eq("id_registre", s.id_registre);
+        if (eUpd) { toast.error("Error: " + eUpd.message); return; }
+      }
+      const { error } = await supabase
+        .from("limpiezas")
+        .update({ estado: "finalizada", finalizada_en: nowIso })
+        .eq("id_limpieza", task.id_limpieza);
+      if (error) { toast.error("Error: " + error.message); return; }
+      refetchAll();
+      setEndSheetOpen(true);
+    } finally {
+      finishTaskInFlightRef.current = false;
+      setFinishingTask(false);
     }
-    const { error } = await supabase
-      .from("limpiezas")
-      .update({ estado: "finalizada", finalizada_en: nowIso })
-      .eq("id_limpieza", task.id_limpieza);
-    if (error) { toast.error("Error: " + error.message); return; }
-    refetchAll();
-    setEndSheetOpen(true);
   }
 
   const refetchAll = () => {
@@ -1981,6 +1992,7 @@ function WorkerView({
                 resv={resvQ.data ?? new Map()}
                 notifTipo={notifByReferencia.get(t.id_limpieza)?.slice(-1)[0]?.tipo}
                 disabled={disabled}
+                finishing={finishingTask}
                 onChanged={refetchAll}
                 onOpenDetail={() => setDetailId(t.id_limpieza)}
                 onFinish={() => finishTask(t)}
@@ -2369,13 +2381,14 @@ function TimeChip({ time, informed }: { time: string | null; informed: boolean |
 }
 
 function TaskCard({
-  t, apt, resv, notifTipo, disabled, onChanged, onOpenDetail, onFinish, onReportIncidencia,
+  t, apt, resv, notifTipo, disabled, finishing, onChanged, onOpenDetail, onFinish, onReportIncidencia,
 }: {
   t: LimpiezaDia;
   apt: Apartamento | undefined;
   resv: Map<string, ResvLite>;
   notifTipo?: string;
   disabled: boolean;
+  finishing: boolean;
   onChanged: () => void;
   onOpenDetail: () => void;
   onFinish: () => void;
@@ -2384,6 +2397,7 @@ function TaskCard({
   const [rejecting, setRejecting] = useState(false);
   const [motivo, setMotivo] = useState("");
   const [busy, setBusy] = useState(false);
+  const startInFlightRef = useRef(false);
 
   const next = t.proxima_reserva_numero ? resv.get(t.proxima_reserva_numero) ?? null : null;
   const nentran = !t.hora_in_time || !next || next["Check in"] !== t.fecha_limpieza;
@@ -2408,22 +2422,28 @@ function TaskCard({
 
   const accept = () => update({ estado: "aceptada" });
   const start = async () => {
+    if (startInFlightRef.current) return;
     if (t.worker == null) { toast.error("La limpieza no tiene un operario asignado"); return; }
+    startInFlightRef.current = true;
     setBusy(true);
-    const nowIso = new Date().toISOString();
-    const { error: e1 } = await supabase.from("limpiezas_registre").insert({
-      id_limpieza: t.id_limpieza,
-      id_persona: t.worker,
-      inici: nowIso,
-    });
-    if (e1) {
-      setBusy(false);
-      toast.error("Error: " + e1.message);
-      return;
+    try {
+      const nowIso = new Date().toISOString();
+      const { error: e1 } = await supabase.from("limpiezas_registre").insert({
+        id_limpieza: t.id_limpieza,
+        id_persona: t.worker,
+        inici: nowIso,
+      });
+      if (e1) {
+        setBusy(false);
+        toast.error("Error: " + e1.message);
+        return;
+      }
+      const patch: Partial<Limpieza> = { estado: "en_curso" };
+      if (!t.iniciada_en) patch.iniciada_en = nowIso;
+      await update(patch);
+    } finally {
+      startInFlightRef.current = false;
     }
-    const patch: Partial<Limpieza> = { estado: "en_curso" };
-    if (!t.iniciada_en) patch.iniciada_en = nowIso;
-    await update(patch);
   };
   const finParcial = async () => {
     setBusy(true);
@@ -2598,7 +2618,7 @@ function TaskCard({
           )}
           {t.estado === "en_curso" && (
             <>
-              <Button size="sm" className="h-11 px-4 bg-emerald-600 hover:bg-emerald-700 text-white" onClick={onFinish}>
+              <Button size="sm" className="h-11 px-4 bg-emerald-600 hover:bg-emerald-700 text-white" disabled={disabled || finishing} onClick={onFinish}>
                 <Check className="h-4 w-4" /> Finalizar
               </Button>
               <Button size="sm" variant="outline" className="h-11 px-4" disabled={disabled || busy} onClick={finParcial}>
@@ -2820,6 +2840,7 @@ function DetailView({
   const [local, setLocal] = useState<Limpieza>(t);
   const [incLocal, setIncLocal] = useState<string>(t.incidencias ?? "");
   const [busy, setBusy] = useState(false);
+  const startInFlightRef = useRef(false);
 
   useEffect(() => {
     setLocal(t);
@@ -2877,25 +2898,31 @@ function DetailView({
   };
   const start = async () => {
     if (disabled) return;
+    if (startInFlightRef.current) return;
     if (t.worker == null) { toast.error("La limpieza no tiene un operario asignado"); return; }
+    startInFlightRef.current = true;
     setBusy(true);
-    const nowIso = new Date().toISOString();
-    const { error: e1 } = await supabase.from("limpiezas_registre").insert({
-      id_limpieza: t.id_limpieza,
-      id_persona: t.worker,
-      inici: nowIso,
-    });
-    if (e1) {
+    try {
+      const nowIso = new Date().toISOString();
+      const { error: e1 } = await supabase.from("limpiezas_registre").insert({
+        id_limpieza: t.id_limpieza,
+        id_persona: t.worker,
+        inici: nowIso,
+      });
+      if (e1) {
+        setBusy(false);
+        toast.error("Error: " + e1.message);
+        return;
+      }
+      const patch: Partial<Limpieza> = { estado: "en_curso" };
+      if (!t.iniciada_en) patch.iniciada_en = nowIso;
+      const { error } = await supabase.from("limpiezas").update(patch).eq("id_limpieza", t.id_limpieza);
       setBusy(false);
-      toast.error("Error: " + e1.message);
-      return;
+      if (error) { toast.error(error.message); return; }
+      onChanged(); onClose();
+    } finally {
+      startInFlightRef.current = false;
     }
-    const patch: Partial<Limpieza> = { estado: "en_curso" };
-    if (!t.iniciada_en) patch.iniciada_en = nowIso;
-    const { error } = await supabase.from("limpiezas").update(patch).eq("id_limpieza", t.id_limpieza);
-    setBusy(false);
-    if (error) { toast.error(error.message); return; }
-    onChanged(); onClose();
   };
   // Finalizar is only triggered from the task list, never from the detail view.
 
