@@ -1072,6 +1072,7 @@ function AjustModal({
         notas: notas.trim() || null,
         tipus_computa: tipusComputa,
       }));
+      console.log("[AjustModal] INSERT PAYLOAD:", JSON.stringify(rows));
       const { error } = await supabase.from("personal_ajustos_hores").insert(rows as never);
       setSaving(false);
       if (error) {
@@ -1089,6 +1090,10 @@ function AjustModal({
       return;
     }
     setSaving(true);
+    console.log("[AjustModal] INSERT PAYLOAD:", JSON.stringify({
+      id_persona: idPersona, fecha, tipo, horas: h, notas: notas.trim() || null,
+      tipus_computa: tipusComputa,
+    }));
     const { error } = await supabase.from("personal_ajustos_hores").insert({
       id_persona: idPersona, fecha, tipo, horas: h, notas: notas.trim() || null,
       tipus_computa: tipusComputa,
