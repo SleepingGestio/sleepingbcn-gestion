@@ -1043,7 +1043,9 @@ function AjustModal({
   const isRangeTipo = RANGE_TIPOS.has(tipo);
 
   async function save() {
+    console.log("[AjustModal] horas state:", horas);
     const h = Number(horas);
+    console.log("[AjustModal] parsed h:", h, "typeof:", typeof h);
 
     if (isRangeTipo) {
       if (!fecha || !fechaFin || !isFinite(h) || h === 0) {

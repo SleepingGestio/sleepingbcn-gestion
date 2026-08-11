@@ -36,6 +36,7 @@ export function HHMMInput({ value, onChange, onValidityChange, placeholder, clas
       return;
     }
     const parsed = parseHHMM(raw);
+    console.log("[HHMMInput] raw:", raw, "parsed:", parsed);
     if (parsed == null) {
       setInvalid(true);
       onValidityChange?.(false);
