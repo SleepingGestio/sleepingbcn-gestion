@@ -1642,6 +1642,31 @@ function WorkerView({
   const todayPendingAssigned = (daysWithTasks.find((d) => d.fecha === todayISO)?.tasks ?? [])
     .filter((t) => t.estado !== "finalizada").length;
 
+  // Sequential "Ver" review progress — rendered inline just below the day tabs
+  // (or in their place, when day tabs aren't shown) instead of floating.
+  const verQueuePill = verQueue != null && (
+    <div className="mx-3 mt-3 flex items-center gap-3 rounded-lg bg-slate-900 text-white px-3 py-2.5">
+      <span className="flex-1 text-sm font-medium whitespace-nowrap">
+        {verQueueIndex + 1} de {verQueue.length} cambios
+      </span>
+      <Button
+        size="sm"
+        className="h-8 px-3 bg-white/15 hover:bg-white/25 text-white"
+        onClick={handleVerSiguiente}
+      >
+        {verQueueIndex + 1 >= verQueue.length ? "Finalizar" : "Ver siguiente"}
+      </Button>
+      <button
+        type="button"
+        className="h-8 w-8 shrink-0 grid place-items-center rounded-full hover:bg-white/15"
+        aria-label="Cancelar revisión"
+        onClick={handleCancelVerQueue}
+      >
+        <X className="h-4 w-4" />
+      </button>
+    </div>
+  );
+
   return (
     <div className="min-h-screen bg-slate-50 pb-12">
       {previewing && (
@@ -1742,32 +1767,6 @@ function WorkerView({
             className="shrink-0 rounded-full p-1 hover:bg-black/5"
             aria-label="Cerrar aviso"
             onClick={handleDismissAllNotifications}
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-      )}
-
-      {/* Sequential "Ver" review progress — floating, distinct from the red
-          banner above so both can coexist while the banner naturally shrinks
-          as each step's notifications get marked visto. */}
-      {verQueue != null && (
-        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 rounded-full bg-slate-900 text-white pl-4 pr-2 py-2 shadow-lg">
-          <span className="text-sm font-medium whitespace-nowrap">
-            {verQueueIndex + 1} de {verQueue.length} cambios
-          </span>
-          <Button
-            size="sm"
-            className="h-8 px-3 bg-white/15 hover:bg-white/25 text-white"
-            onClick={handleVerSiguiente}
-          >
-            {verQueueIndex + 1 >= verQueue.length ? "Finalizar" : "Ver siguiente"}
-          </Button>
-          <button
-            type="button"
-            className="h-8 w-8 shrink-0 grid place-items-center rounded-full hover:bg-white/15"
-            aria-label="Cancelar revisión"
-            onClick={handleCancelVerQueue}
           >
             <X className="h-4 w-4" />
           </button>
@@ -1918,34 +1917,40 @@ function WorkerView({
       )}
 
       {daysWithTasks.length === 0 && !(mantMiasCountQ.data ?? 0) ? (
-        <div className="p-8 text-center">
-          {!activeGen && (
-            <>
-              <p className="text-sm text-muted-foreground mb-4">No tienes tareas asignadas hoy.</p>
-              <Button
-                size="lg"
-                className="h-14 px-6 bg-[#26215C] hover:bg-[#1e1a48] text-white text-base"
-                disabled={disabled}
-                onClick={handleClickIniciarGenerica}
-              >
-                <Play className="h-5 w-5" /> Iniciar jornada
-              </Button>
-            </>
-          )}
-        </div>
+        <>
+          {verQueuePill}
+          <div className="p-8 text-center">
+            {!activeGen && (
+              <>
+                <p className="text-sm text-muted-foreground mb-4">No tienes tareas asignadas hoy.</p>
+                <Button
+                  size="lg"
+                  className="h-14 px-6 bg-[#26215C] hover:bg-[#1e1a48] text-white text-base"
+                  disabled={disabled}
+                  onClick={handleClickIniciarGenerica}
+                >
+                  <Play className="h-5 w-5" /> Iniciar jornada
+                </Button>
+              </>
+            )}
+          </div>
+        </>
       ) : daysWithTasks.length === 0 && tabDates.length <= 1 ? (
-        <div className="p-3 text-center">
-          <p className="text-xs text-muted-foreground mb-3">
-            No tienes limpiezas asignadas hoy, pero sí tareas de mantenimiento arriba.
-          </p>
-          <Button
-            className="w-full h-12 bg-[#26215C] hover:bg-[#1e1a48] text-white"
-            disabled={disabled}
-            onClick={handleClickIniciarGenerica}
-          >
-            <ClipboardList className="h-4 w-4" /> Iniciar tarea genérica
-          </Button>
-        </div>
+        <>
+          {verQueuePill}
+          <div className="p-3 text-center">
+            <p className="text-xs text-muted-foreground mb-3">
+              No tienes limpiezas asignadas hoy, pero sí tareas de mantenimiento arriba.
+            </p>
+            <Button
+              className="w-full h-12 bg-[#26215C] hover:bg-[#1e1a48] text-white"
+              disabled={disabled}
+              onClick={handleClickIniciarGenerica}
+            >
+              <ClipboardList className="h-4 w-4" /> Iniciar tarea genérica
+            </Button>
+          </div>
+        </>
       ) : (
         <>
           <div className={cn("sticky z-20 bg-slate-200 border-b", previewing ? "top-[96px]" : "top-[60px]")}>
@@ -1974,6 +1979,8 @@ function WorkerView({
               })}
             </div>
           </div>
+
+          {verQueuePill}
 
           {/* Pending banner */}
           {pendingCount > 0 && (
