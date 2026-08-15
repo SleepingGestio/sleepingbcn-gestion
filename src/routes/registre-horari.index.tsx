@@ -361,22 +361,20 @@ function RegistreHorariPage() {
     return map;
   }, [reduccionesQ.data]);
 
-  // Most recent closed month's saldo_acumulat_fi per worker, strictly before the
-  // currently-viewed year/month0 — same logic as registre-horari.$id.tsx's
-  // prevAcumulat, fanned out across all workers into a Map like reductionsByWorker.
+  // saldo_acumulat_fi per worker for the month IMMEDIATELY before the
+  // currently-viewed year/month0, only if that exact month is closed — same
+  // logic as registre-horari.$id.tsx's prevAcumulat, fanned out across all
+  // workers into a Map like reductionsByWorker.
   const prevAcumulatByWorker = useMemo(() => {
-    const mesSel = month0 + 1;
-    const byWorker = new Map<number, { anio: number; mes: number; saldo_acumulat_fi: number }[]>();
-    for (const r of historyQ.data ?? []) {
-      if (!byWorker.has(r.id_persona)) byWorker.set(r.id_persona, []);
-      byWorker.get(r.id_persona)!.push(r);
-    }
+    const prevIdx = (() => {
+      const d = new Date(year, month0 - 1, 1);
+      return { y: d.getFullYear(), m: d.getMonth() + 1 };
+    })();
     const map = new Map<number, number>();
-    for (const [id, rows] of byWorker) {
-      const sorted = rows
-        .filter((r) => r.anio < year || (r.anio === year && r.mes < mesSel))
-        .sort((a, b) => (b.anio - a.anio) || (b.mes - a.mes));
-      map.set(id, sorted[0]?.saldo_acumulat_fi ?? 0);
+    for (const r of historyQ.data ?? []) {
+      if (r.anio === prevIdx.y && r.mes === prevIdx.m) {
+        map.set(r.id_persona, r.saldo_acumulat_fi);
+      }
     }
     return map;
   }, [historyQ.data, year, month0]);

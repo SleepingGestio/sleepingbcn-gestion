@@ -538,15 +538,16 @@ function DetallPage() {
     },
   });
 
-  // Previous closed month's accumulated balance, for the currently selected
+  // Previous month's accumulated balance, for the currently selected
   // year/month0 — same logic as TancamentsTab's own prevAcumulat.
   const prevAcumulat = useMemo(() => {
-    const mesSel = month0 + 1;
+    const prevIdx = (() => {
+      const d = new Date(year, month0 - 1, 1);
+      return { y: d.getFullYear(), m: d.getMonth() + 1 };
+    })();
     const rowsHist = historyForPrevAcumulatQ.data ?? [];
-    const sorted = [...rowsHist]
-      .filter((r) => r.cerrado && (r.anio < year || (r.anio === year && r.mes < mesSel)))
-      .sort((a, b) => (b.anio - a.anio) || (b.mes - a.mes));
-    return sorted[0]?.saldo_acumulat_fi ?? 0;
+    const row = rowsHist.find((r) => r.anio === prevIdx.y && r.mes === prevIdx.m && r.cerrado);
+    return row?.saldo_acumulat_fi ?? 0;
   }, [historyForPrevAcumulatQ.data, year, month0]);
 
   const totals = useMemo(() => {
@@ -1398,11 +1399,10 @@ function TancamentsTab({
 
   const prevAcumulat = useMemo(() => {
     const rows = historyQ.data ?? [];
-    // Find latest closed month strictly before (year, mes)
-    const sorted = [...rows]
-      .filter((r) => r.cerrado && (r.anio < year || (r.anio === year && r.mes < mes)))
-      .sort((a, b) => (b.anio - a.anio) || (b.mes - a.mes));
-    return sorted[0]?.saldo_acumulat_fi ?? 0;
+    // Only use the immediately-previous month's balance, and only if that
+    // exact month is closed — no falling back to an earlier closed month.
+    const row = rows.find((r) => r.anio === prevIdx.y && r.mes === prevIdx.m && r.cerrado);
+    return row?.saldo_acumulat_fi ?? 0;
   }, [historyQ.data, year, mes]);
 
   const [detailRow, setDetailRow] = useState<ResumRow | null>(null);
