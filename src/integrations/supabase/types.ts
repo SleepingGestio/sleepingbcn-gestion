@@ -1015,7 +1015,10 @@ export type Database = {
           fecha: string
           horas: number
           id_ajuste: number
+          id_apt: number | null
+          id_grupo: number | null
           id_persona: number | null
+          id_tipo_espacio_comun: number | null
           notas: string | null
           tipo: string | null
           tipus_computa: string | null
@@ -1026,7 +1029,10 @@ export type Database = {
           fecha: string
           horas: number
           id_ajuste?: number
+          id_apt?: number | null
+          id_grupo?: number | null
           id_persona?: number | null
+          id_tipo_espacio_comun?: number | null
           notas?: string | null
           tipo?: string | null
           tipus_computa?: string | null
@@ -1037,7 +1043,10 @@ export type Database = {
           fecha?: string
           horas?: number
           id_ajuste?: number
+          id_apt?: number | null
+          id_grupo?: number | null
           id_persona?: number | null
+          id_tipo_espacio_comun?: number | null
           notas?: string | null
           tipo?: string | null
           tipus_computa?: string | null
@@ -1051,11 +1060,32 @@ export type Database = {
             referencedColumns: ["id_persona"]
           },
           {
+            foreignKeyName: "personal_ajustos_hores_id_apt_fkey"
+            columns: ["id_apt"]
+            isOneToOne: false
+            referencedRelation: "apartamentos"
+            referencedColumns: ["id_apt"]
+          },
+          {
+            foreignKeyName: "personal_ajustos_hores_id_grupo_fkey"
+            columns: ["id_grupo"]
+            isOneToOne: false
+            referencedRelation: "grupos_apartamentos"
+            referencedColumns: ["id_grupo"]
+          },
+          {
             foreignKeyName: "personal_ajustos_hores_id_persona_fkey"
             columns: ["id_persona"]
             isOneToOne: false
             referencedRelation: "personal"
             referencedColumns: ["id_persona"]
+          },
+          {
+            foreignKeyName: "personal_ajustos_hores_id_tipo_espacio_comun_fkey"
+            columns: ["id_tipo_espacio_comun"]
+            isOneToOne: false
+            referencedRelation: "tipos_espacio_comun"
+            referencedColumns: ["id_tipo"]
           },
         ]
       }
