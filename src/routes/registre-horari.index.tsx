@@ -248,6 +248,20 @@ function RegistreHorariPage() {
     },
   });
 
+  const historyQ = useQuery({
+    queryKey: ["reg-horari-index-history", workerIds.join(",")],
+    enabled: workerIds.length > 0,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("personal_resum_mes" as never)
+        .select("id_persona, anio, mes, cerrado, saldo_acumulat_fi")
+        .in("id_persona", workerIds)
+        .eq("cerrado", true);
+      if (error) throw error;
+      return (data ?? []) as { id_persona: number; anio: number; mes: number; saldo_acumulat_fi: number }[];
+    },
+  });
+
   const pendientesQ = useQuery({
     queryKey: ["reg-horari-pendientes", start, end, workerIds.join(",")],
     enabled: workerIds.length > 0,
@@ -347,6 +361,26 @@ function RegistreHorariPage() {
     return map;
   }, [reduccionesQ.data]);
 
+  // Most recent closed month's saldo_acumulat_fi per worker, strictly before the
+  // currently-viewed year/month0 — same logic as registre-horari.$id.tsx's
+  // prevAcumulat, fanned out across all workers into a Map like reductionsByWorker.
+  const prevAcumulatByWorker = useMemo(() => {
+    const mesSel = month0 + 1;
+    const byWorker = new Map<number, { anio: number; mes: number; saldo_acumulat_fi: number }[]>();
+    for (const r of historyQ.data ?? []) {
+      if (!byWorker.has(r.id_persona)) byWorker.set(r.id_persona, []);
+      byWorker.get(r.id_persona)!.push(r);
+    }
+    const map = new Map<number, number>();
+    for (const [id, rows] of byWorker) {
+      const sorted = rows
+        .filter((r) => r.anio < year || (r.anio === year && r.mes < mesSel))
+        .sort((a, b) => (b.anio - a.anio) || (b.mes - a.mes));
+      map.set(id, sorted[0]?.saldo_acumulat_fi ?? 0);
+    }
+    return map;
+  }, [historyQ.data, year, month0]);
+
   const activeObjectiveByWorker = useMemo(() => {
     const map = new Map<number, number | null>();
     for (const p of activePeriodsQ.data ?? []) {
@@ -416,6 +450,7 @@ function RegistreHorariPage() {
                   actual={hoursByWorker.get(w.id_persona) ?? 0}
                   objective={objectiveForWorker(w)}
                   reduction={reductionsByWorker.get(w.id_persona) ?? 0}
+                  prevAcumulat={prevAcumulatByWorker.get(w.id_persona) ?? 0}
                   maxScale={maxScale}
                   showGrip={canEditDashboard}
                   scheduledPending={scheduledPendingByWorker.get(w.id_persona) ?? 0}
@@ -446,6 +481,7 @@ function WorkerColumn({
   actual,
   objective,
   reduction,
+  prevAcumulat,
   maxScale,
   showGrip,
   scheduledPending,
@@ -454,14 +490,16 @@ function WorkerColumn({
   actual: number;
   objective: number | null;
   reduction: number;
+  prevAcumulat: number;
   maxScale: number;
   showGrip: boolean;
   scheduledPending: number;
 }) {
   const isAutonom = worker.tipo_contrato === "autonomo";
   const hasObjective = !isAutonom && objective != null && objective > 0;
+  const hasAdjustment = reduction !== 0 || prevAcumulat !== 0;
 
-  const effectiveObjective = hasObjective ? Math.max(0, (objective as number) - reduction) : null;
+  const effectiveObjective = hasObjective ? Math.max(0, (objective as number) - reduction - prevAcumulat) : null;
 
   let color = "#378ADD"; // blue for autonomo / no objective
   if (hasObjective) {
@@ -476,17 +514,29 @@ function WorkerColumn({
   const scheduledPx = Math.round((scheduledPending / maxScale) * BAR_MAX_PX);
   const objPx = hasObjective ? Math.round(((objective as number) / maxScale) * BAR_MAX_PX) : 0;
   const effPx =
-    hasObjective && reduction !== 0 && effectiveObjective != null
+    hasObjective && hasAdjustment && effectiveObjective != null
       ? Math.round((effectiveObjective / maxScale) * BAR_MAX_PX)
       : null;
+  // effPx can exceed objPx when prevAcumulat < 0 (effectiveObjective grew past
+  // the base objective) — this is the height of the extra segment stacked above
+  // the grey objective bar, mirroring how scheduledPx stacks above actualPx below.
+  const excessPx = effPx !== null && effPx > objPx ? effPx - objPx : 0;
+
+  const objectiveClauses: string[] = [];
+  if (reduction !== 0) objectiveClauses.push(`−${fmtHours(reduction)}`);
+  if (prevAcumulat !== 0) objectiveClauses.push(`${prevAcumulat > 0 ? "−" : "+"}${fmtHours(Math.abs(prevAcumulat))} S.ANT.`);
+  const objectiveTitle =
+    objectiveClauses.length > 0 && effectiveObjective != null
+      ? `Objetivo: ${fmtHours(objective as number)} (${objectiveClauses.join(" · ")} → ${fmtHours(effectiveObjective)} efectivo)`
+      : `Objetivo: ${fmtHours(objective as number)}`;
 
   // Both top labels share this height so they stay aligned with each other
   // and always clear the actual-hours number, even when the red bar grows
   // past the gray one.
-  const topLabelBottomPx = Math.max(objPx + 8, actualPx + 22);
+  const topLabelBottomPx = Math.max(objPx + excessPx + 8, actualPx + 22);
 
   const saldo = hasObjective
-    ? actual - (reduction !== 0 && effectiveObjective != null ? effectiveObjective : (objective as number))
+    ? actual - (hasAdjustment && effectiveObjective != null ? effectiveObjective : (objective as number))
     : 0;
   const deltaText = `${saldo >= 0 ? "+" : ""}${fmtHours(saldo)}`;
   const firstName = (worker.nombre ?? "").split(" ")[0] || "—";
@@ -503,39 +553,52 @@ function WorkerColumn({
               </span>
             </div>
             <div
-              className="relative w-8 rounded-t bg-slate-300"
+              className="w-8 rounded-t bg-slate-300"
               style={{ height: `${objPx}px` }}
-              title={
-                reduction !== 0 && effectiveObjective != null
-                  ? `Objetivo: ${fmtHours(objective as number)} (−${fmtHours(reduction)} → ${fmtHours(effectiveObjective)} efectivo)`
-                  : `Objetivo: ${fmtHours(objective as number)}`
-              }
-            >
-              {reduction !== 0 && effPx !== null && effectiveObjective != null && (
-                <>
-                  <div
-                    className="absolute left-0 right-0"
-                    style={{ top: `${objPx - effPx}px`, height: 2, backgroundColor: "#26215C" }}
-                  />
-                  <span
-                    className="absolute whitespace-nowrap"
-                    style={{
-                      top: `${objPx - effPx - 12}px`,
-                      right: "calc(100% + 4px)",
-                      fontSize: 11,
-                      fontWeight: 700,
-                      color: "#26215C",
-                      background: "#fff",
-                      padding: "1px 5px",
-                      borderRadius: 4,
-                      border: "1px solid #26215C",
-                    }}
-                  >
-                    {fmtHours(effectiveObjective)}
-                  </span>
-                </>
-              )}
-            </div>
+              title={objectiveTitle}
+            />
+            {excessPx > 0 && (
+              <div
+                className="absolute w-8 rounded-t"
+                style={{
+                  bottom: `${objPx}px`,
+                  left: 0,
+                  height: `${excessPx}px`,
+                  background: "#FBDEDD",
+                  borderBottom: "2px solid #E24B4A",
+                }}
+                title={objectiveTitle}
+              />
+            )}
+            {hasAdjustment && effPx !== null && effectiveObjective != null && (
+              <>
+                {/* Anchored to this column's own bottom (bottom: effPx), not
+                    nested inside the grey bar — effPx already represents the
+                    marker's true height above the baseline whether it falls
+                    within the grey zone (reduction) or above it (excess from a
+                    negative prevAcumulat), so no top/negative-offset math needed. */}
+                <div
+                  className="absolute left-0 right-0"
+                  style={{ bottom: `${effPx}px`, height: 2, backgroundColor: "#26215C" }}
+                />
+                <span
+                  className="absolute whitespace-nowrap"
+                  style={{
+                    bottom: `${effPx + 12}px`,
+                    right: "calc(100% + 4px)",
+                    fontSize: 11,
+                    fontWeight: 700,
+                    color: "#26215C",
+                    background: "#fff",
+                    padding: "1px 5px",
+                    borderRadius: 4,
+                    border: "1px solid #26215C",
+                  }}
+                >
+                  {fmtHours(effectiveObjective)}
+                </span>
+              </>
+            )}
           </div>
         )}
         <div className="relative flex flex-col items-center" style={{ width: 32 }}>
