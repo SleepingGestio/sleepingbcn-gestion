@@ -521,6 +521,34 @@ function DetallPage() {
     return sorted;
   }, [rows, typeFilter, search, sortKey, sortDir]);
 
+  // Same query TancamentsTab runs (identical queryKey, so react-query dedupes the
+  // network request) — needed here too so prevAcumulat can be folded into
+  // effectiveObjective below, before totals is computed.
+  const historyForPrevAcumulatQ = useQuery({
+    queryKey: ["resum-mes-history", idPersona],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("personal_resum_mes" as never)
+        .select("*")
+        .eq("id_persona", idPersona)
+        .order("anio", { ascending: false })
+        .order("mes", { ascending: false });
+      if (error) { console.warn(error); return []; }
+      return (data ?? []) as ResumRow[];
+    },
+  });
+
+  // Previous closed month's accumulated balance, for the currently selected
+  // year/month0 — same logic as TancamentsTab's own prevAcumulat.
+  const prevAcumulat = useMemo(() => {
+    const mesSel = month0 + 1;
+    const rowsHist = historyForPrevAcumulatQ.data ?? [];
+    const sorted = [...rowsHist]
+      .filter((r) => r.cerrado && (r.anio < year || (r.anio === year && r.mes < mesSel)))
+      .sort((a, b) => (b.anio - a.anio) || (b.mes - a.mes));
+    return sorted[0]?.saldo_acumulat_fi ?? 0;
+  }, [historyForPrevAcumulatQ.data, year, month0]);
+
   const totals = useMemo(() => {
     let worked = 0, otherAdjustments = 0, reductions = 0;
     let reductionTipo: string | null = null;
@@ -547,10 +575,10 @@ function DetallPage() {
     const objective = activePeriodQ.data?.horas_objetivo_mes ?? personaQ.data?.horas_objetivo_mes ?? null;
     const isAutonom = personaQ.data?.tipo_contrato === "autonomo";
     const baseObjective = objective != null ? Number(objective) : null;
-    const effectiveObjective = baseObjective != null ? Math.max(0, baseObjective - reductions) : null;
+    const effectiveObjective = baseObjective != null ? Math.max(0, baseObjective - reductions - Number(prevAcumulat)) : null;
     const saldo = !isAutonom && effectiveObjective != null ? worked - effectiveObjective + otherAdjustments : 0;
     return { worked, adjustments: otherAdjustments, reductions, reductionTipo, objective: baseObjective, effectiveObjective, isAutonom, saldo };
-  }, [limpiezasQ.data, limpiezasRegistreQ.data, genericQ.data, mantenimentQ.data, ajustosQ.data, personaQ.data, activePeriodQ.data]);
+  }, [limpiezasQ.data, limpiezasRegistreQ.data, genericQ.data, mantenimentQ.data, ajustosQ.data, personaQ.data, activePeriodQ.data, prevAcumulat]);
 
   function toggleSort(k: SortKey) {
     if (sortKey === k) setSortDir(sortDir === "asc" ? "desc" : "asc");
@@ -1357,7 +1385,9 @@ function TancamentsTab({
 
   const closeMonth = useMutation({
     mutationFn: async (decisio: "liquidar" | "acumular") => {
-      const saldoAcumulat = decisio === "liquidar" ? 0 : totals.saldo + Number(prevAcumulat);
+      // prevAcumulat is now already baked into totals.saldo via effectiveObjective
+      // (see DetallPage's totals useMemo) — adding it again here would double-count it.
+      const saldoAcumulat = decisio === "liquidar" ? 0 : totals.saldo;
       const payload = {
         id_persona: idPersona,
         anio: year,
@@ -1453,6 +1483,7 @@ function TancamentsTab({
                   worked={closed ? currentMonthQ.data!.hores_treballades : totals.worked}
                   reductions={closed ? currentMonthQ.data!.hores_reduccio : totals.reductions}
                   baseObjective={closed ? currentMonthQ.data!.hores_objectiu_base : (totals.objective ?? 0)}
+                  prevAcumulat={closed ? currentMonthQ.data!.saldo_acumulat_ant : Number(prevAcumulat)}
                   effectiveObjective={closed ? currentMonthQ.data!.hores_objectiu_ef : (totals.effectiveObjective ?? 0)}
                   reductionTipo={totals.reductionTipo}
                 />
@@ -1476,6 +1507,7 @@ function TancamentsTab({
               baseObjective={closed ? currentMonthQ.data!.hores_objectiu_base : (totals.objective ?? 0)}
               reductions={closed ? currentMonthQ.data!.hores_reduccio : totals.reductions}
               reductionTipo={totals.reductionTipo}
+              prevAcumulat={closed ? currentMonthQ.data!.saldo_acumulat_ant : Number(prevAcumulat)}
               effectiveObjective={closed ? currentMonthQ.data!.hores_objectiu_ef : (totals.effectiveObjective ?? 0)}
               worked={closed ? currentMonthQ.data!.hores_treballades : totals.worked}
               adjustments={closed ? currentMonthQ.data!.hores_ajust_saldo : totals.adjustments}
@@ -1613,8 +1645,11 @@ function saldoColor(h: number): string {
 }
 
 function ClosureProgressBar({
-  worked, reductions, baseObjective, effectiveObjective, reductionTipo,
-}: { worked: number; reductions: number; baseObjective: number; effectiveObjective: number; reductionTipo: string | null }) {
+  worked, reductions, baseObjective, prevAcumulat, effectiveObjective, reductionTipo,
+}: {
+  worked: number; reductions: number; baseObjective: number; prevAcumulat: number;
+  effectiveObjective: number; reductionTipo: string | null;
+}) {
   const BASE_PCT = 80;
   const has = baseObjective > 0;
   const effPct = has ? (effectiveObjective / baseObjective) * BASE_PCT : 0;
@@ -1627,10 +1662,13 @@ function ClosureProgressBar({
   }
 
   const reductionLabel = reductionTipo === "vacaciones" ? "vacaciones" : reductionTipo === "baja" ? "baja" : reductionTipo ?? "";
+  const adjClauses: string[] = [];
+  if (reductions > 0) adjClauses.push(`−${fmtHours(reductions)} ${reductionLabel}`);
+  if (prevAcumulat !== 0) adjClauses.push(`${prevAcumulat > 0 ? "−" : "+"}${fmtHours(Math.abs(prevAcumulat))} saldo anterior`);
   const infoText = !has
     ? "Sin objetivo"
-    : reductions > 0
-      ? `Obj. ${fmtHours(baseObjective)} · −${fmtHours(reductions)} ${reductionLabel} → ${fmtHours(effectiveObjective)} efectivo`
+    : adjClauses.length > 0
+      ? `Obj. ${fmtHours(baseObjective)} · ${adjClauses.join(" · ")} → ${fmtHours(effectiveObjective)} efectivo`
       : `Obj. ${fmtHours(baseObjective)}`;
 
   return (
@@ -1677,9 +1715,9 @@ function ClosureProgressBar({
 }
 
 function BreakdownRows({
-  baseObjective, reductions, reductionTipo, effectiveObjective, worked, adjustments, saldoMes,
+  baseObjective, reductions, reductionTipo, prevAcumulat, effectiveObjective, worked, adjustments, saldoMes,
 }: {
-  baseObjective: number; reductions: number; reductionTipo: string | null;
+  baseObjective: number; reductions: number; reductionTipo: string | null; prevAcumulat: number;
   effectiveObjective: number; worked: number; adjustments: number; saldoMes: number;
 }) {
   const redLabel = reductionTipo === "vacaciones" ? "vacaciones" : reductionTipo === "baja" ? "baja" : reductionTipo ?? "";
@@ -1693,6 +1731,12 @@ function BreakdownRows({
         <div className="flex justify-between text-amber-700">
           <span>− {redLabel} (ajuste objetivo)</span>
           <span className="tabular-nums">−{fmtHours(reductions)}</span>
+        </div>
+      )}
+      {prevAcumulat !== 0 && (
+        <div className={`flex justify-between ${saldoColor(prevAcumulat)}`}>
+          <span>Saldo acumulado anterior</span>
+          <span className="tabular-nums">{fmtSigned(-prevAcumulat)}</span>
         </div>
       )}
       <div className="border-t my-1" />
