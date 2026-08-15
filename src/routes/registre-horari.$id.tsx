@@ -1517,16 +1517,15 @@ function TancamentsTab({
             <div className="my-4 border-t" />
 
             <div className="space-y-2">
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Saldo acumulado anterior</span>
-                <span className="tabular-nums font-medium">{fmtSigned(closed ? currentMonthQ.data!.saldo_acumulat_ant : Number(prevAcumulat))}</span>
-              </div>
               <div className="flex justify-between items-center">
                 <span className="text-sm text-muted-foreground">
                   {closed ? "Saldo acumulado final" : "Saldo acumulado si se confirma"}
                 </span>
                 {(() => {
-                  const acc = closed ? currentMonthQ.data!.saldo_acumulat_fi : (totals.saldo + Number(prevAcumulat));
+                  // totals.saldo already includes prevAcumulat's effect via
+                  // effectiveObjective — adding it again here would double-count it,
+                  // same root cause already fixed in closeMonth's own saldoAcumulat.
+                  const acc = closed ? currentMonthQ.data!.saldo_acumulat_fi : totals.saldo;
                   const st = saldoChipStyle(acc, totals.effectiveObjective);
                   return (
                     <div className="rounded-full px-3 py-1 tabular-nums" style={{ background: st.bg, color: st.fg, fontSize: 16, fontWeight: 700 }}>
@@ -1654,6 +1653,12 @@ function ClosureProgressBar({
   const has = baseObjective > 0;
   const effPct = has ? (effectiveObjective / baseObjective) * BASE_PCT : 0;
   const workedPct = has ? Math.min(100, (worked / baseObjective) * BASE_PCT) : 0;
+  // When effectiveObjective exceeds baseObjective (prevAcumulat < 0, the objective
+  // grew), effPct already extends past BASE_PCT on the same hours-per-percent
+  // scale — this segment just fills that extra width, from BASE_PCT to effPct.
+  const excessPct = has && effectiveObjective > baseObjective
+    ? ((effectiveObjective - baseObjective) / baseObjective) * BASE_PCT
+    : 0;
 
   let color = "#1D9E75";
   if (has && worked < effectiveObjective) {
@@ -1661,10 +1666,10 @@ function ClosureProgressBar({
     color = deficit >= 0.15 ? "#E24B4A" : "#EF9F27";
   }
 
-  const reductionLabel = reductionTipo === "vacaciones" ? "vacaciones" : reductionTipo === "baja" ? "baja" : reductionTipo ?? "";
+  const reductionLabel = reductionTipo === "vacaciones" ? "VACAC." : reductionTipo === "baja" ? "baja" : reductionTipo ?? "";
   const adjClauses: string[] = [];
   if (reductions > 0) adjClauses.push(`−${fmtHours(reductions)} ${reductionLabel}`);
-  if (prevAcumulat !== 0) adjClauses.push(`${prevAcumulat > 0 ? "−" : "+"}${fmtHours(Math.abs(prevAcumulat))} saldo anterior`);
+  if (prevAcumulat !== 0) adjClauses.push(`${prevAcumulat > 0 ? "−" : "+"}${fmtHours(Math.abs(prevAcumulat))} S.ANT.`);
   const infoText = !has
     ? "Sin objetivo"
     : adjClauses.length > 0
@@ -1679,6 +1684,9 @@ function ClosureProgressBar({
         <div className="absolute inset-y-0 left-0" style={{ width: `${effPct}%`, background: "#D3D1C7" }} />
         {has && reductions > 0 && (
           <div className="absolute inset-y-0" style={{ left: `${effPct}%`, width: `${Math.max(0, BASE_PCT - effPct)}%`, background: "#FAEEDA", borderLeft: "2px solid #EF9F27" }} />
+        )}
+        {has && excessPct > 0 && (
+          <div className="absolute inset-y-0" style={{ left: `${BASE_PCT}%`, width: `${excessPct}%`, background: "#FBDEDD", borderLeft: "2px solid #E24B4A" }} />
         )}
       </div>
       <div className="relative w-full" style={{ height: 18 }}>
