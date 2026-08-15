@@ -716,14 +716,14 @@ function WorkerView({
     queryFn: async () => {
       const { data, error } = await supabase
         .from("limpiezas_registre")
-        .select("id_limpieza, hores")
+        .select("id_limpieza, inici, hores")
         .eq("id_persona", personalId)
         .not("fi", "is", null)
         .not("hores", "is", null)
         .gte("inici", `${monthStart}T00:00:00`)
         .lte("inici", `${monthEnd}T23:59:59`);
       if (error) throw error;
-      return (data ?? []) as { id_limpieza: number; hores: number | null }[];
+      return (data ?? []) as { id_limpieza: number; inici: string; hores: number | null }[];
     },
   });
 
@@ -744,19 +744,30 @@ function WorkerView({
 
   const monthDayHours = useMemo(() => {
     const m = new Map<string, number>();
-    const fechaByLimpieza = new Map<number, string>();
-    for (const t of monthTasksQ.data ?? []) fechaByLimpieza.set(t.id_limpieza, t.fecha_limpieza);
-    const limpiezasConSesiones = new Set((monthLimpiezasRegistreQ.data ?? []).map((r) => r.id_limpieza));
-    for (const t of monthTasksQ.data ?? []) {
-      if (limpiezasConSesiones.has(t.id_limpieza)) continue;
-      const h = diffHoursMinutes(t.iniciada_en, t.finalizada_en);
-      m.set(t.fecha_limpieza, (m.get(t.fecha_limpieza) ?? 0) + h);
-    }
-    for (const r of monthLimpiezasRegistreQ.data ?? []) {
-      const fecha = fechaByLimpieza.get(r.id_limpieza);
-      if (!fecha) continue;
-      const h = Number(r.hores ?? 0);
-      m.set(fecha, (m.get(fecha) ?? 0) + h);
+    // Don't compute anything from limpiezas until BOTH sources have resolved —
+    // otherwise a limpieza with a session can be counted via raw
+    // iniciada_en/finalizada_en (the no-session path) during the window where
+    // monthTasksQ has data but monthLimpiezasRegistreQ hasn't loaded yet, since
+    // the exclusion set built from the latter would still be empty.
+    const limpiezasReady = monthTasksQ.isSuccess && monthLimpiezasRegistreQ.isSuccess;
+    if (limpiezasReady) {
+      const fechaByLimpieza = new Map<number, string>();
+      for (const t of monthTasksQ.data ?? []) fechaByLimpieza.set(t.id_limpieza, t.fecha_limpieza);
+      const limpiezasConSesiones = new Set((monthLimpiezasRegistreQ.data ?? []).map((r) => r.id_limpieza));
+      for (const t of monthTasksQ.data ?? []) {
+        if (limpiezasConSesiones.has(t.id_limpieza)) continue;
+        const h = diffHoursMinutes(t.iniciada_en, t.finalizada_en);
+        m.set(t.fecha_limpieza, (m.get(t.fecha_limpieza) ?? 0) + h);
+      }
+      for (const r of monthLimpiezasRegistreQ.data ?? []) {
+        // Overdue tasks (fecha_limpieza in an earlier month) can be worked and
+        // have session rows dated in this month even though monthTasksQ (scoped
+        // to this month's fecha_limpieza) never picked up their parent row — fall
+        // back to the session's own date instead of silently dropping the hours.
+        const fecha = fechaByLimpieza.get(r.id_limpieza) ?? r.inici.slice(0, 10);
+        const h = Number(r.hores ?? 0);
+        m.set(fecha, (m.get(fecha) ?? 0) + h);
+      }
     }
     for (const r of monthMantQ.data ?? []) {
       const h = Number(r.hores ?? 0);
@@ -773,7 +784,11 @@ function WorkerView({
       m.set(a.fecha, (m.get(a.fecha) ?? 0) + h);
     }
     return m;
-  }, [monthTasksQ.data, monthLimpiezasRegistreQ.data, monthMantQ.data, monthGenericQ.data, monthAjustosQ.data]);
+  }, [
+    monthTasksQ.data, monthTasksQ.isSuccess,
+    monthLimpiezasRegistreQ.data, monthLimpiezasRegistreQ.isSuccess,
+    monthMantQ.data, monthGenericQ.data, monthAjustosQ.data,
+  ]);
 
   const monthHours = useMemo(() => {
     let total = 0;
