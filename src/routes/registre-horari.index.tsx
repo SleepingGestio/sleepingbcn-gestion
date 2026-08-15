@@ -533,7 +533,7 @@ function WorkerColumn({
   // Both top labels share this height so they stay aligned with each other
   // and always clear the actual-hours number, even when the red bar grows
   // past the gray one.
-  const topLabelBottomPx = Math.max(objPx + excessPx + 8, actualPx + 22, effPx !== null ? effPx + 24 : 0);
+  const topLabelBottomPx = Math.max(objPx + excessPx + 8, actualPx + 22);
 
   const saldo = hasObjective
     ? actual - (hasAdjustment && effectiveObjective != null ? effectiveObjective : (objective as number))
