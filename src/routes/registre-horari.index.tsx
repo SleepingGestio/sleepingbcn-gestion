@@ -533,7 +533,7 @@ function WorkerColumn({
   // Both top labels share this height so they stay aligned with each other
   // and always clear the actual-hours number, even when the red bar grows
   // past the gray one.
-  const topLabelBottomPx = Math.max(objPx + excessPx + 8, actualPx + 22);
+  const topLabelBottomPx = Math.max(objPx + excessPx + 8, actualPx + 22, effPx !== null ? effPx + 24 : 0);
 
   const saldo = hasObjective
     ? actual - (hasAdjustment && effectiveObjective != null ? effectiveObjective : (objective as number))
@@ -585,8 +585,7 @@ function WorkerColumn({
                   className="absolute whitespace-nowrap"
                   style={{
                     bottom: `${effPx + 12}px`,
-                    left: "50%",
-                    transform: "translateX(-50%)",
+                    right: "calc(100% + 4px)",
                     fontSize: 11,
                     fontWeight: 700,
                     color: "#26215C",
