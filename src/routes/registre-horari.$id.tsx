@@ -27,6 +27,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { ArrowLeft, ChevronLeft, ChevronRight, Plus, Trash2, Search, Lock, LockOpen, Eye, Pencil } from "lucide-react";
 import { fmtDate } from "@/lib/format";
 import { formatHHMM as fmtHours } from "@/lib/utils";
+import { DIAS_PROMEDIO_MES } from "@/lib/vacaciones";
 import { toast } from "sonner";
 import { LimpiezaPopover, type Limpieza } from "@/components/limpieza-popover";
 import { MantenimientoPopover } from "@/components/mantenimiento-popover";
@@ -1121,7 +1122,7 @@ function AjustModal({
 
   useEffect(() => {
     if (tipo !== "vacaciones" || !horasAutoSet) return;
-    const perDia = horasObjetivoMesForDate(fecha) / 30;
+    const perDia = horasObjetivoMesForDate(fecha) / DIAS_PROMEDIO_MES;
     const rounded = String(Math.round(perDia * 100) / 100);
     lastAutoValueRef.current = rounded;
     setHoras(rounded);
@@ -2006,7 +2007,7 @@ function NouAnyModal({
   }, [tipoContrato, periods, inici, fi]);
 
   const diesN = Number(dies) || 0;
-  const horesCalc = diesN * (horesPerMes / 30);
+  const horesCalc = diesN * (horesPerMes / DIAS_PROMEDIO_MES);
 
   async function save() {
     if (diesN <= 0) { toast.error("Los días deben ser > 0"); return; }

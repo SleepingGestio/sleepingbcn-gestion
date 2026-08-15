@@ -27,6 +27,7 @@ import { usePermissions } from "@/hooks/use-permissions";
 import { useCurrentPersonal } from "@/hooks/use-current-personal";
 import { formatHHMM } from "@/lib/utils";
 import { roleColor } from "@/lib/role-colors";
+import { DIAS_PROMEDIO_MES } from "@/lib/vacaciones";
 import { HHMMInput } from "@/components/hhmm-input";
 
 type Persona = {
@@ -78,7 +79,7 @@ type PeriodoActividad = {
 };
 
 function computeVacHours(dies: number, horasMes: number): number {
-  return Math.round(dies * (horasMes / 30) * 10) / 10;
+  return Math.round(dies * (horasMes / DIAS_PROMEDIO_MES) * 10) / 10;
 }
 function addOneYear(iso: string): string {
   const d = new Date(iso);
