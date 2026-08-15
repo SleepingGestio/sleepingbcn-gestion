@@ -1035,13 +1035,14 @@ function AjustModal({
 }) {
   const [fecha, setFecha] = useState(defaultDate);
   const [fechaFin, setFechaFin] = useState(defaultDate);
-  const [tipusComputa, setTipusComputa] = useState<"treballades" | "objectiu" | "ajust">("objectiu");
-  const [tipo, setTipo] = useState("vacaciones");
+  const [tipusComputa, setTipusComputa] = useState<"treballades" | "objectiu" | "ajust">("ajust");
+  const [tipo, setTipo] = useState("otro");
   const [horas, setHoras] = useState<string>("");
   const [horasValid, setHorasValid] = useState(true);
   const [notas, setNotas] = useState("");
   const [saving, setSaving] = useState(false);
   const [horasAutoSet, setHorasAutoSet] = useState(true);
+  const [resetToken, setResetToken] = useState(0);
   const lastAutoValueRef = useRef<string>("");
   const prevOpenRef = useRef(false);
 
@@ -1093,20 +1094,27 @@ function AjustModal({
     if (open && !prevOpenRef.current) {
       setFecha(defaultDate);
       setFechaFin(defaultDate);
-      setTipusComputa("objectiu");
-      setTipo("vacaciones");
+      setTipusComputa("ajust");
+      setTipo("otro");
       setHoras("");
       setHorasValid(true);
       setNotas("");
       setSaving(false);
       setHorasAutoSet(true);
+      setResetToken((n) => n + 1);
       lastAutoValueRef.current = "";
+      // periodsQ never remounts (AjustModal stays mounted for the page's whole
+      // lifetime), so a dialog reopen is not a react-query "mount" event and
+      // won't auto-refetch on its own — force it here in case the worker's
+      // contract periods changed elsewhere since the last fetch.
+      periodsQ.refetch();
     }
     prevOpenRef.current = open;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, defaultDate]);
 
-  // Re-enable auto-calc whenever the user (re-)selects "vacaciones", including
-  // the initial mount (tipo starts as "vacaciones").
+  // Re-enable auto-calc whenever the user selects "vacaciones" from the Tipo
+  // dropdown (tipo now defaults to "otro", so this no longer fires on mount).
   useEffect(() => {
     if (tipo === "vacaciones") setHorasAutoSet(true);
   }, [tipo]);
@@ -1118,7 +1126,7 @@ function AjustModal({
     lastAutoValueRef.current = rounded;
     setHoras(rounded);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tipo, fecha, horasAutoSet, periodsQ.data, tipoContrato]);
+  }, [tipo, fecha, horasAutoSet, periodsQ.data, tipoContrato, resetToken]);
 
   function handleHorasChange(v: string) {
     setHoras(v);
