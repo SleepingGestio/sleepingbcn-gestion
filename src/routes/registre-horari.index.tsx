@@ -435,7 +435,7 @@ function RegistreHorariPage() {
         </div>
       ) : (
         <div className="rounded-xl border bg-card p-4 md:p-6">
-          <div className="flex items-end justify-around gap-[56px] overflow-x-auto min-h-[340px] pl-10">
+          <div className="flex items-end justify-around gap-3 md:gap-6 overflow-x-auto min-h-[340px] pl-10">
             {displayedWorkers.map((w) => (
               <div
                 key={w.id_persona}
@@ -552,39 +552,24 @@ function WorkerColumn({
                 {fmtHours(objective as number)}
               </span>
             </div>
-            <div
-              className="w-8 rounded-t bg-slate-300"
-              style={{ height: `${objPx}px` }}
-              title={objectiveTitle}
-            />
-            {excessPx > 0 && (
+            {excessPx > 0 && effPx !== null && effectiveObjective != null && (
               <div
-                className="absolute w-8 rounded-t"
+                className="relative w-8 rounded-t"
                 style={{
-                  bottom: `${objPx}px`,
-                  left: 0,
                   height: `${excessPx}px`,
                   background: "#FBDEDD",
-                  borderBottom: "2px solid #E24B4A",
+                  borderTop: "2px solid #E24B4A",
                 }}
                 title={objectiveTitle}
-              />
-            )}
-            {hasAdjustment && effPx !== null && effectiveObjective != null && (
-              <>
-                {/* Anchored to this column's own bottom (bottom: effPx), not
-                    nested inside the grey bar — effPx already represents the
-                    marker's true height above the baseline whether it falls
-                    within the grey zone (reduction) or above it (excess from a
-                    negative prevAcumulat), so no top/negative-offset math needed. */}
+              >
                 <div
                   className="absolute left-0 right-0"
-                  style={{ bottom: `${effPx}px`, height: 2, backgroundColor: "#26215C" }}
+                  style={{ top: 0, height: 2, backgroundColor: "#26215C" }}
                 />
                 <span
                   className="absolute whitespace-nowrap"
                   style={{
-                    bottom: `${effPx + 12}px`,
+                    top: -12,
                     right: "calc(100% + 4px)",
                     fontSize: 11,
                     fontWeight: 700,
@@ -597,8 +582,38 @@ function WorkerColumn({
                 >
                   {fmtHours(effectiveObjective)}
                 </span>
-              </>
+              </div>
             )}
+            <div
+              className="relative w-8 rounded-t bg-slate-300"
+              style={{ height: `${objPx}px` }}
+              title={objectiveTitle}
+            >
+              {hasAdjustment && effPx !== null && excessPx === 0 && effectiveObjective != null && (
+                <>
+                  <div
+                    className="absolute left-0 right-0"
+                    style={{ top: `${objPx - effPx}px`, height: 2, backgroundColor: "#26215C" }}
+                  />
+                  <span
+                    className="absolute whitespace-nowrap"
+                    style={{
+                      top: `${objPx - effPx - 12}px`,
+                      right: "calc(100% + 4px)",
+                      fontSize: 11,
+                      fontWeight: 700,
+                      color: "#26215C",
+                      background: "#fff",
+                      padding: "1px 5px",
+                      borderRadius: 4,
+                      border: "1px solid #26215C",
+                    }}
+                  >
+                    {fmtHours(effectiveObjective)}
+                  </span>
+                </>
+              )}
+            </div>
           </div>
         )}
         <div className="relative flex flex-col items-center" style={{ width: 32 }}>
