@@ -1263,17 +1263,17 @@ function AjustModal({
 // ============================================================
 
 type ResumRow = {
-  id_resum: number;
+  id_resumen: number;
   id_persona: number;
-  any_mes: number;
+  anio: number;
   mes: number;
-  horas_objetivo_base: number;
-  horas_reduccion: number;
-  horas_objetivo_efectiu: number;
-  horas_treballades: number;
-  horas_ajust_saldo: number;
+  hores_objectiu_base: number;
+  hores_reduccio: number;
+  hores_objectiu_ef: number;
+  hores_treballades: number;
+  hores_ajust_saldo: number;
   saldo_mes: number;
-  saldo_acumulat_anterior: number;
+  saldo_acumulat_ant: number;
   saldo_acumulat_fi: number;
   decisio_tancament: "liquidar" | "acumular" | null;
   cerrado: boolean;
@@ -1316,7 +1316,7 @@ function TancamentsTab({
         .from("personal_resum_mes" as never)
         .select("*")
         .eq("id_persona", idPersona)
-        .eq("any_mes", year)
+        .eq("anio", year)
         .eq("mes", mes)
         .maybeSingle();
       if (error) { console.warn(error); return null; }
@@ -1331,7 +1331,7 @@ function TancamentsTab({
         .from("personal_resum_mes" as never)
         .select("*")
         .eq("id_persona", idPersona)
-        .order("any_mes", { ascending: false })
+        .order("anio", { ascending: false })
         .order("mes", { ascending: false });
       if (error) { console.warn(error); return []; }
       return (data ?? []) as ResumRow[];
@@ -1348,8 +1348,8 @@ function TancamentsTab({
     const rows = historyQ.data ?? [];
     // Find latest closed month strictly before (year, mes)
     const sorted = [...rows]
-      .filter((r) => r.cerrado && (r.any_mes < year || (r.any_mes === year && r.mes < mes)))
-      .sort((a, b) => (b.any_mes - a.any_mes) || (b.mes - a.mes));
+      .filter((r) => r.cerrado && (r.anio < year || (r.anio === year && r.mes < mes)))
+      .sort((a, b) => (b.anio - a.anio) || (b.mes - a.mes));
     return sorted[0]?.saldo_acumulat_fi ?? 0;
   }, [historyQ.data, year, mes]);
 
@@ -1360,15 +1360,15 @@ function TancamentsTab({
       const saldoAcumulat = decisio === "liquidar" ? 0 : totals.saldo + Number(prevAcumulat);
       const payload = {
         id_persona: idPersona,
-        any_mes: year,
+        anio: year,
         mes,
-        horas_objetivo_base: totals.objective ?? 0,
-        horas_reduccion: totals.reductions,
-        horas_objetivo_efectiu: totals.effectiveObjective ?? 0,
-        horas_treballades: totals.worked,
-        horas_ajust_saldo: totals.adjustments,
+        hores_objectiu_base: totals.objective ?? 0,
+        hores_reduccio: totals.reductions,
+        hores_objectiu_ef: totals.effectiveObjective ?? 0,
+        hores_treballades: totals.worked,
+        hores_ajust_saldo: totals.adjustments,
         saldo_mes: totals.saldo,
-        saldo_acumulat_anterior: Number(prevAcumulat),
+        saldo_acumulat_ant: Number(prevAcumulat),
         saldo_acumulat_fi: saldoAcumulat,
         decisio_tancament: decisio,
         cerrado: true,
@@ -1380,7 +1380,7 @@ function TancamentsTab({
         const { error } = await supabase
           .from("personal_resum_mes" as never)
           .update(payload as never)
-          .eq("id_resum", existing.id_resum);
+          .eq("id_resumen", existing.id_resumen);
         if (error) throw error;
       } else {
         const { error } = await supabase
@@ -1450,16 +1450,16 @@ function TancamentsTab({
             <div className="mb-4 flex items-end gap-4">
               <div className="flex-1 min-w-0">
                 <ClosureProgressBar
-                  worked={closed ? currentMonthQ.data!.horas_treballades : totals.worked}
-                  reductions={closed ? currentMonthQ.data!.horas_reduccion : totals.reductions}
-                  baseObjective={closed ? currentMonthQ.data!.horas_objetivo_base : (totals.objective ?? 0)}
-                  effectiveObjective={closed ? currentMonthQ.data!.horas_objetivo_efectiu : (totals.effectiveObjective ?? 0)}
+                  worked={closed ? currentMonthQ.data!.hores_treballades : totals.worked}
+                  reductions={closed ? currentMonthQ.data!.hores_reduccio : totals.reductions}
+                  baseObjective={closed ? currentMonthQ.data!.hores_objectiu_base : (totals.objective ?? 0)}
+                  effectiveObjective={closed ? currentMonthQ.data!.hores_objectiu_ef : (totals.effectiveObjective ?? 0)}
                   reductionTipo={totals.reductionTipo}
                 />
               </div>
               {(() => {
                 const saldoVal = closed ? Number(currentMonthQ.data!.saldo_mes) : totals.saldo;
-                const eff = closed ? Number(currentMonthQ.data!.horas_objetivo_efectiu) : (totals.effectiveObjective ?? 0);
+                const eff = closed ? Number(currentMonthQ.data!.hores_objectiu_ef) : (totals.effectiveObjective ?? 0);
                 const st = saldoChipStyle(saldoVal, eff);
                 return (
                   <div className="flex flex-col items-center shrink-0" style={{ minWidth: 72 }}>
@@ -1473,12 +1473,12 @@ function TancamentsTab({
             </div>
 
             <BreakdownRows
-              baseObjective={closed ? currentMonthQ.data!.horas_objetivo_base : (totals.objective ?? 0)}
-              reductions={closed ? currentMonthQ.data!.horas_reduccion : totals.reductions}
+              baseObjective={closed ? currentMonthQ.data!.hores_objectiu_base : (totals.objective ?? 0)}
+              reductions={closed ? currentMonthQ.data!.hores_reduccio : totals.reductions}
               reductionTipo={totals.reductionTipo}
-              effectiveObjective={closed ? currentMonthQ.data!.horas_objetivo_efectiu : (totals.effectiveObjective ?? 0)}
-              worked={closed ? currentMonthQ.data!.horas_treballades : totals.worked}
-              adjustments={closed ? currentMonthQ.data!.horas_ajust_saldo : totals.adjustments}
+              effectiveObjective={closed ? currentMonthQ.data!.hores_objectiu_ef : (totals.effectiveObjective ?? 0)}
+              worked={closed ? currentMonthQ.data!.hores_treballades : totals.worked}
+              adjustments={closed ? currentMonthQ.data!.hores_ajust_saldo : totals.adjustments}
               saldoMes={closed ? currentMonthQ.data!.saldo_mes : totals.saldo}
             />
 
@@ -1487,7 +1487,7 @@ function TancamentsTab({
             <div className="space-y-2">
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">Saldo acumulado anterior</span>
-                <span className="tabular-nums font-medium">{fmtSigned(closed ? currentMonthQ.data!.saldo_acumulat_anterior : Number(prevAcumulat))}</span>
+                <span className="tabular-nums font-medium">{fmtSigned(closed ? currentMonthQ.data!.saldo_acumulat_ant : Number(prevAcumulat))}</span>
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-sm text-muted-foreground">
@@ -1552,13 +1552,13 @@ function TancamentsTab({
                 <tr><td colSpan={6} className="text-center text-muted-foreground py-8">Sin historial.</td></tr>
               ) : (
                 (historyQ.data ?? []).map((r) => (
-                  <tr key={r.id_resum} className="border-b">
-                    <td className="p-3 capitalize">{MONTH_ES[r.mes - 1]} {r.any_mes}</td>
+                  <tr key={r.id_resumen} className="border-b">
+                    <td className="p-3 capitalize">{MONTH_ES[r.mes - 1]} {r.anio}</td>
                     <td className="p-3 text-right tabular-nums">
-                      {fmtHours(Number(r.horas_objetivo_efectiu))}
+                      {fmtHours(Number(r.hores_objectiu_ef))}
                       {r.decisio_tancament === "liquidar" && <span className="ml-1 text-amber-600 text-xs">★ liquidado</span>}
                     </td>
-                    <td className="p-3 text-right tabular-nums">{fmtHours(Number(r.horas_treballades))}</td>
+                    <td className="p-3 text-right tabular-nums">{fmtHours(Number(r.hores_treballades))}</td>
                     <td className={`p-3 text-right tabular-nums ${saldoColor(Number(r.saldo_mes))}`}>{fmtSigned(Number(r.saldo_mes))}</td>
                     <td className={`p-3 text-right tabular-nums ${saldoColor(Number(r.saldo_acumulat_fi))}`}>{fmtSigned(Number(r.saldo_acumulat_fi))}</td>
                     <td className="p-3">
@@ -1579,18 +1579,18 @@ function TancamentsTab({
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle className="capitalize">
-              {detailRow ? `${MONTH_ES[detailRow.mes - 1]} ${detailRow.any_mes}` : ""}
+              {detailRow ? `${MONTH_ES[detailRow.mes - 1]} ${detailRow.anio}` : ""}
             </DialogTitle>
           </DialogHeader>
           {detailRow && (
             <div className="space-y-1 text-sm">
-              <Field label="Objetivo base" value={fmtHours(Number(detailRow.horas_objetivo_base))} />
-              <Field label="Reducción" value={`−${fmtHours(Number(detailRow.horas_reduccion))}`} />
-              <Field label="Objetivo efectivo" value={fmtHours(Number(detailRow.horas_objetivo_efectiu))} />
-              <Field label="Horas trabajadas" value={fmtHours(Number(detailRow.horas_treballades))} />
-              <Field label="Ajuste de saldo" value={fmtSigned(Number(detailRow.horas_ajust_saldo))} />
+              <Field label="Objetivo base" value={fmtHours(Number(detailRow.hores_objectiu_base))} />
+              <Field label="Reducción" value={`−${fmtHours(Number(detailRow.hores_reduccio))}`} />
+              <Field label="Objetivo efectivo" value={fmtHours(Number(detailRow.hores_objectiu_ef))} />
+              <Field label="Horas trabajadas" value={fmtHours(Number(detailRow.hores_treballades))} />
+              <Field label="Ajuste de saldo" value={fmtSigned(Number(detailRow.hores_ajust_saldo))} />
               <Field label="Saldo del mes" value={fmtSigned(Number(detailRow.saldo_mes))} />
-              <Field label="Acumulado anterior" value={fmtSigned(Number(detailRow.saldo_acumulat_anterior))} />
+              <Field label="Acumulado anterior" value={fmtSigned(Number(detailRow.saldo_acumulat_ant))} />
               <Field label="Acumulado final" value={fmtSigned(Number(detailRow.saldo_acumulat_fi))} />
               <Field label="Decisión" value={detailRow.decisio_tancament ?? "—"} />
             </div>
