@@ -1043,6 +1043,7 @@ function AjustModal({
   const [saving, setSaving] = useState(false);
   const [horasAutoSet, setHorasAutoSet] = useState(true);
   const lastAutoValueRef = useRef<string>("");
+  const prevOpenRef = useRef(false);
 
   const isRangeTipo = RANGE_TIPOS.has(tipo);
 
@@ -1082,6 +1083,27 @@ function AjustModal({
     const fallback = started.length > 0 ? started[started.length - 1] : periods[0];
     return Number(fallback?.horas_objetivo_mes ?? 0);
   }
+
+  // Master reset: whenever the dialog transitions from closed to open, wipe all
+  // local state back to fresh defaults. AjustModal is always mounted (visibility
+  // is delegated to the Dialog's `open` prop), so without this every field would
+  // keep leaking stale values across reopens and across switching to a different
+  // worker (idPersona changes via route param without remounting this component).
+  useEffect(() => {
+    if (open && !prevOpenRef.current) {
+      setFecha(defaultDate);
+      setFechaFin(defaultDate);
+      setTipusComputa("objectiu");
+      setTipo("vacaciones");
+      setHoras("");
+      setHorasValid(true);
+      setNotas("");
+      setSaving(false);
+      setHorasAutoSet(true);
+      lastAutoValueRef.current = "";
+    }
+    prevOpenRef.current = open;
+  }, [open, defaultDate]);
 
   // Re-enable auto-calc whenever the user (re-)selects "vacaciones", including
   // the initial mount (tipo starts as "vacaciones").
