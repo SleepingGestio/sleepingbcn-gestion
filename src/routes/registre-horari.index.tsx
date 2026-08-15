@@ -585,7 +585,8 @@ function WorkerColumn({
                   className="absolute whitespace-nowrap"
                   style={{
                     bottom: `${effPx + 12}px`,
-                    right: "calc(100% + 4px)",
+                    left: "50%",
+                    transform: "translateX(-50%)",
                     fontSize: 11,
                     fontWeight: 700,
                     color: "#26215C",
