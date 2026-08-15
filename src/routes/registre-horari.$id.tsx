@@ -1682,7 +1682,7 @@ function ClosureProgressBar({
       <div className="relative w-full mb-4" style={{ overflow: "visible" }}>
       <div className="relative w-full" style={{ height: 10 }}>
         <div className="absolute inset-y-0 left-0" style={{ width: `${effPct}%`, background: "#D3D1C7" }} />
-        {has && reductions > 0 && (
+        {has && (reductions > 0 || prevAcumulat > 0) && (
           <div className="absolute inset-y-0" style={{ left: `${effPct}%`, width: `${Math.max(0, BASE_PCT - effPct)}%`, background: "#FAEEDA", borderLeft: "2px solid #EF9F27" }} />
         )}
         {has && excessPct > 0 && (
