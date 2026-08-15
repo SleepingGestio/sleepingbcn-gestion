@@ -312,7 +312,7 @@ function DetallPage() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("personal_ajustos_hores")
-        .select("id_ajuste, id_persona, fecha, tipo, horas, notas, tipus_computa")
+        .select("id_ajuste, id_persona, fecha, tipo, horas, notas, tipus_computa, id_apt, id_grupo, id_tipo_espacio_comun")
         .eq("id_persona", idPersona)
         .gte("fecha", start)
         .lte("fecha", end);
@@ -324,6 +324,7 @@ function DetallPage() {
         id_ajuste: number; id_persona: number; fecha: string; tipo: string | null;
         horas: number | null; notas: string | null;
         tipus_computa: "treballades" | "objectiu" | "ajust" | null;
+        id_apt: number | null; id_grupo: number | null; id_tipo_espacio_comun: number | null;
       }>;
     },
   });
@@ -479,13 +480,22 @@ function DetallPage() {
       });
     }
     for (const a of ajustosQ.data ?? []) {
+      const hasLocation = a.id_apt != null || a.id_tipo_espacio_comun != null || a.id_grupo != null;
+      const propietat = hasLocation
+        ? resolveLocation(
+            { id_apt: a.id_apt, id_tipo_espacio_comun: a.id_tipo_espacio_comun, id_grup: a.id_grupo },
+            mantAptById,
+            mantEspacioById,
+            mantGrupoById,
+          )
+        : "—";
       out.push({
         key: `aj-${a.id_ajuste}`,
         kind: "ajust",
         fecha: a.fecha,
         inici: null,
         fi: null,
-        propietat: "—",
+        propietat,
         tipus: a.tipo ?? "Ajuste manual",
         hores: Number(a.horas ?? 0),
         tipus_computa: a.tipus_computa ?? "ajust",
@@ -793,6 +803,9 @@ function DetallPage() {
             qc.invalidateQueries({ queryKey: ["reg-horari-det-ajustos", idPersona] });
             setAjustOpen(false);
           }}
+          grupos={mantGruposQ.data ?? []}
+          apartamentos={mantAptsQ.data ?? []}
+          espaciosComunes={mantEspaciosQ.data ?? []}
         />
         </TabsContent>
 
@@ -1083,9 +1096,13 @@ function fmtDateLong(iso: string): string {
 
 function AjustModal({
   open, onClose, idPersona, defaultDate, tipoContrato, onSaved,
+  grupos, apartamentos, espaciosComunes,
 }: {
   open: boolean; onClose: () => void; idPersona: number; defaultDate: string;
   tipoContrato: string | null; onSaved: () => void;
+  grupos: { id_grupo: number; nombre: string }[];
+  apartamentos: { id_apt: number; nombre: string; id_grupo: number | null }[];
+  espaciosComunes: { id_tipo: number; nombre: string }[];
 }) {
   const [fecha, setFecha] = useState(defaultDate);
   const [fechaFin, setFechaFin] = useState(defaultDate);
@@ -1097,10 +1114,34 @@ function AjustModal({
   const [saving, setSaving] = useState(false);
   const [horasAutoSet, setHorasAutoSet] = useState(true);
   const [resetToken, setResetToken] = useState(0);
+  const [propOpen, setPropOpen] = useState(false);
+  const [idGrupo, setIdGrupo] = useState<number | null>(null);
+  const [idApt, setIdApt] = useState<number | null>(null);
+  const [idEspacioComun, setIdEspacioComun] = useState<number | null>(null);
   const lastAutoValueRef = useRef<string>("");
   const prevOpenRef = useRef(false);
 
   const isRangeTipo = RANGE_TIPOS.has(tipo);
+  const showPropiedad = tipo === "otro" && (tipusComputa === "ajust" || tipusComputa === "treballades");
+
+  const filteredApts = useMemo(() => {
+    const list = idGrupo == null
+      ? apartamentos
+      : apartamentos.filter((a) => a.id_grupo === idGrupo);
+    return [...list].sort((a, b) => a.nombre.localeCompare(b.nombre, "ca", { sensitivity: "base" }));
+  }, [apartamentos, idGrupo]);
+
+  // When the visibility rule stops being met (tipo/tipusComputa changed away
+  // from a qualifying combination), clear any selection so a stale
+  // apt/grupo/espacio can't get silently submitted for a type that shouldn't
+  // carry one.
+  useEffect(() => {
+    if (!showPropiedad) {
+      setIdGrupo(null);
+      setIdApt(null);
+      setIdEspacioComun(null);
+    }
+  }, [showPropiedad]);
 
   const periodsQ = useQuery({
     queryKey: ["ajuste-modal-periods", idPersona],
@@ -1156,6 +1197,10 @@ function AjustModal({
       setSaving(false);
       setHorasAutoSet(true);
       setResetToken((n) => n + 1);
+      setPropOpen(false);
+      setIdGrupo(null);
+      setIdApt(null);
+      setIdEspacioComun(null);
       lastAutoValueRef.current = "";
       // periodsQ never remounts (AjustModal stays mounted for the page's whole
       // lifetime), so a dialog reopen is not a react-query "mount" event and
@@ -1214,6 +1259,9 @@ function AjustModal({
         horas: h,
         notas: notas.trim() || null,
         tipus_computa: tipusComputa,
+        id_grupo: idGrupo,
+        id_apt: idApt,
+        id_tipo_espacio_comun: idEspacioComun,
       }));
       const { error } = await supabase.from("personal_ajustos_hores").insert(rows as never);
       setSaving(false);
@@ -1235,6 +1283,7 @@ function AjustModal({
     const { error } = await supabase.from("personal_ajustos_hores").insert({
       id_persona: idPersona, fecha, tipo, horas: h, notas: notas.trim() || null,
       tipus_computa: tipusComputa,
+      id_grupo: idGrupo, id_apt: idApt, id_tipo_espacio_comun: idEspacioComun,
     } as never);
     setSaving(false);
     if (error) { toast.error(error.message); return; }
@@ -1288,6 +1337,78 @@ function AjustModal({
               </SelectContent>
             </Select>
           </div>
+          {showPropiedad && (
+            <div className="rounded-lg border border-slate-200 bg-white">
+              <button
+                type="button"
+                onClick={() => setPropOpen((v) => !v)}
+                className="w-full flex items-center justify-between px-3 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
+              >
+                <span>Asociar a una propiedad (opcional)</span>
+                <span className="text-xs text-muted-foreground">
+                  {propOpen ? "−" : "+"}
+                </span>
+              </button>
+              {propOpen && (
+                <div className="px-3 pb-3 pt-1 space-y-3 border-t border-slate-100">
+                  <div className="space-y-1">
+                    <label className="text-xs font-medium">Grupo</label>
+                    <select
+                      value={idGrupo ?? ""}
+                      onChange={(e) => {
+                        const v = e.target.value ? Number(e.target.value) : null;
+                        setIdGrupo(v);
+                        if (idApt != null) {
+                          const apt = apartamentos.find((a) => a.id_apt === idApt);
+                          if (v != null && apt && apt.id_grupo !== v) setIdApt(null);
+                        }
+                      }}
+                      className="w-full h-9 rounded-md border border-input bg-transparent px-3 text-sm"
+                    >
+                      <option value="">— Ninguno —</option>
+                      {grupos.map((g) => (
+                        <option key={g.id_grupo} value={g.id_grupo}>{g.nombre}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-medium">Ubicación</label>
+                    <select
+                      value={
+                        idApt != null
+                          ? `apt-${idApt}`
+                          : idEspacioComun != null
+                            ? `esp-${idEspacioComun}`
+                            : ""
+                      }
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        setIdApt(v.startsWith("apt-") ? Number(v.slice(4)) : null);
+                        setIdEspacioComun(v.startsWith("esp-") ? Number(v.slice(4)) : null);
+                      }}
+                      className="w-full h-9 rounded-md border border-input bg-transparent px-3 text-sm"
+                    >
+                      <option value="">— Ninguno —</option>
+                      {filteredApts.length > 0 && (
+                        <optgroup label="Apartamentos">
+                          {filteredApts.map((a) => (
+                            <option key={`apt-${a.id_apt}`} value={`apt-${a.id_apt}`}>{a.nombre}</option>
+                          ))}
+                        </optgroup>
+                      )}
+                      {espaciosComunes.length > 0 && (
+                        <optgroup label="Espacios comunes">
+                          {espaciosComunes.map((esp) => (
+                            <option key={`esp-${esp.id_tipo}`} value={`esp-${esp.id_tipo}`}>{esp.nombre}</option>
+                          ))}
+                        </optgroup>
+                      )}
+                    </select>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
           <div>
             <label className="text-sm font-medium">Horas</label>
             <HHMMInput value={horas} onChange={handleHorasChange} onValidityChange={setHorasValid} placeholder="ej. 8:00" />
