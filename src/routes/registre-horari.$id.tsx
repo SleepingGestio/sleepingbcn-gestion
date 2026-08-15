@@ -652,6 +652,7 @@ function DetallPage() {
           adjustments={totals.adjustments}
           reductions={totals.reductions}
           reductionTipo={totals.reductionTipo}
+          prevAcumulat={Number(prevAcumulat)}
           baseObjective={totals.objective}
           effectiveObjective={totals.effectiveObjective}
           saldo={totals.saldo}
@@ -881,10 +882,10 @@ function hexToRgba(hex: string, alpha: number): string {
 }
 
 function HoresProgress({
-  worked, adjustments, reductions, reductionTipo,
+  worked, adjustments, reductions, reductionTipo, prevAcumulat,
   baseObjective, effectiveObjective, saldo, isAutonom, scheduledPending,
 }: {
-  worked: number; adjustments: number; reductions: number; reductionTipo: string | null;
+  worked: number; adjustments: number; reductions: number; reductionTipo: string | null; prevAcumulat: number;
   baseObjective: number | null; effectiveObjective: number | null; saldo: number; isAutonom: boolean;
   scheduledPending: number;
 }) {
@@ -897,6 +898,12 @@ function HoresProgress({
   const workedPct = hasObjective ? Math.min(100, (total / baseObjective!) * BASE_PCT) : 0;
   const scheduledPendingPct = hasObjective
     ? Math.min(100 - workedPct, (scheduledPending / baseObjective!) * BASE_PCT)
+    : 0;
+  // Same excess-segment math as ClosureProgressBar. Depends only on
+  // effectiveObjective/baseObjective, not on workedPct (which folds in
+  // `adjustments` here) — so workedPct's different formula has no bearing on this.
+  const excessPct = hasObjective && effectiveObjective! > baseObjective!
+    ? ((effectiveObjective! - baseObjective!) / baseObjective!) * BASE_PCT
     : 0;
 
   // Progress bar color
@@ -928,11 +935,14 @@ function HoresProgress({
     saldoText = `${saldo >= 0 ? "+" : "−"}${fmtHours(Math.abs(saldo))}`;
   }
 
-  const reductionLabel = reductionTipo === "vacaciones" ? "vacaciones" : reductionTipo === "baja" ? "baja" : reductionTipo ?? "";
+  const reductionLabel = reductionTipo === "vacaciones" ? "VACAC." : reductionTipo === "baja" ? "baja" : reductionTipo ?? "";
+  const adjClauses: string[] = [];
+  if (reductions > 0) adjClauses.push(`−${fmtHours(reductions)} ${reductionLabel}`);
+  if (prevAcumulat !== 0) adjClauses.push(`${prevAcumulat > 0 ? "−" : "+"}${fmtHours(Math.abs(prevAcumulat))} S.ANT.`);
   const infoText = !hasObjective
     ? (isAutonom ? "Autónomo" : "Sin objetivo")
-    : reductions > 0
-      ? `Obj. ${fmtHours(baseObjective!)} · −${fmtHours(reductions)} ${reductionLabel} → ${fmtHours(effectiveObjective!)} efectivo`
+    : adjClauses.length > 0
+      ? `Obj. ${fmtHours(baseObjective!)} · ${adjClauses.join(" · ")} → ${fmtHours(effectiveObjective!)} efectivo`
       : `Obj. ${fmtHours(baseObjective!)}`;
 
   return (
@@ -943,7 +953,7 @@ function HoresProgress({
           {/* Bar 1 - objective breakdown */}
           <div className="relative w-full" style={{ height: 10 }}>
             <div className="absolute inset-y-0 left-0" style={{ width: `${effPct}%`, background: "#D3D1C7" }} />
-            {hasObjective && reductions > 0 && (
+            {hasObjective && (reductions > 0 || prevAcumulat > 0) && (
               <div
                 className="absolute inset-y-0 flex items-center justify-center text-[10px] font-medium"
                 style={{
@@ -954,7 +964,21 @@ function HoresProgress({
                   color: "#B35C00",
                 }}
               >
-                −{fmtHours(reductions)}
+                −{fmtHours(reductions + (prevAcumulat > 0 ? prevAcumulat : 0))}
+              </div>
+            )}
+            {hasObjective && excessPct > 0 && (
+              <div
+                className="absolute inset-y-0 flex items-center justify-center text-[10px] font-medium"
+                style={{
+                  left: `${BASE_PCT}%`,
+                  width: `${excessPct}%`,
+                  background: "#FBDEDD",
+                  borderLeft: "2px solid #E24B4A",
+                  color: "#A32D2D",
+                }}
+              >
+                {excessPct > 4 ? `+${fmtHours(effectiveObjective! - baseObjective!)}` : ""}
               </div>
             )}
           </div>
@@ -1683,10 +1707,20 @@ function ClosureProgressBar({
       <div className="relative w-full" style={{ height: 10 }}>
         <div className="absolute inset-y-0 left-0" style={{ width: `${effPct}%`, background: "#D3D1C7" }} />
         {has && (reductions > 0 || prevAcumulat > 0) && (
-          <div className="absolute inset-y-0" style={{ left: `${effPct}%`, width: `${Math.max(0, BASE_PCT - effPct)}%`, background: "#FAEEDA", borderLeft: "2px solid #EF9F27" }} />
+          <div
+            className="absolute inset-y-0 flex items-center justify-center text-[10px] font-medium"
+            style={{ left: `${effPct}%`, width: `${Math.max(0, BASE_PCT - effPct)}%`, background: "#FAEEDA", borderLeft: "2px solid #EF9F27", color: "#B35C00" }}
+          >
+            −{fmtHours(reductions + (prevAcumulat > 0 ? prevAcumulat : 0))}
+          </div>
         )}
         {has && excessPct > 0 && (
-          <div className="absolute inset-y-0" style={{ left: `${BASE_PCT}%`, width: `${excessPct}%`, background: "#FBDEDD", borderLeft: "2px solid #E24B4A" }} />
+          <div
+            className="absolute inset-y-0 flex items-center justify-center text-[10px] font-medium"
+            style={{ left: `${BASE_PCT}%`, width: `${excessPct}%`, background: "#FBDEDD", borderLeft: "2px solid #E24B4A", color: "#A32D2D" }}
+          >
+            {excessPct > 4 ? `+${fmtHours(effectiveObjective - baseObjective)}` : ""}
+          </div>
         )}
       </div>
       <div className="relative w-full" style={{ height: 18 }}>
