@@ -3,6 +3,8 @@ import { useAuth } from "@/hooks/use-auth";
 import { useCurrentPersonal } from "@/hooks/use-current-personal";
 import { usePermissions, ROUTE_TO_MENU } from "@/hooks/use-permissions";
 import { useRouter, useRouterState } from "@tanstack/react-router";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PasswordInput } from "@/components/ui/password-input";
@@ -11,7 +13,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { ForcePasswordSetup } from "@/components/force-password-setup";
 
 export function AuthGate({ children }: { children: ReactNode }) {
-  const { user, loading } = useAuth();
+  const { user, loading, isPasswordRecovery } = useAuth();
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center text-sm text-muted-foreground">
@@ -19,6 +21,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
       </div>
     );
   }
+  if (isPasswordRecovery) return <PasswordRecoveryScreen />;
   if (!user) return <LoginScreen />;
   return <RoleRouter>{children}</RoleRouter>;
 }
@@ -149,6 +152,94 @@ function LoginScreen() {
               {busy ? "Entrando…" : "Entrar"}
             </Button>
           </form>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+function PasswordRecoveryScreen() {
+  const { clearPasswordRecovery, signOut } = useAuth();
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  async function onSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    if (!newPassword || !confirmPassword) {
+      setError("Ambos campos son obligatorios");
+      return;
+    }
+    if (newPassword.length < 8) {
+      setError("La contraseña debe tener al menos 8 caracteres");
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setError("Las contraseñas no coinciden");
+      return;
+    }
+    setBusy(true);
+    const { error: updateError } = await supabase.auth.updateUser({ password: newPassword });
+    setBusy(false);
+    if (updateError) {
+      setError(updateError.message);
+      toast.error("Error al actualizar la contraseña");
+      return;
+    }
+    toast.success("Contraseña actualizada correctamente");
+    clearPasswordRecovery();
+  }
+
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-slate-50 px-4">
+      <Card className="w-full max-w-sm">
+        <CardHeader className="text-center">
+          <div className="mx-auto mb-2 rounded-md bg-slate-900 text-white px-3 py-1 text-sm font-semibold tracking-tight inline-block">
+            SleepingBCN
+          </div>
+          <CardTitle>Establecer nueva contraseña</CardTitle>
+          <CardDescription>Acceso al panel interno</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={onSubmit} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="recovery-new-pw">Nueva contraseña</Label>
+              <PasswordInput
+                id="recovery-new-pw"
+                autoComplete="new-password"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                disabled={busy}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="recovery-confirm-pw">Confirmar contraseña</Label>
+              <PasswordInput
+                id="recovery-confirm-pw"
+                autoComplete="new-password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                disabled={busy}
+              />
+            </div>
+            {error && <p className="text-sm text-destructive">{error}</p>}
+            <Button type="submit" className="w-full" disabled={busy}>
+              {busy ? "Guardando…" : "Guardar"}
+            </Button>
+          </form>
+          <Button
+            type="button"
+            variant="outline"
+            className="w-full mt-3"
+            onClick={() => {
+              clearPasswordRecovery();
+              signOut();
+            }}
+          >
+            Cerrar sesión
+          </Button>
         </CardContent>
       </Card>
     </div>
