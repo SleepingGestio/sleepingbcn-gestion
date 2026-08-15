@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { AppShell } from "@/components/app-shell";
@@ -757,6 +757,7 @@ function DetallPage() {
           onClose={() => setAjustOpen(false)}
           idPersona={idPersona}
           defaultDate={`${start.slice(0, 8)}${pad(Math.min(today.getDate(), 28))}`}
+          tipoContrato={personaQ.data?.tipo_contrato ?? null}
           onSaved={() => {
             qc.invalidateQueries({ queryKey: ["reg-horari-det-ajustos", idPersona] });
             setAjustOpen(false);
@@ -1027,9 +1028,10 @@ function fmtDateLong(iso: string): string {
 }
 
 function AjustModal({
-  open, onClose, idPersona, defaultDate, onSaved,
+  open, onClose, idPersona, defaultDate, tipoContrato, onSaved,
 }: {
-  open: boolean; onClose: () => void; idPersona: number; defaultDate: string; onSaved: () => void;
+  open: boolean; onClose: () => void; idPersona: number; defaultDate: string;
+  tipoContrato: string | null; onSaved: () => void;
 }) {
   const [fecha, setFecha] = useState(defaultDate);
   const [fechaFin, setFechaFin] = useState(defaultDate);
@@ -1039,8 +1041,67 @@ function AjustModal({
   const [horasValid, setHorasValid] = useState(true);
   const [notas, setNotas] = useState("");
   const [saving, setSaving] = useState(false);
+  const [horasAutoSet, setHorasAutoSet] = useState(true);
+  const lastAutoValueRef = useRef<string>("");
 
   const isRangeTipo = RANGE_TIPOS.has(tipo);
+
+  const periodsQ = useQuery({
+    queryKey: ["ajuste-modal-periods", idPersona],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("personal_periodos_actividad")
+        .select("id_periodo, fecha_inicio, fecha_fin, horas_objetivo_mes")
+        .eq("id_persona", idPersona)
+        .order("fecha_inicio", { ascending: true });
+      if (error) { console.warn(error); return []; }
+      return (data ?? []) as PeriodRow[];
+    },
+    enabled: !!idPersona,
+  });
+
+  function horasObjetivoMesForDate(dateISO: string): number {
+    const periods = periodsQ.data ?? [];
+    if (periods.length === 0) return 0;
+    if (tipoContrato === "fijo_discontinuo") {
+      let sum = 0;
+      for (const p of periods) {
+        const pi = p.fecha_inicio;
+        const pf = p.fecha_fin ?? "9999-12-31";
+        if (pi <= dateISO && dateISO <= pf) sum += Number(p.horas_objetivo_mes ?? 0);
+      }
+      return sum;
+    }
+    const exact = periods.find(
+      (p) => p.fecha_inicio <= dateISO && (p.fecha_fin == null || dateISO <= p.fecha_fin),
+    );
+    if (exact) return Number(exact.horas_objetivo_mes ?? 0);
+    // No period covers this exact date (e.g. a gap in the contract history) —
+    // fall back to the closest period that had already started by this date.
+    const started = periods.filter((p) => p.fecha_inicio <= dateISO);
+    const fallback = started.length > 0 ? started[started.length - 1] : periods[0];
+    return Number(fallback?.horas_objetivo_mes ?? 0);
+  }
+
+  // Re-enable auto-calc whenever the user (re-)selects "vacaciones", including
+  // the initial mount (tipo starts as "vacaciones").
+  useEffect(() => {
+    if (tipo === "vacaciones") setHorasAutoSet(true);
+  }, [tipo]);
+
+  useEffect(() => {
+    if (tipo !== "vacaciones" || !horasAutoSet) return;
+    const perDia = horasObjetivoMesForDate(fecha) / 30;
+    const rounded = String(Math.round(perDia * 100) / 100);
+    lastAutoValueRef.current = rounded;
+    setHoras(rounded);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tipo, fecha, horasAutoSet, periodsQ.data, tipoContrato]);
+
+  function handleHorasChange(v: string) {
+    setHoras(v);
+    if (v !== lastAutoValueRef.current) setHorasAutoSet(false);
+  }
 
   async function save() {
     const h = Number(horas);
@@ -1145,7 +1206,12 @@ function AjustModal({
           </div>
           <div>
             <label className="text-sm font-medium">Horas</label>
-            <HHMMInput value={horas} onChange={setHoras} onValidityChange={setHorasValid} placeholder="ej. 8:00" />
+            <HHMMInput value={horas} onChange={handleHorasChange} onValidityChange={setHorasValid} placeholder="ej. 8:00" />
+            {tipo === "vacaciones" && horasAutoSet && (
+              <p className="text-xs text-muted-foreground mt-1">
+                Calculado automáticamente según el contrato — puedes ajustarlo
+              </p>
+            )}
           </div>
           <div>
             <label className="text-sm font-medium">Notas</label>
