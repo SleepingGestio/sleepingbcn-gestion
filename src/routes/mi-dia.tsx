@@ -444,6 +444,26 @@ function WorkerView({
     },
   });
 
+  // Furthest scheduled cleaning date across the WHOLE team (not just this
+  // worker) — used to fill the day tabs with muted placeholder days through
+  // that horizon, so a worker can see how far out the team is scheduled even
+  // on days with nothing assigned to them personally.
+  const teamHorizonQ = useQuery({
+    queryKey: ["mi-dia-team-horizon", todayISO],
+    queryFn: async (): Promise<string | null> => {
+      const { data, error } = await supabase
+        .from("limpiezas")
+        .select("fecha_limpieza")
+        .in("estado", VISIBLE_STATES as unknown as string[])
+        .gte("fecha_limpieza", todayISO)
+        .order("fecha_limpieza", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (error) throw error;
+      return data?.fecha_limpieza ?? null;
+    },
+  });
+
   // Apartments lookup
   const aptIds = useMemo(() => Array.from(new Set((tasksQ.data ?? []).map((t) => t.id_apt))), [tasksQ.data]);
   const aptsQ = useQuery({
@@ -1587,12 +1607,37 @@ function WorkerView({
   // navigate to a future day that only has a maintenance task assigned and
   // no cleaning. todayISO is always included, even if both sources are empty
   // for it — mantDaysMap already guarantees a (possibly empty) todayISO key.
+  // Also filled through the team-wide horizon with placeholder dates that
+  // have nothing for this worker — emptyDates below marks which ones those
+  // are, so the tabs can render them muted instead of just omitting them.
   const tabDates = useMemo(() => {
     const s = new Set<string>([todayISO]);
     for (const d of daysWithTasks) s.add(d.fecha);
     for (const fecha of mantDaysMap.keys()) s.add(fecha);
+    const horizon = teamHorizonQ.data;
+    if (horizon != null) {
+      const cur = fromISO(todayISO);
+      const end = fromISO(horizon);
+      while (cur.getTime() <= end.getTime()) {
+        s.add(toISO(cur));
+        cur.setDate(cur.getDate() + 1);
+      }
+    }
     return Array.from(s).sort((a, b) => a.localeCompare(b));
-  }, [daysWithTasks, mantDaysMap, todayISO]);
+  }, [daysWithTasks, mantDaysMap, todayISO, teamHorizonQ.data]);
+
+  // Dates present in tabDates purely because of the team-horizon fill above —
+  // neither a real cleaning nor a maintenance task for this worker on that
+  // date. Rendered muted/disabled in the tabs; every other date is untouched.
+  const emptyDates = useMemo(() => {
+    const s = new Set<string>();
+    for (const fecha of tabDates) {
+      const hasCleaning = daysWithTasks.some((d) => d.fecha === fecha);
+      const hasMant = (mantDaysMap.get(fecha)?.length ?? 0) > 0;
+      if (!hasCleaning && !hasMant) s.add(fecha);
+    }
+    return s;
+  }, [tabDates, daysWithTasks, mantDaysMap]);
 
   // Default day: first available if today has none
   useEffect(() => {
@@ -1972,20 +2017,25 @@ function WorkerView({
             <div className="flex gap-2 overflow-x-auto px-3 py-2">
               {tabDates.map((fecha) => {
                 const active = fecha === activeDay;
+                const isEmpty = emptyDates.has(fecha);
                 const hasPending = daysWithTasks.find((d) => d.fecha === fecha)?.hasPending ?? false;
                 return (
                   <button
                     key={fecha}
                     type="button"
+                    disabled={isEmpty}
                     onClick={() => setActiveDay(fecha)}
                     className={cn(
                       "relative shrink-0 rounded-full px-4 h-11 text-sm font-medium transition-colors min-w-[88px]",
-                      active
-                        ? "bg-[#26215C] text-white"
-                        : "bg-white text-slate-700 border border-slate-200",
+                      isEmpty
+                        ? "bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed"
+                        : active
+                          ? "bg-[#26215C] text-white"
+                          : "bg-white text-slate-700 border border-slate-200",
                     )}
                   >
                     {tabLabel(fecha, todayISO, tomorrowISO)}
+                    {isEmpty && <span className="ml-1 text-slate-300">–</span>}
                     {hasPending && (
                       <span className="absolute -bottom-0.5 left-1/2 -translate-x-1/2 h-1.5 w-1.5 rounded-full bg-amber-400" />
                     )}
