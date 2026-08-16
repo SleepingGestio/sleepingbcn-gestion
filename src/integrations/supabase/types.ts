@@ -825,6 +825,109 @@ export type Database = {
           },
         ]
       }
+      manteniment_reclamacion_notas: {
+        Row: {
+          creado_en: string
+          creado_por: number | null
+          id_nota: number
+          id_reclamacion: number
+          nota: string
+        }
+        Insert: {
+          creado_en?: string
+          creado_por?: number | null
+          id_nota?: never
+          id_reclamacion: number
+          nota: string
+        }
+        Update: {
+          creado_en?: string
+          creado_por?: number | null
+          id_nota?: never
+          id_reclamacion?: number
+          nota?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "manteniment_reclamacion_notas_creado_por_fkey"
+            columns: ["creado_por"]
+            isOneToOne: false
+            referencedRelation: "personal"
+            referencedColumns: ["id_persona"]
+          },
+          {
+            foreignKeyName: "manteniment_reclamacion_notas_id_reclamacion_fkey"
+            columns: ["id_reclamacion"]
+            isOneToOne: false
+            referencedRelation: "manteniment_reclamaciones"
+            referencedColumns: ["id_reclamacion"]
+          },
+        ]
+      }
+      manteniment_reclamaciones: {
+        Row: {
+          actualizado_en: string
+          cerrado: boolean
+          cobro_confirmado: boolean
+          creado_en: string
+          creado_por: number | null
+          id_incidencia: number
+          id_reclamacion: number
+          id_responsable: number | null
+          importe_cobrado: number | null
+          importe_reclamado: number | null
+          metodo_cobro: string | null
+        }
+        Insert: {
+          actualizado_en?: string
+          cerrado?: boolean
+          cobro_confirmado?: boolean
+          creado_en?: string
+          creado_por?: number | null
+          id_incidencia: number
+          id_reclamacion?: never
+          id_responsable?: number | null
+          importe_cobrado?: number | null
+          importe_reclamado?: number | null
+          metodo_cobro?: string | null
+        }
+        Update: {
+          actualizado_en?: string
+          cerrado?: boolean
+          cobro_confirmado?: boolean
+          creado_en?: string
+          creado_por?: number | null
+          id_incidencia?: number
+          id_reclamacion?: never
+          id_responsable?: number | null
+          importe_cobrado?: number | null
+          importe_reclamado?: number | null
+          metodo_cobro?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "manteniment_reclamaciones_creado_por_fkey"
+            columns: ["creado_por"]
+            isOneToOne: false
+            referencedRelation: "personal"
+            referencedColumns: ["id_persona"]
+          },
+          {
+            foreignKeyName: "manteniment_reclamaciones_id_incidencia_fkey"
+            columns: ["id_incidencia"]
+            isOneToOne: true
+            referencedRelation: "manteniment_incidencies"
+            referencedColumns: ["id_incidencia"]
+          },
+          {
+            foreignKeyName: "manteniment_reclamaciones_id_responsable_fkey"
+            columns: ["id_responsable"]
+            isOneToOne: false
+            referencedRelation: "personal"
+            referencedColumns: ["id_persona"]
+          },
+        ]
+      }
       manteniment_registre: {
         Row: {
           cost_materials: number | null
