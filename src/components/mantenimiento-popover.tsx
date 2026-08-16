@@ -8,10 +8,15 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { fmtDate, fmtDateTime } from "@/lib/format";
 import { cn, formatHHMM } from "@/lib/utils";
 import { fullName } from "@/lib/types";
 import { usePermissions } from "@/hooks/use-permissions";
+import { useCurrentPersonal } from "@/hooks/use-current-personal";
+import type { Tables } from "@/integrations/supabase/types";
 import {
   useMantenimientoActions,
   usePersonalLite,
@@ -34,6 +39,17 @@ import {
 import { Home, Loader2, RotateCcw } from "lucide-react";
 
 type Adjunto = Record<string, unknown> & { id_adjunt?: number };
+
+const METODO_COBRO_OPTIONS: { value: string; label: string }[] = [
+  { value: "booking", label: "Booking" },
+  { value: "airbnb", label: "Airbnb" },
+  { value: "expedia", label: "Expedia" },
+  { value: "transferencia", label: "Transferencia" },
+  { value: "paypal", label: "PayPal" },
+  { value: "bizum", label: "Bizum" },
+  { value: "stripe", label: "Stripe" },
+  { value: "efectivo", label: "Efectivo" },
+];
 
 function dataUrlToBlobUrl(dataUrl: string): string {
   const [header, base64] = dataUrl.split(",");
@@ -192,6 +208,14 @@ export function MantenimientoPopover({
   const [finTotalExtrasAdjuntos, setFinTotalExtrasAdjuntos] = useState<{ tipo: AdjuntoTipo; file: File }[]>([]);
   const [finTotalExtrasNota, setFinTotalExtrasNota] = useState("");
   const [finTotalExtrasSaving, setFinTotalExtrasSaving] = useState(false);
+  const [reclResponsable, setReclResponsable] = useState<number | null>(null);
+  const [reclImporteReclamado, setReclImporteReclamado] = useState("");
+  const [reclImporteCobrado, setReclImporteCobrado] = useState("");
+  const [reclMetodoCobro, setReclMetodoCobro] = useState<string | null>(null);
+  const [reclCobroConfirmado, setReclCobroConfirmado] = useState(false);
+  const [reclCerrado, setReclCerrado] = useState(false);
+  const [reclLoadedFor, setReclLoadedFor] = useState<number | null>(null);
+  const [reclNotaTexto, setReclNotaTexto] = useState("");
 
   async function verAdjunto(idAdjunto: number, key: string) {
     const newWindow = window.open("", "_blank");
@@ -253,6 +277,36 @@ export function MantenimientoPopover({
     },
   });
 
+  const reclamacionQ = useQuery({
+    queryKey: ["mantenimiento-reclamacion", idIncidencia],
+    enabled: idIncidencia != null,
+    queryFn: async (): Promise<Tables<"manteniment_reclamaciones"> | null> => {
+      const { data, error } = await supabase
+        .from("manteniment_reclamaciones")
+        .select("*")
+        .eq("id_incidencia", idIncidencia!)
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const reclamacionNotasQ = useQuery({
+    queryKey: ["mantenimiento-reclamacion-notas", reclamacionQ.data?.id_reclamacion],
+    enabled: reclamacionQ.data?.id_reclamacion != null,
+    queryFn: async (): Promise<Tables<"manteniment_reclamacion_notas">[]> => {
+      const { data, error } = await supabase
+        .from("manteniment_reclamacion_notas")
+        .select("*")
+        .eq("id_reclamacion", reclamacionQ.data!.id_reclamacion)
+        .order("creado_en", { ascending: false });
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+
+  const { persona: currentPersona } = useCurrentPersonal();
+
   const personalQ = usePersonalLite();
   const personaById = new Map((personalQ.data ?? []).map((p) => [p.id_persona, p]));
   const aptQ = useApartamentosLite();
@@ -266,6 +320,8 @@ export function MantenimientoPopover({
     detailQ.refetch();
     sesionesQ.refetch();
     adjuntosQ.refetch();
+    reclamacionQ.refetch();
+    reclamacionNotasQ.refetch();
     onSaved();
   }
 
@@ -300,6 +356,21 @@ export function MantenimientoPopover({
     }
   }, [inc, notaFinalizacionLoadedFor]);
 
+  useEffect(() => {
+    const r = reclamacionQ.data;
+    if (r && reclLoadedFor !== r.id_reclamacion) {
+      setReclResponsable(r.id_responsable);
+      setReclImporteReclamado(r.importe_reclamado != null ? String(r.importe_reclamado) : "");
+      setReclImporteCobrado(r.importe_cobrado != null ? String(r.importe_cobrado) : "");
+      setReclMetodoCobro(r.metodo_cobro);
+      setReclCobroConfirmado(r.cobro_confirmado);
+      setReclCerrado(r.cerrado);
+      setReclLoadedFor(r.id_reclamacion);
+    } else if (!r && reclLoadedFor != null) {
+      setReclLoadedFor(null);
+    }
+  }, [reclamacionQ.data, reclLoadedFor]);
+
   const open = idIncidencia != null;
   const closedSessions = sesiones.filter((s) => s.fi != null);
   const totalHoras = closedSessions.reduce((sum, s) => sum + (s.hores ?? 0), 0);
@@ -314,6 +385,21 @@ export function MantenimientoPopover({
   const notaDirty = inc != null && nota !== (inc.notas_gestor ?? "");
   const descripcioDirty = inc != null && descripcio !== (inc.descripcio ?? "");
   const notaFinalizacionDirty = inc != null && notaFinalizacion !== (inc.notas_finalizacion ?? "");
+  const recl = reclamacionQ.data ?? null;
+  const reclDirty =
+    recl != null &&
+    (reclResponsable !== recl.id_responsable ||
+      reclImporteReclamado !== (recl.importe_reclamado != null ? String(recl.importe_reclamado) : "") ||
+      reclImporteCobrado !== (recl.importe_cobrado != null ? String(recl.importe_cobrado) : "") ||
+      reclMetodoCobro !== recl.metodo_cobro ||
+      reclCobroConfirmado !== recl.cobro_confirmado ||
+      reclCerrado !== recl.cerrado);
+
+  async function handleAddReclNota() {
+    if (!recl || !reclNotaTexto.trim()) return;
+    await actions.agregarNotaReclamacion(recl.id_reclamacion, reclNotaTexto, currentPersona?.id_persona ?? null);
+    setReclNotaTexto("");
+  }
 
   // Fin total already closes the incidencia — this dialog is a purely optional,
   // skippable follow-up. Skipping it (Omitir) must never undo or block the closure
@@ -576,6 +662,160 @@ export function MantenimientoPopover({
                     <Label className="text-xs uppercase tracking-wide text-muted-foreground">ADJUNTOS DE CIERRE</Label>
                     <div className="mt-1.5 space-y-2">
                       <AdjuntosGroup adjuntos={adjuntosCierre} loadingAdjunto={loadingAdjunto} onVer={verAdjunto} />
+                    </div>
+                  </section>
+                )}
+
+                {editable && (
+                  <section>
+                    <Label className="text-xs uppercase tracking-wide text-muted-foreground">RECLAMACIÓN AL HUÉSPED</Label>
+                    <div className="mt-1.5 space-y-3">
+                      {reclamacionQ.isLoading ? (
+                        <div className="text-sm text-muted-foreground">Cargando…</div>
+                      ) : !recl ? (
+                        <div className="space-y-1.5">
+                          <div className="text-sm text-muted-foreground">¿Se reclama al huésped por esta incidencia?</div>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => actions.crearReclamacion(inc.id_incidencia, currentPersona?.id_persona ?? null)}
+                          >
+                            Sí, reclamar
+                          </Button>
+                        </div>
+                      ) : (
+                        <div className="space-y-3">
+                          <div className="grid grid-cols-2 gap-3">
+                            <div>
+                              <Label className="text-xs">Responsable</Label>
+                              <Select
+                                value={reclResponsable != null ? String(reclResponsable) : ""}
+                                onValueChange={(v) => setReclResponsable(v ? Number(v) : null)}
+                              >
+                                <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Sin asignar" /></SelectTrigger>
+                                <SelectContent>
+                                  {workers.map((w) => (
+                                    <SelectItem key={w.id_persona} value={String(w.id_persona)}>
+                                      {fullName(w)}{w.codigo ? ` (${w.codigo})` : ""}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            <div>
+                              <Label className="text-xs">Método de cobro</Label>
+                              <Select
+                                value={reclMetodoCobro ?? ""}
+                                onValueChange={(v) => setReclMetodoCobro(v || null)}
+                              >
+                                <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Sin especificar" /></SelectTrigger>
+                                <SelectContent>
+                                  {METODO_COBRO_OPTIONS.map((o) => (
+                                    <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            <div>
+                              <Label className="text-xs">Importe reclamado</Label>
+                              <Input
+                                type="number"
+                                step="0.01"
+                                className="h-8 text-xs"
+                                value={reclImporteReclamado}
+                                onChange={(e) => setReclImporteReclamado(e.target.value)}
+                              />
+                            </div>
+                            <div>
+                              <Label className="text-xs">Importe cobrado</Label>
+                              <Input
+                                type="number"
+                                step="0.01"
+                                className="h-8 text-xs"
+                                value={reclImporteCobrado || reclImporteReclamado}
+                                onChange={(e) => setReclImporteCobrado(e.target.value)}
+                              />
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-4">
+                            <label className="flex items-center gap-1.5 text-xs cursor-pointer">
+                              <Checkbox checked={reclCobroConfirmado} onCheckedChange={(v) => setReclCobroConfirmado(!!v)} />
+                              Cobro confirmado
+                            </label>
+                            <label className="flex items-center gap-1.5 text-xs cursor-pointer">
+                              <Checkbox checked={reclCerrado} onCheckedChange={(v) => setReclCerrado(!!v)} />
+                              Cerrado
+                            </label>
+                          </div>
+
+                          <div className="flex items-center justify-between gap-2">
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-6 px-2 text-xs text-red-600 hover:text-red-700 hover:bg-red-50"
+                              onClick={() => actions.eliminarReclamacion(recl.id_reclamacion)}
+                            >
+                              Eliminar reclamación
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className={cn(
+                                "h-6 px-2 text-xs",
+                                reclDirty && "bg-red-600 hover:bg-red-700 text-white border-red-600",
+                              )}
+                              disabled={!reclDirty}
+                              onClick={() =>
+                                actions.actualizarReclamacion(recl.id_reclamacion, {
+                                  id_responsable: reclResponsable,
+                                  importe_reclamado: reclImporteReclamado.trim() === "" ? null : Number(reclImporteReclamado),
+                                  importe_cobrado: reclImporteCobrado.trim() === "" ? null : Number(reclImporteCobrado),
+                                  metodo_cobro: reclMetodoCobro,
+                                  cobro_confirmado: reclCobroConfirmado,
+                                  cerrado: reclCerrado,
+                                })
+                              }
+                            >
+                              Guardar
+                            </Button>
+                          </div>
+
+                          <div className="pt-2 border-t space-y-2">
+                            <Label className="text-xs uppercase tracking-wide text-muted-foreground">Notas</Label>
+                            <Textarea
+                              rows={2}
+                              className="text-xs"
+                              placeholder="Añade una nota…"
+                              value={reclNotaTexto}
+                              onChange={(e) => setReclNotaTexto(e.target.value)}
+                            />
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-6 px-2 text-xs"
+                              disabled={!reclNotaTexto.trim()}
+                              onClick={handleAddReclNota}
+                            >
+                              Añadir nota
+                            </Button>
+                            <div className="space-y-1.5">
+                              {(reclamacionNotasQ.data ?? []).length === 0 ? (
+                                <div className="text-xs text-muted-foreground italic">Sin notas</div>
+                              ) : (
+                                (reclamacionNotasQ.data ?? []).map((n) => (
+                                  <div key={n.id_nota} className="text-xs rounded-md border bg-muted/30 px-2 py-1.5">
+                                    <div>{n.nota}</div>
+                                    <div className="text-muted-foreground mt-0.5">
+                                      {n.creado_por != null ? fullName(personaById.get(n.creado_por)) : "—"} · {fmtDateTime(n.creado_en)}
+                                    </div>
+                                  </div>
+                                ))
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </section>
                 )}

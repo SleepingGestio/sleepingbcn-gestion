@@ -355,6 +355,68 @@ export function useMantenimientoActions(onMutated?: () => void) {
     onMutated?.();
   }
 
+  // manteniment_reclamaciones' own RLS also requires is_gestor_or_admin() —
+  // this is only a UX convenience, MantenimientoPopover's `editable` gating
+  // is what keeps client-side and server-side authorization consistent.
+  async function crearReclamacion(idIncidencia: number, creadoPor: number | null) {
+    const { error } = await supabase
+      .from("manteniment_reclamaciones")
+      .insert({ id_incidencia: idIncidencia, creado_por: creadoPor });
+    if (error) {
+      toast.error("Error: " + error.message);
+      return;
+    }
+    toast.success("Reclamación creada");
+    onMutated?.();
+  }
+
+  // Deletes rather than tracking a "no" state — there's nothing to persist
+  // when the answer is "no se reclama", per the earlier design decision.
+  // Cascades to manteniment_reclamacion_notas via its FK.
+  async function eliminarReclamacion(idReclamacion: number) {
+    if (!window.confirm("¿Eliminar esta reclamación? Se borrarán también sus notas.")) return;
+    const { error } = await supabase
+      .from("manteniment_reclamaciones")
+      .delete()
+      .eq("id_reclamacion", idReclamacion);
+    if (error) {
+      toast.error("Error: " + error.message);
+      return;
+    }
+    toast.success("Reclamación eliminada");
+    onMutated?.();
+  }
+
+  async function actualizarReclamacion(
+    idReclamacion: number,
+    patch: TablesUpdate<"manteniment_reclamaciones">,
+  ) {
+    const { error } = await supabase
+      .from("manteniment_reclamaciones")
+      .update({ ...patch, actualizado_en: new Date().toISOString() })
+      .eq("id_reclamacion", idReclamacion);
+    if (error) {
+      toast.error("Error: " + error.message);
+      return;
+    }
+    toast.success("Reclamación actualizada");
+    onMutated?.();
+  }
+
+  async function agregarNotaReclamacion(idReclamacion: number, nota: string, creadoPor: number | null) {
+    const trimmed = nota.trim();
+    if (!trimmed) return;
+    const { error } = await supabase
+      .from("manteniment_reclamacion_notas")
+      .insert({ id_reclamacion: idReclamacion, nota: trimmed, creado_por: creadoPor });
+    if (error) {
+      toast.error("Error: " + error.message);
+      return;
+    }
+    toast.success("Nota añadida");
+    onMutated?.();
+  }
+
   return {
     rechazar,
     confirmarAsignacion,
@@ -366,5 +428,9 @@ export function useMantenimientoActions(onMutated?: () => void) {
     subirAdjuntosIncidencia,
     guardarDescripcio,
     reprogramar,
+    crearReclamacion,
+    eliminarReclamacion,
+    actualizarReclamacion,
+    agregarNotaReclamacion,
   };
 }
