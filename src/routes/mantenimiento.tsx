@@ -15,7 +15,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { fmtDate, fmtDateTime } from "@/lib/format";
-import { formatHHMM } from "@/lib/utils";
+import { cn, formatHHMM } from "@/lib/utils";
 import { fullName } from "@/lib/types";
 import { usePermissions } from "@/hooks/use-permissions";
 import { useCurrentPersonal } from "@/hooks/use-current-personal";
@@ -42,7 +42,7 @@ import {
   type Registre,
   type PersonaLite,
 } from "@/lib/mantenimiento";
-import { Home, Plus, RotateCcw, Camera, Video, Mic, FileText } from "lucide-react";
+import { Home, Plus, RotateCcw, Camera, Video, Mic, FileText, Euro } from "lucide-react";
 
 export const Route = createFileRoute("/mantenimiento")({
   component: MantenimientoPage,
@@ -51,6 +51,8 @@ export const Route = createFileRoute("/mantenimiento")({
 type TareasFilter = "asignadas_curso" | "en_curso" | "finalizadas" | "rechazadas" | "todas";
 type SortKey = "prioridad" | "fecha_prevista" | "fecha_inicio" | "fecha_fin" | "titulo" | "ubicacion" | "operario";
 type UbicacionFilter = "todos" | `apt-${number}` | `esp-${number}`;
+type ReclamacionFilter = "todas" | "abierta" | "cerrada";
+type ReclamacionEstado = "pendiente" | "gestionada" | "finalizada";
 
 const ADJUNTO_TIPO_ICONS: { tipo: string; Icon: typeof Camera; title: string }[] = [
   { tipo: "foto", Icon: Camera, title: "Tiene fotos" },
@@ -58,6 +60,21 @@ const ADJUNTO_TIPO_ICONS: { tipo: string; Icon: typeof Camera; title: string }[]
   { tipo: "nota_veu", Icon: Mic, title: "Tiene notas de voz" },
   { tipo: "document", Icon: FileText, title: "Tiene documentos" },
 ];
+
+const RECLAMACION_ESTADO_STYLE: Record<ReclamacionEstado, { className: string; label: string }> = {
+  pendiente: { className: "text-amber-600", label: "Reclamación pendiente" },
+  gestionada: { className: "text-blue-600", label: "Reclamación gestionada" },
+  finalizada: { className: "text-emerald-600", label: "Reclamación finalizada" },
+};
+
+function ReclamacionIndicator({ estado }: { estado: ReclamacionEstado }) {
+  const s = RECLAMACION_ESTADO_STYLE[estado];
+  return (
+    <span title={s.label}>
+      <Euro className={cn("h-3.5 w-3.5", s.className)} />
+    </span>
+  );
+}
 
 function MantenimientoPage() {
   const { canEdit } = usePermissions();
@@ -70,6 +87,7 @@ function MantenimientoPage() {
   const [sortKey, setSortKey] = useState<SortKey>("prioridad");
   const [grupoFilter, setGrupoFilter] = useState<number | "todos">("todos");
   const [ubicacionFilter, setUbicacionFilter] = useState<UbicacionFilter>("todos");
+  const [reclamacionFilter, setReclamacionFilter] = useState<ReclamacionFilter>("todas");
   const [incidenciaOpen, setIncidenciaOpen] = useState(false);
 
   const pendientesQ = useQuery({
@@ -101,6 +119,14 @@ function MantenimientoPage() {
 
   const tareaIds = useMemo(() => (tareasQ.data ?? []).map((t) => t.id_incidencia), [tareasQ.data]);
   const tareaIdsKey = useMemo(() => tareaIds.slice().sort((a, b) => a - b).join(","), [tareaIds]);
+
+  // pendientesQ is fetched entirely independently of tareasQ (own queryKey, no
+  // `enabled` gate, own refetch) — mirroring that independence rather than
+  // unioning the two id sets into tareaIds keeps this query's lifecycle
+  // consistent with how the rest of this file already treats "Nuevas" as a
+  // separate parallel list.
+  const pendienteIds = useMemo(() => (pendientesQ.data ?? []).map((t) => t.id_incidencia), [pendientesQ.data]);
+  const pendienteIdsKey = useMemo(() => pendienteIds.slice().sort((a, b) => a - b).join(","), [pendienteIds]);
 
   const registreQ = useQuery({
     queryKey: ["mantenimiento-registre", tareaIdsKey],
@@ -150,6 +176,45 @@ function MantenimientoPage() {
     return m;
   }, [adjuntoTiposQ.data]);
 
+  const reclamacionesQ = useQuery({
+    queryKey: ["mantenimiento-reclamaciones", tareaIdsKey],
+    enabled: tareaIds.length > 0,
+    queryFn: async (): Promise<{ id_incidencia: number; cobro_confirmado: boolean; cerrado: boolean }[]> => {
+      const { data, error } = await supabase
+        .from("manteniment_reclamaciones")
+        .select("id_incidencia, cobro_confirmado, cerrado")
+        .in("id_incidencia", tareaIds);
+      if (error) throw error;
+      return (data ?? []) as { id_incidencia: number; cobro_confirmado: boolean; cerrado: boolean }[];
+    },
+  });
+
+  // Separate small query for "Nuevas", scoped to its own independent id set —
+  // see the comment by pendienteIds above for why this isn't unioned into the
+  // tareaIds-scoped query above.
+  const reclamacionesPendientesQ = useQuery({
+    queryKey: ["mantenimiento-reclamaciones-pendientes", pendienteIdsKey],
+    enabled: pendienteIds.length > 0,
+    queryFn: async (): Promise<{ id_incidencia: number; cobro_confirmado: boolean; cerrado: boolean }[]> => {
+      const { data, error } = await supabase
+        .from("manteniment_reclamaciones")
+        .select("id_incidencia, cobro_confirmado, cerrado")
+        .in("id_incidencia", pendienteIds);
+      if (error) throw error;
+      return (data ?? []) as { id_incidencia: number; cobro_confirmado: boolean; cerrado: boolean }[];
+    },
+  });
+
+  // Single shared map for both TareaRow and NuevaCard, fed by the two
+  // independent queries above.
+  const reclamacionEstadoByIncidencia = useMemo(() => {
+    const m = new Map<number, ReclamacionEstado>();
+    for (const r of [...(reclamacionesQ.data ?? []), ...(reclamacionesPendientesQ.data ?? [])]) {
+      m.set(r.id_incidencia, r.cerrado ? "finalizada" : r.cobro_confirmado ? "gestionada" : "pendiente");
+    }
+    return m;
+  }, [reclamacionesQ.data, reclamacionesPendientesQ.data]);
+
   const personalQ = usePersonalLite();
   const personaById = useMemo(
     () => new Map((personalQ.data ?? []).map((p) => [p.id_persona, p])),
@@ -190,6 +255,8 @@ function MantenimientoPage() {
     pendientesQ.refetch();
     tareasQ.refetch();
     registreQ.refetch();
+    reclamacionesQ.refetch();
+    reclamacionesPendientesQ.refetch();
   }
 
   const actions = useMantenimientoActions(refetchLists);
@@ -204,9 +271,14 @@ function MantenimientoPage() {
           if (t.id_tipo_espacio_comun !== Number(ubicacionFilter.slice(4))) return false;
         }
       }
+      if (reclamacionFilter !== "todas") {
+        const estado = reclamacionEstadoByIncidencia.get(t.id_incidencia);
+        if (reclamacionFilter === "abierta" && !(estado === "pendiente" || estado === "gestionada")) return false;
+        if (reclamacionFilter === "cerrada" && estado !== "finalizada") return false;
+      }
       return true;
     });
-  }, [tareasQ.data, grupoFilter, ubicacionFilter]);
+  }, [tareasQ.data, grupoFilter, ubicacionFilter, reclamacionFilter, reclamacionEstadoByIncidencia]);
 
   const sortedTareas = useMemo(() => {
     const arr = [...filteredTareas];
@@ -291,6 +363,7 @@ function MantenimientoPage() {
                 inc={inc}
                 location={resolveLocation(inc, aptById, espacioById, grupoById)}
                 reporter={inc.id_reporter != null ? fullName(personaById.get(inc.id_reporter)) : "—"}
+                reclamacionEstado={reclamacionEstadoByIncidencia.get(inc.id_incidencia)}
                 editable={editable}
                 onOpenDetail={() => setDetailId(inc.id_incidencia)}
                 onRechazar={() => actions.rechazar(inc)}
@@ -363,6 +436,16 @@ function MantenimientoPage() {
                   )}
                 </SelectContent>
               </Select>
+              <Select value={reclamacionFilter} onValueChange={(v) => setReclamacionFilter(v as ReclamacionFilter)}>
+                <SelectTrigger className="h-8 w-[190px] text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="todas">Todas</SelectItem>
+                  <SelectItem value="abierta">Con reclamación abierta</SelectItem>
+                  <SelectItem value="cerrada">Con reclamación cerrada</SelectItem>
+                </SelectContent>
+              </Select>
               <Select value={sortKey} onValueChange={(v) => setSortKey(v as SortKey)}>
                 <SelectTrigger className="h-8 w-[190px] text-xs">
                   <SelectValue />
@@ -394,6 +477,7 @@ function MantenimientoPage() {
                 worker={t.id_assignat != null ? personaById.get(t.id_assignat) : null}
                 personaById={personaById}
                 adjuntoTipos={adjuntoTiposByIncidencia.get(t.id_incidencia) ?? new Set()}
+                reclamacionEstado={reclamacionEstadoByIncidencia.get(t.id_incidencia)}
                 editable={editable}
                 onOpenDetail={() => setDetailId(t.id_incidencia)}
                 onIniciar={() => actions.iniciar(t, t.id_assignat)}
@@ -444,6 +528,7 @@ function NuevaCard({
   inc,
   location,
   reporter,
+  reclamacionEstado,
   editable,
   onOpenDetail,
   onRechazar,
@@ -452,6 +537,7 @@ function NuevaCard({
   inc: Incidencia;
   location: string;
   reporter: string;
+  reclamacionEstado: ReclamacionEstado | undefined;
   editable: boolean;
   onOpenDetail: () => void;
   onRechazar: () => void;
@@ -470,6 +556,7 @@ function NuevaCard({
       <div className="flex items-center gap-1.5 flex-wrap">
         <TipoBadge tipus={inc.tipus} />
         <PrioridadPill prioridad={inc.prioritat_proposta} />
+        {reclamacionEstado && <ReclamacionIndicator estado={reclamacionEstado} />}
       </div>
       {inc.descripcio && (
         <div className="text-sm text-foreground font-medium line-clamp-2">{inc.descripcio}</div>
@@ -505,6 +592,7 @@ function TareaRow({
   worker,
   personaById,
   adjuntoTipos,
+  reclamacionEstado,
   editable,
   onOpenDetail,
   onIniciar,
@@ -518,6 +606,7 @@ function TareaRow({
   worker: PersonaLite | null | undefined;
   personaById: Map<number, PersonaLite>;
   adjuntoTipos: Set<string>;
+  reclamacionEstado: ReclamacionEstado | undefined;
   editable: boolean;
   onOpenDetail: () => void;
   onIniciar: () => void;
@@ -597,6 +686,11 @@ function TareaRow({
             </div>
           )}
         </div>
+        {reclamacionEstado && (
+          <div className="shrink-0 flex items-center justify-center px-2">
+            <ReclamacionIndicator estado={reclamacionEstado} />
+          </div>
+        )}
         <div
           className="shrink-0 flex flex-col justify-center gap-1 px-3 py-2 text-xs leading-tight w-full md:w-[288px] md:min-w-[288px] md:max-w-[288px]"
           style={{
