@@ -51,6 +51,12 @@ const METODO_COBRO_OPTIONS: { value: string; label: string }[] = [
   { value: "efectivo", label: "Efectivo" },
 ];
 
+function todayISO(): string {
+  const d = new Date();
+  const tz = d.getTimezoneOffset() * 60000;
+  return new Date(d.getTime() - tz).toISOString().slice(0, 10);
+}
+
 function dataUrlToBlobUrl(dataUrl: string): string {
   const [header, base64] = dataUrl.split(",");
   const contentType = header.match(/data:(.*?);base64/)?.[1] ?? "application/octet-stream";
@@ -213,6 +219,7 @@ export function MantenimientoPopover({
   const [reclImporteCobrado, setReclImporteCobrado] = useState("");
   const [reclMetodoCobro, setReclMetodoCobro] = useState<string | null>(null);
   const [reclCobroConfirmado, setReclCobroConfirmado] = useState(false);
+  const [reclFechaCobro, setReclFechaCobro] = useState("");
   const [reclCerrado, setReclCerrado] = useState(false);
   const [reclLoadedFor, setReclLoadedFor] = useState<number | null>(null);
   const [reclNotaTexto, setReclNotaTexto] = useState("");
@@ -364,6 +371,7 @@ export function MantenimientoPopover({
       setReclImporteCobrado(r.importe_cobrado != null ? String(r.importe_cobrado) : "");
       setReclMetodoCobro(r.metodo_cobro);
       setReclCobroConfirmado(r.cobro_confirmado);
+      setReclFechaCobro(r.fecha_cobro ?? "");
       setReclCerrado(r.cerrado);
       setReclLoadedFor(r.id_reclamacion);
     } else if (!r && reclLoadedFor != null) {
@@ -386,14 +394,33 @@ export function MantenimientoPopover({
   const descripcioDirty = inc != null && descripcio !== (inc.descripcio ?? "");
   const notaFinalizacionDirty = inc != null && notaFinalizacion !== (inc.notas_finalizacion ?? "");
   const recl = reclamacionQ.data ?? null;
-  const reclDirty =
+  // Split into two groups because they're filled in at different moments —
+  // the claim is raised first (Responsable/Importe reclamado), resolved later
+  // (cobro/cierre) — so each gets its own independent Guardar/dirty state.
+  const reclDirtyGroup1 =
     recl != null &&
     (reclResponsable !== recl.id_responsable ||
-      reclImporteReclamado !== (recl.importe_reclamado != null ? String(recl.importe_reclamado) : "") ||
-      reclImporteCobrado !== (recl.importe_cobrado != null ? String(recl.importe_cobrado) : "") ||
-      reclMetodoCobro !== recl.metodo_cobro ||
+      reclImporteReclamado !== (recl.importe_reclamado != null ? String(recl.importe_reclamado) : ""));
+  const reclDirtyGroup2 =
+    recl != null &&
+    (reclMetodoCobro !== recl.metodo_cobro ||
       reclCobroConfirmado !== recl.cobro_confirmado ||
+      reclFechaCobro !== (recl.fecha_cobro ?? "") ||
+      reclImporteCobrado !== (recl.importe_cobrado != null ? String(recl.importe_cobrado) : "") ||
       reclCerrado !== recl.cerrado);
+
+  // Propose (never force) a fecha/importe only at the moment Cobro confirmado
+  // transitions off -> on, and only when that specific field is still empty —
+  // same "propose but don't force" pattern as before, just scoped to this one
+  // transition instead of re-evaluating on every render.
+  function handleCobroConfirmadoChange(value: boolean | "indeterminate") {
+    const checked = !!value;
+    if (checked && !reclCobroConfirmado) {
+      if (!reclFechaCobro) setReclFechaCobro(todayISO());
+      if (!reclImporteCobrado) setReclImporteCobrado(reclImporteReclamado);
+    }
+    setReclCobroConfirmado(checked);
+  }
 
   async function handleAddReclNota() {
     if (!recl || !reclNotaTexto.trim()) return;
@@ -685,6 +712,7 @@ export function MantenimientoPopover({
                         </div>
                       ) : (
                         <div className="space-y-3">
+                          {/* Group 1 — raised when the claim is first filed */}
                           <div className="grid grid-cols-2 gap-3">
                             <div>
                               <Label className="text-xs">Responsable</Label>
@@ -703,20 +731,6 @@ export function MantenimientoPopover({
                               </Select>
                             </div>
                             <div>
-                              <Label className="text-xs">Método de cobro</Label>
-                              <Select
-                                value={reclMetodoCobro ?? ""}
-                                onValueChange={(v) => setReclMetodoCobro(v || null)}
-                              >
-                                <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Sin especificar" /></SelectTrigger>
-                                <SelectContent>
-                                  {METODO_COBRO_OPTIONS.map((o) => (
-                                    <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                            </div>
-                            <div>
                               <Label className="text-xs">Importe reclamado</Label>
                               <Input
                                 type="number"
@@ -726,54 +740,20 @@ export function MantenimientoPopover({
                                 onChange={(e) => setReclImporteReclamado(e.target.value)}
                               />
                             </div>
-                            <div>
-                              <Label className="text-xs">Importe cobrado</Label>
-                              <Input
-                                type="number"
-                                step="0.01"
-                                className="h-8 text-xs"
-                                value={reclImporteCobrado || reclImporteReclamado}
-                                onChange={(e) => setReclImporteCobrado(e.target.value)}
-                              />
-                            </div>
                           </div>
-
-                          <div className="flex items-center gap-4">
-                            <label className="flex items-center gap-1.5 text-xs cursor-pointer">
-                              <Checkbox checked={reclCobroConfirmado} onCheckedChange={(v) => setReclCobroConfirmado(!!v)} />
-                              Cobro confirmado
-                            </label>
-                            <label className="flex items-center gap-1.5 text-xs cursor-pointer">
-                              <Checkbox checked={reclCerrado} onCheckedChange={(v) => setReclCerrado(!!v)} />
-                              Cerrado
-                            </label>
-                          </div>
-
-                          <div className="flex items-center justify-between gap-2">
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              className="h-6 px-2 text-xs text-red-600 hover:text-red-700 hover:bg-red-50"
-                              onClick={() => actions.eliminarReclamacion(recl.id_reclamacion)}
-                            >
-                              Eliminar reclamación
-                            </Button>
+                          <div className="flex justify-end">
                             <Button
                               size="sm"
                               variant="outline"
                               className={cn(
                                 "h-6 px-2 text-xs",
-                                reclDirty && "bg-red-600 hover:bg-red-700 text-white border-red-600",
+                                reclDirtyGroup1 && "bg-red-600 hover:bg-red-700 text-white border-red-600",
                               )}
-                              disabled={!reclDirty}
+                              disabled={!reclDirtyGroup1}
                               onClick={() =>
                                 actions.actualizarReclamacion(recl.id_reclamacion, {
                                   id_responsable: reclResponsable,
                                   importe_reclamado: reclImporteReclamado.trim() === "" ? null : Number(reclImporteReclamado),
-                                  importe_cobrado: reclImporteCobrado.trim() === "" ? null : Number(reclImporteCobrado),
-                                  metodo_cobro: reclMetodoCobro,
-                                  cobro_confirmado: reclCobroConfirmado,
-                                  cerrado: reclCerrado,
                                 })
                               }
                             >
@@ -781,6 +761,7 @@ export function MantenimientoPopover({
                             </Button>
                           </div>
 
+                          {/* Notas */}
                           <div className="pt-2 border-t space-y-2">
                             <Label className="text-xs uppercase tracking-wide text-muted-foreground">Notas</Label>
                             <Textarea
@@ -793,7 +774,10 @@ export function MantenimientoPopover({
                             <Button
                               size="sm"
                               variant="outline"
-                              className="h-6 px-2 text-xs"
+                              className={cn(
+                                "h-6 px-2 text-xs",
+                                reclNotaTexto.trim() && "bg-red-600 hover:bg-red-700 text-white border-red-600",
+                              )}
                               disabled={!reclNotaTexto.trim()}
                               onClick={handleAddReclNota}
                             >
@@ -812,6 +796,90 @@ export function MantenimientoPopover({
                                   </div>
                                 ))
                               )}
+                            </div>
+                          </div>
+
+                          {/* Group 2 — resolved later, once the claim is settled */}
+                          <div className="pt-2 border-t space-y-3">
+                            <div>
+                              <Label className="text-xs">Método de cobro</Label>
+                              <Select
+                                value={reclMetodoCobro ?? ""}
+                                onValueChange={(v) => setReclMetodoCobro(v || null)}
+                              >
+                                <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Sin especificar" /></SelectTrigger>
+                                <SelectContent>
+                                  {METODO_COBRO_OPTIONS.map((o) => (
+                                    <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
+
+                            <div className="flex items-center gap-4">
+                              <label className="flex items-center gap-1.5 text-xs cursor-pointer">
+                                <Checkbox checked={reclCobroConfirmado} onCheckedChange={handleCobroConfirmadoChange} />
+                                Cobro confirmado
+                              </label>
+                              <label className="flex items-center gap-1.5 text-xs cursor-pointer">
+                                <Checkbox checked={reclCerrado} onCheckedChange={(v) => setReclCerrado(!!v)} />
+                                Cerrado
+                              </label>
+                            </div>
+
+                            {reclCobroConfirmado && (
+                              <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                  <Label className="text-xs">Fecha de cobro</Label>
+                                  <Input
+                                    type="date"
+                                    className="h-8 text-xs"
+                                    value={reclFechaCobro}
+                                    onChange={(e) => setReclFechaCobro(e.target.value)}
+                                  />
+                                </div>
+                                <div>
+                                  <Label className="text-xs">Importe cobrado</Label>
+                                  <Input
+                                    type="number"
+                                    step="0.01"
+                                    className="h-8 text-xs"
+                                    value={reclImporteCobrado}
+                                    onChange={(e) => setReclImporteCobrado(e.target.value)}
+                                  />
+                                </div>
+                              </div>
+                            )}
+
+                            <div className="flex items-center gap-2">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className={cn(
+                                  "h-6 px-2 text-xs",
+                                  reclDirtyGroup2 && "bg-red-600 hover:bg-red-700 text-white border-red-600",
+                                )}
+                                disabled={!reclDirtyGroup2}
+                                onClick={() =>
+                                  actions.actualizarReclamacion(recl.id_reclamacion, {
+                                    metodo_cobro: reclMetodoCobro,
+                                    cobro_confirmado: reclCobroConfirmado,
+                                    fecha_cobro: reclFechaCobro.trim() === "" ? null : reclFechaCobro,
+                                    importe_cobrado: reclImporteCobrado.trim() === "" ? null : Number(reclImporteCobrado),
+                                    cerrado: reclCerrado,
+                                  })
+                                }
+                              >
+                                Guardar
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="h-6 px-2 text-xs text-red-600 hover:text-red-700 hover:bg-red-50"
+                                onClick={() => actions.eliminarReclamacion(recl.id_reclamacion)}
+                              >
+                                Eliminar reclamación
+                              </Button>
                             </div>
                           </div>
                         </div>
