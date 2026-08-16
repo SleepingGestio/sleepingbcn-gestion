@@ -2014,7 +2014,7 @@ function WorkerView({
       ) : (
         <>
           <div className={cn("sticky z-20 bg-slate-200 border-b", previewing ? "top-[96px]" : "top-[60px]")}>
-            <div className="flex gap-2 overflow-x-auto px-3 py-2">
+            <div className="flex items-center gap-2 overflow-x-auto px-3 py-2">
               {tabDates.map((fecha) => {
                 const active = fecha === activeDay;
                 const isEmpty = emptyDates.has(fecha);
@@ -2026,16 +2026,18 @@ function WorkerView({
                     disabled={isEmpty}
                     onClick={() => setActiveDay(fecha)}
                     className={cn(
-                      "relative shrink-0 rounded-full px-4 h-11 text-sm font-medium transition-colors min-w-[88px]",
+                      "relative shrink-0 rounded-full px-4 text-sm font-medium transition-colors min-w-[88px]",
                       isEmpty
-                        ? "bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed"
+                        ? "min-h-11 py-1.5 flex flex-col items-center justify-center gap-0.5 bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed"
                         : active
-                          ? "bg-[#26215C] text-white"
-                          : "bg-white text-slate-700 border border-slate-200",
+                          ? "h-11 bg-[#26215C] text-white"
+                          : "h-11 bg-white text-slate-700 border border-slate-200",
                     )}
                   >
                     {tabLabel(fecha, todayISO, tomorrowISO)}
-                    {isEmpty && <span className="ml-1 text-slate-300">–</span>}
+                    {isEmpty && (
+                      <span className="text-[10px] font-normal leading-none text-slate-300">Nada asignado</span>
+                    )}
                     {hasPending && (
                       <span className="absolute -bottom-0.5 left-1/2 -translate-x-1/2 h-1.5 w-1.5 rounded-full bg-amber-400" />
                     )}
