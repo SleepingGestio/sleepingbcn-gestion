@@ -871,6 +871,7 @@ export type Database = {
           cobro_confirmado: boolean
           creado_en: string
           creado_por: number | null
+          fecha_cobro: string | null
           id_incidencia: number
           id_reclamacion: number
           id_responsable: number | null
@@ -884,6 +885,7 @@ export type Database = {
           cobro_confirmado?: boolean
           creado_en?: string
           creado_por?: number | null
+          fecha_cobro?: string | null
           id_incidencia: number
           id_reclamacion?: never
           id_responsable?: number | null
@@ -897,6 +899,7 @@ export type Database = {
           cobro_confirmado?: boolean
           creado_en?: string
           creado_por?: number | null
+          fecha_cobro?: string | null
           id_incidencia?: number
           id_reclamacion?: never
           id_responsable?: number | null
