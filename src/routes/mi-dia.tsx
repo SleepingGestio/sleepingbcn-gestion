@@ -2036,7 +2036,7 @@ function WorkerView({
                   >
                     {tabLabel(fecha, todayISO, tomorrowISO)}
                     {isEmpty && (
-                      <span className="text-[10px] font-normal leading-none text-slate-300">Nada asignado</span>
+                      <span className="text-[10px] font-normal leading-none text-slate-500">Nada asignado</span>
                     )}
                     {hasPending && (
                       <span className="absolute -bottom-0.5 left-1/2 -translate-x-1/2 h-1.5 w-1.5 rounded-full bg-amber-400" />
