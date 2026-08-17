@@ -62,9 +62,9 @@ const ADJUNTO_TIPO_ICONS: { tipo: string; Icon: typeof Camera; title: string }[]
 ];
 
 const RECLAMACION_ESTADO_STYLE: Record<ReclamacionEstado, { className: string; label: string }> = {
-  pendiente: { className: "bg-amber-100 text-amber-700", label: "Reclamación pendiente" },
-  gestionada: { className: "bg-blue-100 text-blue-700", label: "Reclamación gestionada" },
-  finalizada: { className: "bg-emerald-100 text-emerald-700", label: "Reclamación finalizada" },
+  pendiente: { className: "bg-amber-200 text-amber-800 border border-amber-400", label: "Reclamación pendiente" },
+  gestionada: { className: "bg-blue-200 text-blue-800 border border-blue-400", label: "Reclamación gestionada" },
+  finalizada: { className: "bg-emerald-200 text-emerald-800 border border-emerald-400", label: "Reclamación finalizada" },
 };
 
 function ReclamacionIndicator({ estado }: { estado: ReclamacionEstado }) {
@@ -72,9 +72,9 @@ function ReclamacionIndicator({ estado }: { estado: ReclamacionEstado }) {
   return (
     <span
       title={s.label}
-      className={cn("inline-flex items-center rounded px-1.5 py-0.5 shrink-0", s.className)}
+      className={cn("inline-flex items-center rounded-md px-2 py-1 shrink-0", s.className)}
     >
-      <Euro className="h-4 w-4" />
+      <Euro className="h-4 w-4" strokeWidth={2.5} />
     </span>
   );
 }
