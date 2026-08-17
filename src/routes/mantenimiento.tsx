@@ -208,6 +208,22 @@ function MantenimientoPage() {
     },
   });
 
+  // Fully independent of tareaIds/filtro — tareaIds only covers whatever
+  // estados the current filtro happens to include (e.g. "Asignadas + en curso"
+  // excludes finalitzada), so it can't be trusted for an always-correct count
+  // of open reclamaciones across ALL incidencias regardless of their estat.
+  const reclamacionesAbiertasCountQ = useQuery({
+    queryKey: ["mantenimiento-reclamaciones-abiertas-count"],
+    queryFn: async (): Promise<number> => {
+      const { count, error } = await supabase
+        .from("manteniment_reclamaciones")
+        .select("id_reclamacion", { count: "exact", head: true })
+        .eq("cerrado", false);
+      if (error) throw error;
+      return count ?? 0;
+    },
+  });
+
   // Single shared map for both TareaRow and NuevaCard, fed by the two
   // independent queries above.
   const reclamacionEstadoByIncidencia = useMemo(() => {
@@ -260,6 +276,7 @@ function MantenimientoPage() {
     registreQ.refetch();
     reclamacionesQ.refetch();
     reclamacionesPendientesQ.refetch();
+    reclamacionesAbiertasCountQ.refetch();
   }
 
   const actions = useMantenimientoActions(refetchLists);
@@ -380,6 +397,20 @@ function MantenimientoPage() {
           <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
             <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Tareas</h2>
             <div className="flex flex-wrap items-center gap-2">
+              {(reclamacionesAbiertasCountQ.data ?? 0) > 0 && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-8 text-xs border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100"
+                  onClick={() => {
+                    setFiltro("todas");
+                    setReclamacionFilter("abierta");
+                  }}
+                >
+                  <Euro className="h-3.5 w-3.5" />
+                  {reclamacionesAbiertasCountQ.data} pendientes de cobro
+                </Button>
+              )}
               <Select value={filtro} onValueChange={(v) => setFiltro(v as TareasFilter)}>
                 <SelectTrigger className="h-8 w-[190px] text-xs">
                   <SelectValue />
