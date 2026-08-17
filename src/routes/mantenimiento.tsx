@@ -358,14 +358,39 @@ function MantenimientoPage() {
   return (
     <AppShell title="Mantenimiento">
       <div className="space-y-6">
-        {editable && (
-          <div className="flex justify-end">
-            <Button
-              className="bg-[#26215C] hover:bg-[#1e1a48] text-white"
-              onClick={() => setIncidenciaOpen(true)}
-            >
-              <Plus className="h-4 w-4" /> Nueva incidencia
-            </Button>
+        {(editable || (reclamacionesAbiertasCountQ.data ?? 0) > 0) && (
+          <div className="flex justify-end items-center gap-2">
+            {(reclamacionesAbiertasCountQ.data ?? 0) > 0 && (
+              <Button
+                size="sm"
+                className={cn(
+                  "h-8 text-xs",
+                  reclamacionFilter === "abierta"
+                    ? "bg-red-900 hover:bg-red-900 text-white ring-2 ring-inset ring-red-950"
+                    : "bg-red-600 hover:bg-red-700 text-white",
+                )}
+                onClick={() => {
+                  if (reclamacionFilter === "abierta") {
+                    setFiltro("asignadas_curso");
+                    setReclamacionFilter("todas");
+                  } else {
+                    setFiltro("todas");
+                    setReclamacionFilter("abierta");
+                  }
+                }}
+              >
+                <Euro className="h-3.5 w-3.5" />
+                {reclamacionesAbiertasCountQ.data} pendientes de cobro
+              </Button>
+            )}
+            {editable && (
+              <Button
+                className="bg-[#26215C] hover:bg-[#1e1a48] text-white"
+                onClick={() => setIncidenciaOpen(true)}
+              >
+                <Plus className="h-4 w-4" /> Nueva incidencia
+              </Button>
+            )}
           </div>
         )}
         <section>
@@ -397,20 +422,6 @@ function MantenimientoPage() {
           <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
             <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Tareas</h2>
             <div className="flex flex-wrap items-center gap-2">
-              {(reclamacionesAbiertasCountQ.data ?? 0) > 0 && (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="h-8 text-xs border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100"
-                  onClick={() => {
-                    setFiltro("todas");
-                    setReclamacionFilter("abierta");
-                  }}
-                >
-                  <Euro className="h-3.5 w-3.5" />
-                  {reclamacionesAbiertasCountQ.data} pendientes de cobro
-                </Button>
-              )}
               <Select value={filtro} onValueChange={(v) => setFiltro(v as TareasFilter)}>
                 <SelectTrigger className="h-8 w-[190px] text-xs">
                   <SelectValue />
