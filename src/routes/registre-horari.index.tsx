@@ -199,6 +199,9 @@ function RegistreHorariPage() {
     },
   });
 
+  // Unfiltered on tipus_computa — "treballades" and "ajust"/null rows fold
+  // into hoursByWorker below, "objectiu" rows fold into reductionsByWorker,
+  // mirroring DetallPage's totals memo (registre-horari.$id.tsx) exactly.
   const ajustosQ = useQuery({
     queryKey: ["reg-horari-ajustos", start, end, workerIds.join(",")],
     enabled: workerIds.length > 0,
@@ -207,11 +210,10 @@ function RegistreHorariPage() {
         .from("personal_ajustos_hores")
         .select("id_persona, fecha, horas, tipus_computa")
         .in("id_persona", workerIds)
-        .eq("tipus_computa", "treballades")
         .gte("fecha", start)
         .lte("fecha", end);
       if (error) throw error;
-      return (data ?? []) as { id_persona: number; horas: number | null }[];
+      return (data ?? []) as { id_persona: number; horas: number | null; tipus_computa: "treballades" | "objectiu" | "ajust" | null }[];
     },
   });
 
@@ -229,22 +231,6 @@ function RegistreHorariPage() {
         .lte("inici", `${end}T23:59:59`);
       if (error) throw error;
       return (data ?? []) as { id_persona: number; hores: number | null }[];
-    },
-  });
-
-  const reduccionesQ = useQuery({
-    queryKey: ["reg-horari-reducciones", start, end, workerIds.join(",")],
-    enabled: workerIds.length > 0,
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("personal_ajustos_hores")
-        .select("id_persona, horas")
-        .in("id_persona", workerIds)
-        .eq("tipus_computa", "objectiu")
-        .gte("fecha", start)
-        .lte("fecha", end);
-      if (error) throw error;
-      return (data ?? []) as { id_persona: number; horas: number | null }[];
     },
   });
 
@@ -344,22 +330,28 @@ function RegistreHorariPage() {
     for (const r of genericQ.data ?? []) {
       map.set(r.id_persona, (map.get(r.id_persona) ?? 0) + diffHours(r.inici, r.fi));
     }
-    for (const a of ajustosQ.data ?? []) {
-      map.set(a.id_persona, (map.get(a.id_persona) ?? 0) + Number(a.horas ?? 0));
-    }
     for (const m of mantenimentQ.data ?? []) {
       map.set(m.id_persona, (map.get(m.id_persona) ?? 0) + Number(m.hores ?? 0));
     }
+    // "treballades" adds to worked hours directly; "ajust"/null rows are manual
+    // balance corrections folded in the same way DetallPage's totals memo folds
+    // otherAdjustments into workedTotal. "objectiu" rows are handled separately
+    // in reductionsByWorker below — they reduce the objective, not worked hours.
+    for (const a of ajustosQ.data ?? []) {
+      if ((a.tipus_computa ?? "ajust") === "objectiu") continue;
+      map.set(a.id_persona, (map.get(a.id_persona) ?? 0) + Number(a.horas ?? 0));
+    }
     return map;
-  }, [limpiezasQ.data, limpiezasRegistreQ.data, genericQ.data, ajustosQ.data, mantenimentQ.data]);
+  }, [limpiezasQ.data, limpiezasRegistreQ.data, genericQ.data, mantenimentQ.data, ajustosQ.data]);
 
   const reductionsByWorker = useMemo(() => {
     const map = new Map<number, number>();
-    for (const r of reduccionesQ.data ?? []) {
-      map.set(r.id_persona, (map.get(r.id_persona) ?? 0) + Math.abs(Number(r.horas ?? 0)));
+    for (const a of ajustosQ.data ?? []) {
+      if ((a.tipus_computa ?? "ajust") !== "objectiu") continue;
+      map.set(a.id_persona, (map.get(a.id_persona) ?? 0) + Math.abs(Number(a.horas ?? 0)));
     }
     return map;
-  }, [reduccionesQ.data]);
+  }, [ajustosQ.data]);
 
   // saldo_acumulat_fi per worker for the month IMMEDIATELY before the
   // currently-viewed year/month0, only if that exact month is closed — same
@@ -404,7 +396,7 @@ function RegistreHorariPage() {
     return m || 1;
   }, [workers, hoursByWorker, activeObjectiveByWorker, scheduledPendingByWorker]);
 
-  const loading = workersQ.isLoading || limpiezasQ.isLoading || limpiezasRegistreQ.isLoading || genericQ.isLoading || ajustosQ.isLoading || mantenimentQ.isLoading || reduccionesQ.isLoading || activePeriodsQ.isLoading;
+  const loading = workersQ.isLoading || limpiezasQ.isLoading || limpiezasRegistreQ.isLoading || genericQ.isLoading || ajustosQ.isLoading || mantenimentQ.isLoading || activePeriodsQ.isLoading;
 
   return (
     <AppShell title="Registro horario">
