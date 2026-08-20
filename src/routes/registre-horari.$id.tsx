@@ -561,21 +561,21 @@ function DetallPage() {
   }, [historyForPrevAcumulatQ.data, year, month0]);
 
   const totals = useMemo(() => {
-    let worked = 0, otherAdjustments = 0, reductions = 0;
+    let workedRaw = 0, otherAdjustments = 0, reductions = 0;
     let reductionTipo: string | null = null;
     const limpiezasConSesiones = new Set((limpiezasRegistreQ.data ?? []).map((r) => r.id_limpieza));
     for (const l of limpiezasQ.data ?? []) {
       if (limpiezasConSesiones.has(l.id_limpieza)) continue;
-      worked += diffHours(l.iniciada_en, l.finalizada_en);
+      workedRaw += diffHours(l.iniciada_en, l.finalizada_en);
     }
-    for (const r of limpiezasRegistreQ.data ?? []) worked += Number(r.hores ?? 0);
-    for (const r of genericQ.data ?? []) worked += diffHours(r.inici, r.fi);
-    for (const m of mantenimentQ.data ?? []) worked += Number(m.hores ?? 0);
+    for (const r of limpiezasRegistreQ.data ?? []) workedRaw += Number(r.hores ?? 0);
+    for (const r of genericQ.data ?? []) workedRaw += diffHours(r.inici, r.fi);
+    for (const m of mantenimentQ.data ?? []) workedRaw += Number(m.hores ?? 0);
     for (const a of ajustosQ.data ?? []) {
       const h = Number(a.horas ?? 0);
       const tc = a.tipus_computa ?? "ajust";
       if (tc === "treballades") {
-        worked += h;
+        workedRaw += h;
       } else if (tc === "objectiu") {
         reductions += Math.abs(h);
         if (!reductionTipo) reductionTipo = a.tipo;
@@ -583,12 +583,16 @@ function DetallPage() {
         otherAdjustments += h;
       }
     }
+    // "Horas trabajadas" folds in manual balance corrections (otherAdjustments)
+    // so it matches mi-dia.tsx's "Horas efectivas" figure for the same worker/month.
+    const workedTotal = workedRaw + otherAdjustments;
     const objective = activePeriodQ.data?.horas_objetivo_mes ?? personaQ.data?.horas_objetivo_mes ?? null;
     const isAutonom = personaQ.data?.tipo_contrato === "autonomo";
     const baseObjective = objective != null ? Number(objective) : null;
     const effectiveObjective = baseObjective != null ? Math.max(0, baseObjective - reductions - Number(prevAcumulat)) : null;
-    const saldo = !isAutonom && effectiveObjective != null ? worked - effectiveObjective + otherAdjustments : 0;
-    return { worked, adjustments: otherAdjustments, reductions, reductionTipo, objective: baseObjective, effectiveObjective, isAutonom, saldo };
+    // otherAdjustments is already folded into workedTotal above — don't add it again here.
+    const saldo = !isAutonom && effectiveObjective != null ? workedTotal - effectiveObjective : 0;
+    return { worked: workedTotal, adjustments: otherAdjustments, reductions, reductionTipo, objective: baseObjective, effectiveObjective, isAutonom, saldo };
   }, [limpiezasQ.data, limpiezasRegistreQ.data, genericQ.data, mantenimentQ.data, ajustosQ.data, personaQ.data, activePeriodQ.data, prevAcumulat]);
 
   function toggleSort(k: SortKey) {
@@ -905,7 +909,9 @@ function HoresProgress({
 }) {
   const BASE_PCT = 80;
   const hasObjective = baseObjective != null && baseObjective > 0 && effectiveObjective != null;
-  const total = worked + adjustments;
+  // `worked` already folds in `adjustments` (see DetallPage's totals memo) —
+  // don't add it again here or the bar width/color would double-count it.
+  const total = worked;
 
   // Positions relative to bar container width (%). Base objective sits at 80%.
   const effPct = hasObjective ? (effectiveObjective! / baseObjective!) * BASE_PCT : 0;
