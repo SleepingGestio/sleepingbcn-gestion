@@ -43,7 +43,7 @@ async function fetchLimpiezasAsignadas(fechaFrom: string, fechaTo: string): Prom
     .gte("fecha_limpieza", fechaFrom)
     .lte("fecha_limpieza", fechaTo);
   if (error) throw error;
-  return (data ?? []) as unknown as LimpiezaExt[];
+  return (data ?? []) as LimpiezaExt[];
 }
 
 async function fetchLimpiezasRegistre(fechaFrom: string, fechaTo: string): Promise<{ id_limpieza: number; hores: number | null }[]> {

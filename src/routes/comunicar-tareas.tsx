@@ -71,7 +71,7 @@ async function fetchLimpiezasDia(fecha: string): Promise<Limpieza[]> {
     .neq("estado", "anulada")
     .order("orden_trabajo", { ascending: true, nullsFirst: false });
   if (error) throw error;
-  return (data ?? []) as unknown as Limpieza[];
+  return (data ?? []) as Limpieza[];
 }
 
 async function fetchApartamentos(): Promise<Apartamento[]> {

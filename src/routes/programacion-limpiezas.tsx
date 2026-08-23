@@ -149,7 +149,7 @@ async function fetchLimpiezas(fromISO: string, toExclusiveISO: string): Promise<
     .gte("fecha_limpieza", fromISO)
     .lt("fecha_limpieza", toExclusiveISO);
   if (error) throw error;
-  return (data ?? []) as unknown as LimpiezaRow[];
+  return (data ?? []) as LimpiezaRow[];
 }
 
 // Estado → bar background color (mirror of EstadoBadge palette)

@@ -88,8 +88,6 @@ type Limpieza = {
   rechazada_en: string | null;
   motivo_rechazo: string | null;
   proxima_reserva_numero: string | null;
-  // Not yet in the generated Supabase types (column exists in the DB;
-  // types.ts regeneration pending) — see the `as unknown as` casts below.
   huespedes_previstos: number | null;
 };
 
@@ -443,7 +441,7 @@ function WorkerView({
         .order("fecha_limpieza", { ascending: true })
         .order("orden_trabajo", { ascending: true, nullsFirst: false });
       if (error) throw error;
-      return (data ?? []) as unknown as Limpieza[];
+      return (data ?? []) as Limpieza[];
     },
   });
 
@@ -831,7 +829,7 @@ function WorkerView({
         .neq("worker", personalId)
         .order("orden_trabajo", { ascending: true, nullsFirst: false });
       if (error) throw error;
-      return (data ?? []) as unknown as Limpieza[];
+      return (data ?? []) as Limpieza[];
     },
   });
 
@@ -2583,7 +2581,7 @@ function TaskCard({
 
   const update = async (patch: Partial<Limpieza>) => {
     setBusy(true);
-    const { error } = await supabase.from("limpiezas").update(patch as never).eq("id_limpieza", t.id_limpieza);
+    const { error } = await supabase.from("limpiezas").update(patch).eq("id_limpieza", t.id_limpieza);
     setBusy(false);
     if (error) { toast.error("Error: " + error.message); return false; }
     onChanged();
@@ -3086,7 +3084,7 @@ function DetailView({
       }
       const patch: Partial<Limpieza> = { estado: "en_curso" };
       if (!t.iniciada_en) patch.iniciada_en = nowIso;
-      const { error } = await supabase.from("limpiezas").update(patch as never).eq("id_limpieza", t.id_limpieza);
+      const { error } = await supabase.from("limpiezas").update(patch).eq("id_limpieza", t.id_limpieza);
       setBusy(false);
       if (error) { toast.error(error.message); return; }
       onChanged(); onClose();

@@ -56,9 +56,6 @@ export type Limpieza = {
   proxima_reserva_numero: string | null;
   iniciada_en: string | null;
   finalizada_en: string | null;
-  // Not yet in the generated Supabase types (column exists in the DB;
-  // types.ts regeneration pending) — see the `as unknown as` cast in
-  // programacion-limpiezas.tsx's fetchLimpiezas.
   huespedes_previstos: number | null;
 };
 
