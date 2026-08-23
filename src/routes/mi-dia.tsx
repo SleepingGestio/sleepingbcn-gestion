@@ -37,7 +37,7 @@ import { TimeBadge } from "@/components/time-badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ESTADO_LIMPIEZA_STYLE } from "@/components/estado-limpieza-badge";
 import { fmtDate } from "@/lib/format";
-import { TipoBadge, PrioridadPill } from "@/components/mantenimiento-badges";
+import { TipoBadge, PrioridadPill, EstadoFullPill } from "@/components/mantenimiento-badges";
 import { useApartamentosLite, useEspaciosLite, useGruposLite, useMantenimientoActions, usePersonalLite } from "@/hooks/use-mantenimiento";
 import {
   INCIDENCIA_COLUMNS,
@@ -1027,6 +1027,23 @@ function WorkerView({
     setIncidenciaOpen(true);
   }
 
+  // ---- Incidencias reportadas hoy por este trabajador (cualquier rol) ----
+  const [misIncidenciasHoyOpen, setMisIncidenciasHoyOpen] = useState(false);
+  const misIncidenciasHoyQ = useQuery({
+    queryKey: ["mi-dia-mis-incidencias-hoy", personalId, todayISO],
+    queryFn: async (): Promise<Incidencia[]> => {
+      const { data, error } = await supabase
+        .from("manteniment_incidencies")
+        .select(INCIDENCIA_COLUMNS)
+        .eq("id_reporter", personalId)
+        .gte("creado_en", `${todayISO}T00:00:00`)
+        .lte("creado_en", `${todayISO}T23:59:59`)
+        .order("creado_en", { ascending: false });
+      if (error) throw error;
+      return (data ?? []) as unknown as Incidencia[];
+    },
+  });
+
   // ---- Tareas de mantenimiento (role Mantenimiento only) ----
   const [mantFiltro, setMantFiltro] = useState<"mias" | "todas" | "nuevas">("mias");
 
@@ -1833,6 +1850,18 @@ function WorkerView({
         </div>
       )}
 
+      {/* Incidencias reportadas hoy por este trabajador — visible a cualquier rol */}
+      {(misIncidenciasHoyQ.data?.length ?? 0) > 0 && (
+        <div className="px-3 mt-3">
+          <Button
+            className="w-full h-12 bg-amber-600 hover:bg-amber-700 text-white"
+            onClick={() => setMisIncidenciasHoyOpen(true)}
+          >
+            <AlertTriangle className="h-4 w-4" /> Incidencias reportadas hoy ({misIncidenciasHoyQ.data?.length ?? 0})
+          </Button>
+        </div>
+      )}
+
       {/* Persistent entry point for Mantenimiento workers — no active cleaning required */}
       {isMantenimiento && (
         <div className="px-3 mt-3">
@@ -2333,6 +2362,60 @@ function WorkerView({
         />
       )}
 
+      {/* Incidencias reportadas hoy por este trabajador (cualquier rol) */}
+      <Dialog open={misIncidenciasHoyOpen} onOpenChange={setMisIncidenciasHoyOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Incidencias reportadas hoy</DialogTitle>
+            <DialogDescription>Incidencias que has reportado hoy</DialogDescription>
+          </DialogHeader>
+          {(misIncidenciasHoyQ.data ?? []).length === 0 ? (
+            <div className="text-sm text-muted-foreground text-center py-6">No has reportado incidencias hoy</div>
+          ) : (
+            <div className="space-y-2 max-h-[320px] overflow-y-auto">
+              {(misIncidenciasHoyQ.data ?? []).map((inc) => {
+                const clickable = inc.estat === "pendent_validacio";
+                return (
+                  <div
+                    key={inc.id_incidencia}
+                    className={cn(
+                      "rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm",
+                      clickable && "cursor-pointer hover:bg-slate-50",
+                    )}
+                    onClick={
+                      clickable
+                        ? () => {
+                            setMantDetailId(inc.id_incidencia);
+                            setMisIncidenciasHoyOpen(false);
+                          }
+                        : undefined
+                    }
+                  >
+                    {inc.descripcio && <div className="text-sm text-slate-700 line-clamp-2">{inc.descripcio}</div>}
+                    <div className="mt-1 flex items-center gap-1.5 flex-wrap">
+                      <TipoBadge tipus={inc.tipus} />
+                      <EstadoFullPill estat={inc.estat} />
+                      {!clickable && (
+                        <span className="text-xs text-muted-foreground">
+                          Asignada a{" "}
+                          {inc.id_assignat != null
+                            ? (personalQ.data ?? []).find((p) => p.id_persona === inc.id_assignat)?.codigo ??
+                              `#${inc.id_assignat}`
+                            : "—"}
+                        </span>
+                      )}
+                      <span className="text-xs text-muted-foreground ml-auto">
+                        {new Date(inc.data_incident ?? inc.creado_en).toLocaleDateString()}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
       <MantenimientoPopover
         idIncidencia={mantDetailId}
         onOpenChange={(o) => {
@@ -2341,6 +2424,7 @@ function WorkerView({
         onSaved={() => {
           mantIncidenciasQ.refetch();
           mantNuevasAllQ.refetch();
+          misIncidenciasHoyQ.refetch();
         }}
         workers={personalQ.data ?? []}
         selfAssignId={personalId}

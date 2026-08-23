@@ -223,6 +223,8 @@ export function MantenimientoPopover({
   const [reclCerrado, setReclCerrado] = useState(false);
   const [reclLoadedFor, setReclLoadedFor] = useState<number | null>(null);
   const [reclNotaTexto, setReclNotaTexto] = useState("");
+  const [nuevoAdjuntos, setNuevoAdjuntos] = useState<{ tipo: AdjuntoTipo; file: File }[]>([]);
+  const [nuevoAdjuntosSaving, setNuevoAdjuntosSaving] = useState(false);
 
   async function verAdjunto(idAdjunto: number, key: string) {
     const newWindow = window.open("", "_blank");
@@ -390,6 +392,13 @@ export function MantenimientoPopover({
   // server-side; this is only a UX convenience, not the authorization boundary.
   const puedeEditarNotasGestion =
     editable || (selfAssignId != null && sesiones.some((s) => s.id_persona === selfAssignId));
+  // Narrower than `editable` — lets the worker who reported an incidencia edit
+  // its Descripción and add adjuntos while it's still awaiting validation, without
+  // exposing the footer action bar or the reclamación section (both stay gated by
+  // `editable` only).
+  const puedeEditarComoReporter =
+    editable ||
+    (inc != null && selfAssignId != null && inc.id_reporter === selfAssignId && inc.estat === "pendent_validacio");
   const notaDirty = inc != null && nota !== (inc.notas_gestor ?? "");
   const descripcioDirty = inc != null && descripcio !== (inc.descripcio ?? "");
   const notaFinalizacionDirty = inc != null && notaFinalizacion !== (inc.notas_finalizacion ?? "");
@@ -426,6 +435,15 @@ export function MantenimientoPopover({
     if (!recl || !reclNotaTexto.trim()) return;
     await actions.agregarNotaReclamacion(recl.id_reclamacion, reclNotaTexto, currentPersona?.id_persona ?? null);
     setReclNotaTexto("");
+  }
+
+  async function handleSubirNuevoAdjunto() {
+    if (!inc || nuevoAdjuntos.length === 0) return;
+    setNuevoAdjuntosSaving(true);
+    await actions.subirAdjuntosIncidencia(inc.id_incidencia, nuevoAdjuntos, selfAssignId ?? null, "apertura");
+    setNuevoAdjuntos([]);
+    setNuevoAdjuntosSaving(false);
+    refetchAll();
   }
 
   // Fin total already closes the incidencia — this dialog is a purely optional,
@@ -494,7 +512,7 @@ export function MantenimientoPopover({
                 <section>
                   <div className="flex items-center justify-between gap-2">
                     <Label className="text-xs uppercase tracking-wide text-muted-foreground">Descripción</Label>
-                    {editable && (
+                    {puedeEditarComoReporter && (
                       <Button
                         size="sm"
                         variant="outline"
@@ -509,7 +527,7 @@ export function MantenimientoPopover({
                       </Button>
                     )}
                   </div>
-                  <Textarea rows={3} className="mt-1" placeholder="Describe la incidencia…" value={descripcio} onChange={(e) => setDescripcio(e.target.value)} disabled={!editable} />
+                  <Textarea rows={3} className="mt-1" placeholder="Describe la incidencia…" value={descripcio} onChange={(e) => setDescripcio(e.target.value)} disabled={!puedeEditarComoReporter} />
                 </section>
 
                 <section>
@@ -613,6 +631,23 @@ export function MantenimientoPopover({
                   <Label className="text-xs uppercase tracking-wide text-muted-foreground">Adjuntos</Label>
                   <div className="mt-1.5 space-y-2">
                     <AdjuntosGroup adjuntos={adjuntosApertura} loadingAdjunto={loadingAdjunto} onVer={verAdjunto} />
+                    {puedeEditarComoReporter && (
+                      <div className="space-y-1.5 pt-2 border-t">
+                        <AdjuntoPicker adjuntos={nuevoAdjuntos} onChange={setNuevoAdjuntos} />
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className={cn(
+                            "h-6 px-2 text-xs",
+                            nuevoAdjuntos.length > 0 && "bg-red-600 hover:bg-red-700 text-white border-red-600",
+                          )}
+                          disabled={nuevoAdjuntos.length === 0 || nuevoAdjuntosSaving}
+                          onClick={handleSubirNuevoAdjunto}
+                        >
+                          {nuevoAdjuntosSaving ? "Subiendo…" : "Subir adjuntos"}
+                        </Button>
+                      </div>
+                    )}
                   </div>
                 </section>
 
