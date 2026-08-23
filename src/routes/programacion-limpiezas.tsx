@@ -149,7 +149,7 @@ async function fetchLimpiezas(fromISO: string, toExclusiveISO: string): Promise<
     .gte("fecha_limpieza", fromISO)
     .lt("fecha_limpieza", toExclusiveISO);
   if (error) throw error;
-  return (data ?? []) as LimpiezaRow[];
+  return (data ?? []) as unknown as LimpiezaRow[];
 }
 
 // Estado → bar background color (mirror of EstadoBadge palette)
@@ -649,7 +649,10 @@ function ProgramacionLimpiezasPage() {
                                         check_toallas: true,
                                         check_sabanas: true,
                                         check_limpieza_basica: true,
-                                        check_limpieza_completa: false,
+                                        // Empty-cell creation always means no reservation
+                                        // is linked (unoccupied gap) — default to a full
+                                        // clean, still freely toggleable afterward.
+                                        check_limpieza_completa: true,
                                         observaciones: null,
                                         estado: "activa",
                                         motivo_anulacion: null,
@@ -658,6 +661,7 @@ function ProgramacionLimpiezasPage() {
                                         proxima_reserva_numero: null,
                                         iniciada_en: null,
                                         finalizada_en: null,
+                                        huespedes_previstos: null,
                                       };
                                   setPopover({
                                     loadKey,

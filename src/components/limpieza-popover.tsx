@@ -56,6 +56,10 @@ export type Limpieza = {
   proxima_reserva_numero: string | null;
   iniciada_en: string | null;
   finalizada_en: string | null;
+  // Not yet in the generated Supabase types (column exists in the DB;
+  // types.ts regeneration pending) — see the `as unknown as` cast in
+  // programacion-limpiezas.tsx's fetchLimpiezas.
+  huespedes_previstos: number | null;
 };
 
 type AptInfo = {
@@ -124,6 +128,7 @@ function emptyLimpieza(apt: AptInfo, fecha: string): Limpieza {
     proxima_reserva_numero: null,
     iniciada_en: null,
     finalizada_en: null,
+    huespedes_previstos: null,
   };
 }
 
@@ -536,6 +541,7 @@ export function LimpiezaPopover({ open, loadKey, onOpenChange, apt, fecha, exist
         check_sabanas: form.check_sabanas,
         check_limpieza_basica: form.check_limpieza_basica,
         check_limpieza_completa: form.check_limpieza_completa,
+        huespedes_previstos: form.huespedes_previstos,
         observaciones: form.observaciones,
         estado: form.estado ?? "activa",
         // Saving normally implies the gestor has reviewed and acted on
@@ -975,6 +981,21 @@ export function LimpiezaPopover({ open, loadKey, onOpenChange, apt, fecha, exist
                   disabled={readOnly}
                 />
               </div>
+              {form.numero_reserva == null && (
+                <div className="mt-3 pt-2 border-t space-y-1">
+                  <Label className="text-xs">Huéspedes a preparar</Label>
+                  <Input
+                    type="number"
+                    min={0}
+                    className="h-8 text-sm"
+                    value={form.huespedes_previstos ?? ""}
+                    onChange={(e) =>
+                      set("huespedes_previstos", e.target.value === "" ? null : Number(e.target.value))
+                    }
+                    disabled={readOnly}
+                  />
+                </div>
+              )}
             </section>
             ) : (
             <section>

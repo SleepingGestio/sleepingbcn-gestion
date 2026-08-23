@@ -88,6 +88,9 @@ type Limpieza = {
   rechazada_en: string | null;
   motivo_rechazo: string | null;
   proxima_reserva_numero: string | null;
+  // Not yet in the generated Supabase types (column exists in the DB;
+  // types.ts regeneration pending) — see the `as unknown as` casts below.
+  huespedes_previstos: number | null;
 };
 
 type LimpiezaDia = Limpieza & { esPendienteAtrasada?: boolean };
@@ -440,7 +443,7 @@ function WorkerView({
         .order("fecha_limpieza", { ascending: true })
         .order("orden_trabajo", { ascending: true, nullsFirst: false });
       if (error) throw error;
-      return (data ?? []) as Limpieza[];
+      return (data ?? []) as unknown as Limpieza[];
     },
   });
 
@@ -828,7 +831,7 @@ function WorkerView({
         .neq("worker", personalId)
         .order("orden_trabajo", { ascending: true, nullsFirst: false });
       if (error) throw error;
-      return (data ?? []) as Limpieza[];
+      return (data ?? []) as unknown as Limpieza[];
     },
   });
 
@@ -2563,6 +2566,15 @@ function TaskCard({
   const isVacio = t.tipo === "salida" && !!sourceResv?.["Check-out"] && sourceResv["Check-out"] < t.fecha_limpieza;
   const isIntermedia = t.tipo === "intermedia";
   const nextGuests = next?.["Huéspedes"] ?? null;
+  // "intermedia" (LIMPIEZA EXTRA-CR) has no incoming reservation of its own —
+  // show the current stay's guests when linked to one, or the manually-entered
+  // huespedes_previstos when it's an ad-hoc cleaning over an unoccupied gap.
+  const guestsToShow =
+    t.tipo === "intermedia"
+      ? t.numero_reserva != null
+        ? sourceResv?.["Huéspedes"] ?? null
+        : t.huespedes_previstos ?? null
+      : nextGuests;
   const win = windowHours(t.hora_out_time, t.hora_in_time, t.fecha_limpieza, next?.["Check in"] ?? null);
 
   const isPriority = t.prioritaria_manual != null ? !!t.prioritaria_manual : !!t.prioritaria;
@@ -2571,7 +2583,7 @@ function TaskCard({
 
   const update = async (patch: Partial<Limpieza>) => {
     setBusy(true);
-    const { error } = await supabase.from("limpiezas").update(patch).eq("id_limpieza", t.id_limpieza);
+    const { error } = await supabase.from("limpiezas").update(patch as never).eq("id_limpieza", t.id_limpieza);
     setBusy(false);
     if (error) { toast.error("Error: " + error.message); return false; }
     onChanged();
@@ -2680,8 +2692,8 @@ function TaskCard({
           ) : (
             <TimeChip time={t.hora_in_time} informed={t.hora_in_informed} />
           )}
-          {nextGuests != null && nextGuests > 0 && (
-            <span>👤 {nextGuests} {nextGuests === 1 ? "huésped" : "huéspedes"}</span>
+          {guestsToShow != null && guestsToShow > 0 && (
+            <span>👤 {guestsToShow} {guestsToShow === 1 ? "huésped" : "huéspedes"}</span>
           )}
         </div>
 
@@ -3074,7 +3086,7 @@ function DetailView({
       }
       const patch: Partial<Limpieza> = { estado: "en_curso" };
       if (!t.iniciada_en) patch.iniciada_en = nowIso;
-      const { error } = await supabase.from("limpiezas").update(patch).eq("id_limpieza", t.id_limpieza);
+      const { error } = await supabase.from("limpiezas").update(patch as never).eq("id_limpieza", t.id_limpieza);
       setBusy(false);
       if (error) { toast.error(error.message); return; }
       onChanged(); onClose();
