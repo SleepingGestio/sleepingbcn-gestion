@@ -431,6 +431,7 @@ export type Database = {
           hora_out_informed: boolean
           hora_out_time: string | null
           hora_sugerida: string | null
+          huespedes_previstos: number | null
           id_apt: number
           id_limpieza: number
           incidencias: string | null
@@ -472,6 +473,7 @@ export type Database = {
           hora_out_informed?: boolean
           hora_out_time?: string | null
           hora_sugerida?: string | null
+          huespedes_previstos?: number | null
           id_apt: number
           id_limpieza?: number
           incidencias?: string | null
@@ -513,6 +515,7 @@ export type Database = {
           hora_out_informed?: boolean
           hora_out_time?: string | null
           hora_sugerida?: string | null
+          huespedes_previstos?: number | null
           id_apt?: number
           id_limpieza?: number
           incidencias?: string | null
