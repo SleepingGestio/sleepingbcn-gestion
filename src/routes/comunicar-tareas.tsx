@@ -545,6 +545,15 @@ function TaskCard({
   const sfcDesmontar = !!t.sfc_desmontar;
   const isIntermedia = t.tipo === "intermedia" && !t.check_limpieza_completa;
   const nextGuests = nxt?.["Huéspedes"] ?? null;
+  // "intermedia" (LIMPIEZA EXTRA-CR) has no incoming reservation of its own —
+  // show the current stay's guests when linked to one, or the manually-entered
+  // huespedes_previstos when it's an ad-hoc cleaning over an unoccupied gap.
+  const guestsToShow =
+    t.tipo === "intermedia"
+      ? t.numero_reserva != null
+        ? src?.["Huéspedes"] ?? null
+        : t.huespedes_previstos ?? null
+      : nextGuests;
 
   const estadoKey = (t.estado ?? "activa") as keyof typeof ESTADO_BADGE;
   const estadoCls = ESTADO_BADGE[estadoKey] ?? "bg-slate-200 text-slate-800";
@@ -594,9 +603,9 @@ function TaskCard({
             ) : (
               <TimeBadge value={horaIn ?? "—"} informed={!!t.hora_in_informed} />
             )}
-            {nextGuests != null && nextGuests > 0 && (
+            {guestsToShow != null && guestsToShow > 0 && (
               <span className="ml-1 inline-flex items-center gap-0.5 text-[11px] font-medium text-foreground">
-                👤 {nextGuests} {nextGuests === 1 ? "huésped" : "huéspedes"}
+                👤 {guestsToShow} {guestsToShow === 1 ? "huésped" : "huéspedes"}
               </span>
             )}
           </div>
