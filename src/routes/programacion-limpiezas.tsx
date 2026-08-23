@@ -623,11 +623,26 @@ function ProgramacionLimpiezasPage() {
                                   // view-only user reach that, since there's nothing to view yet.
                                   if (!existing && !canEditProgramacion) return;
                                   const loadKey = ++popoverLoadSeq.current;
+                                  // If this apt+date falls within an active reservation's
+                                  // stay, link the new intermedia cleaning to it — same
+                                  // overlap convention as fetchReservas (ci <= fecha < co).
+                                  const covering = (reservasByApt.get(a.id_apt) ?? []).find(
+                                    (r) =>
+                                      r["Check in"] != null &&
+                                      r["Check-out"] != null &&
+                                      r["Check in"]! <= iso &&
+                                      r["Check-out"]! > iso,
+                                  );
+                                  const coveringSfcMontar =
+                                    !!covering &&
+                                    !covering.es_reserva_compartida &&
+                                    !!a.tiene_sofa_cama &&
+                                    (covering["Huéspedes"] ?? 0) > (a.camas_fijas ?? 0);
                                   const skeleton: LimpiezaRow | null = existing
                                     ? null
                                     : {
                                         id_limpieza: 0,
-                                        numero_reserva: null,
+                                        numero_reserva: covering?.Número ?? null,
                                         id_apt: a.id_apt,
                                         fecha_limpieza: iso,
                                         tipo: "intermedia",
@@ -640,7 +655,7 @@ function ProgramacionLimpiezasPage() {
                                         hora_sugerida: null,
                                         prioritaria: false,
                                         prioritaria_manual: null,
-                                        sfc_montar: false,
+                                        sfc_montar: coveringSfcMontar,
                                         sfc_montar_manual: null,
                                         sfc_desmontar: false,
                                         sfc_desmontar_manual: null,
@@ -649,10 +664,10 @@ function ProgramacionLimpiezasPage() {
                                         check_toallas: true,
                                         check_sabanas: true,
                                         check_limpieza_basica: true,
-                                        // Empty-cell creation always means no reservation
-                                        // is linked (unoccupied gap) — default to a full
-                                        // clean, still freely toggleable afterward.
-                                        check_limpieza_completa: true,
+                                        // Reservation-linked: items-only clean, matching
+                                        // generar-limpiezas.ts's auto-generated intermedia
+                                        // rows. Unoccupied gap: default to a full clean.
+                                        check_limpieza_completa: covering ? false : true,
                                         observaciones: null,
                                         estado: "activa",
                                         motivo_anulacion: null,
