@@ -433,8 +433,8 @@ function MantenimientoPage() {
           <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
             <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Tareas</h2>
             <div className="flex flex-wrap items-center gap-2">
-              <div className="flex flex-wrap items-center gap-1.5 rounded-lg border bg-muted/40 px-2 py-1.5">
-                <span className="flex items-center gap-1 pl-0.5 text-[11px] font-semibold uppercase tracking-wide text-slate-600">
+              <div className="flex flex-wrap items-center gap-1.5 rounded-lg border border-primary/25 bg-primary/10 px-2 py-1.5">
+                <span className="flex items-center gap-1 pl-0.5 text-[11px] font-semibold uppercase tracking-wide text-slate-700">
                   <Filter className="h-3.5 w-3.5" /> Filtros
                 </span>
                 <Select value={filtro} onValueChange={(v) => setFiltro(v as TareasFilter)}>
@@ -526,7 +526,7 @@ function MantenimientoPage() {
               </div>
               <div className="hidden h-6 w-px bg-border sm:block" />
               <div className="flex items-center gap-1.5">
-                <span className="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-slate-600">
+                <span className="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-slate-800">
                   <ArrowUpDown className="h-3.5 w-3.5" /> Ordenar por
                 </span>
                 <Select value={sortKey} onValueChange={(v) => setSortKey(v as SortKey)}>
