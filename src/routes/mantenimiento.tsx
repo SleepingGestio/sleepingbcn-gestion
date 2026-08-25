@@ -51,6 +51,7 @@ export const Route = createFileRoute("/mantenimiento")({
 type TareasFilter = "asignadas_curso" | "en_curso" | "finalizadas" | "rechazadas" | "todas";
 type SortKey = "prioridad" | "fecha_prevista" | "fecha_inicio" | "fecha_fin" | "titulo" | "ubicacion" | "operario";
 type UbicacionFilter = "todos" | `apt-${number}` | `esp-${number}`;
+type OperarioFilter = "todos" | "sin_asignar" | number;
 type ReclamacionFilter = "todas" | "abierta" | "cerrada";
 type ReclamacionEstado = "pendiente" | "gestionada" | "finalizada";
 
@@ -90,6 +91,7 @@ function MantenimientoPage() {
   const [sortKey, setSortKey] = useState<SortKey>("prioridad");
   const [grupoFilter, setGrupoFilter] = useState<number | "todos">("todos");
   const [ubicacionFilter, setUbicacionFilter] = useState<UbicacionFilter>("todos");
+  const [operarioFilter, setOperarioFilter] = useState<OperarioFilter>("todos");
   const [reclamacionFilter, setReclamacionFilter] = useState<ReclamacionFilter>("todas");
   const [incidenciaOpen, setIncidenciaOpen] = useState(false);
 
@@ -260,6 +262,10 @@ function MantenimientoPage() {
   );
 
   const workersQ = useMantenimientoWorkers();
+  const operarioOptionsForFilter = useMemo(
+    () => (workersQ.data ?? []).slice().sort((a, b) => fullName(a).localeCompare(fullName(b))),
+    [workersQ.data],
+  );
 
   const incidenciaContext: ReportarIncidenciaContext = useMemo(
     () => ({
@@ -291,6 +297,11 @@ function MantenimientoPage() {
           if (t.id_tipo_espacio_comun !== Number(ubicacionFilter.slice(4))) return false;
         }
       }
+      if (operarioFilter !== "todos") {
+        if (operarioFilter === "sin_asignar") {
+          if (t.id_assignat != null) return false;
+        } else if (t.id_assignat !== operarioFilter) return false;
+      }
       if (reclamacionFilter !== "todas") {
         const estado = reclamacionEstadoByIncidencia.get(t.id_incidencia);
         if (reclamacionFilter === "abierta" && !(estado === "pendiente" || estado === "gestionada")) return false;
@@ -298,7 +309,7 @@ function MantenimientoPage() {
       }
       return true;
     });
-  }, [tareasQ.data, grupoFilter, ubicacionFilter, reclamacionFilter, reclamacionEstadoByIncidencia]);
+  }, [tareasQ.data, grupoFilter, ubicacionFilter, operarioFilter, reclamacionFilter, reclamacionEstadoByIncidencia]);
 
   const sortedTareas = useMemo(() => {
     const arr = [...filteredTareas];
@@ -479,6 +490,23 @@ function MantenimientoPage() {
                       ))}
                     </SelectGroup>
                   )}
+                </SelectContent>
+              </Select>
+              <Select
+                value={operarioFilter === "todos" || operarioFilter === "sin_asignar" ? operarioFilter : String(operarioFilter)}
+                onValueChange={(v) => setOperarioFilter(v === "todos" || v === "sin_asignar" ? v : Number(v))}
+              >
+                <SelectTrigger className="h-8 w-[190px] text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="todos">Todos los operarios</SelectItem>
+                  <SelectItem value="sin_asignar">Sin asignar</SelectItem>
+                  {operarioOptionsForFilter.map((w) => (
+                    <SelectItem key={w.id_persona} value={String(w.id_persona)}>
+                      {fullName(w)}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
               <Select value={reclamacionFilter} onValueChange={(v) => setReclamacionFilter(v as ReclamacionFilter)}>
