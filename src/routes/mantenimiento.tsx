@@ -42,7 +42,7 @@ import {
   type Registre,
   type PersonaLite,
 } from "@/lib/mantenimiento";
-import { Home, Plus, RotateCcw, Camera, Video, Mic, FileText, Euro } from "lucide-react";
+import { Home, Plus, RotateCcw, Camera, Video, Mic, FileText, Euro, Filter, ArrowUpDown } from "lucide-react";
 
 export const Route = createFileRoute("/mantenimiento")({
   component: MantenimientoPage,
@@ -51,6 +51,7 @@ export const Route = createFileRoute("/mantenimiento")({
 type TareasFilter = "asignadas_curso" | "en_curso" | "finalizadas" | "rechazadas" | "todas";
 type SortKey = "prioridad" | "fecha_prevista" | "fecha_inicio" | "fecha_fin" | "titulo" | "ubicacion" | "operario";
 type UbicacionFilter = "todos" | `apt-${number}` | `esp-${number}`;
+type OperarioFilter = "todos" | "sin_asignar" | number;
 type ReclamacionFilter = "todas" | "abierta" | "cerrada";
 type ReclamacionEstado = "pendiente" | "gestionada" | "finalizada";
 
@@ -90,6 +91,7 @@ function MantenimientoPage() {
   const [sortKey, setSortKey] = useState<SortKey>("prioridad");
   const [grupoFilter, setGrupoFilter] = useState<number | "todos">("todos");
   const [ubicacionFilter, setUbicacionFilter] = useState<UbicacionFilter>("todos");
+  const [operarioFilter, setOperarioFilter] = useState<OperarioFilter>("todos");
   const [reclamacionFilter, setReclamacionFilter] = useState<ReclamacionFilter>("todas");
   const [incidenciaOpen, setIncidenciaOpen] = useState(false);
 
@@ -260,6 +262,10 @@ function MantenimientoPage() {
   );
 
   const workersQ = useMantenimientoWorkers();
+  const operarioOptionsForFilter = useMemo(
+    () => (workersQ.data ?? []).slice().sort((a, b) => fullName(a).localeCompare(fullName(b))),
+    [workersQ.data],
+  );
 
   const incidenciaContext: ReportarIncidenciaContext = useMemo(
     () => ({
@@ -291,6 +297,11 @@ function MantenimientoPage() {
           if (t.id_tipo_espacio_comun !== Number(ubicacionFilter.slice(4))) return false;
         }
       }
+      if (operarioFilter !== "todos") {
+        if (operarioFilter === "sin_asignar") {
+          if (t.id_assignat != null) return false;
+        } else if (t.id_assignat !== operarioFilter) return false;
+      }
       if (reclamacionFilter !== "todas") {
         const estado = reclamacionEstadoByIncidencia.get(t.id_incidencia);
         if (reclamacionFilter === "abierta" && !(estado === "pendiente" || estado === "gestionada")) return false;
@@ -298,7 +309,7 @@ function MantenimientoPage() {
       }
       return true;
     });
-  }, [tareasQ.data, grupoFilter, ubicacionFilter, reclamacionFilter, reclamacionEstadoByIncidencia]);
+  }, [tareasQ.data, grupoFilter, ubicacionFilter, operarioFilter, reclamacionFilter, reclamacionEstadoByIncidencia]);
 
   const sortedTareas = useMemo(() => {
     const arr = [...filteredTareas];
@@ -422,89 +433,117 @@ function MantenimientoPage() {
           <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
             <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Tareas</h2>
             <div className="flex flex-wrap items-center gap-2">
-              <Select value={filtro} onValueChange={(v) => setFiltro(v as TareasFilter)}>
-                <SelectTrigger className="h-8 w-[190px] text-xs">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="asignadas_curso">Asignadas + en curso</SelectItem>
-                  <SelectItem value="en_curso">Solo en curso</SelectItem>
-                  <SelectItem value="finalizadas">Finalizadas</SelectItem>
-                  <SelectItem value="rechazadas">Rechazadas</SelectItem>
-                  <SelectItem value="todas">Todas</SelectItem>
-                </SelectContent>
-              </Select>
-              <Select
-                value={grupoFilter === "todos" ? "todos" : String(grupoFilter)}
-                onValueChange={(v) => {
-                  setGrupoFilter(v === "todos" ? "todos" : Number(v));
-                  setUbicacionFilter("todos");
-                }}
-              >
-                <SelectTrigger className="h-8 w-[160px] text-xs">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="todos">Todos los grupos</SelectItem>
-                  {(gruposQ.data ?? []).map((g) => (
-                    <SelectItem key={g.id_grupo} value={String(g.id_grupo)}>
-                      {g.nombre}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Select value={ubicacionFilter} onValueChange={(v) => setUbicacionFilter(v as UbicacionFilter)}>
-                <SelectTrigger className="h-8 w-[190px] text-xs">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="todos">Todos los apt./espacios</SelectItem>
-                  {aptOptionsForFilter.length > 0 && (
-                    <SelectGroup>
-                      <SelectLabel>Apartamentos</SelectLabel>
-                      {aptOptionsForFilter.map((a) => (
-                        <SelectItem key={`apt-${a.id_apt}`} value={`apt-${a.id_apt}`}>
-                          {a.nombre}
-                        </SelectItem>
-                      ))}
-                    </SelectGroup>
-                  )}
-                  {espacioOptionsForFilter.length > 0 && (
-                    <SelectGroup>
-                      <SelectLabel>Espacios comunes</SelectLabel>
-                      {espacioOptionsForFilter.map((e) => (
-                        <SelectItem key={`esp-${e.id_tipo}`} value={`esp-${e.id_tipo}`}>
-                          {e.nombre}
-                        </SelectItem>
-                      ))}
-                    </SelectGroup>
-                  )}
-                </SelectContent>
-              </Select>
-              <Select value={reclamacionFilter} onValueChange={(v) => setReclamacionFilter(v as ReclamacionFilter)}>
-                <SelectTrigger className="h-8 w-[190px] text-xs">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="todas">Todas</SelectItem>
-                  <SelectItem value="abierta">Con reclamación abierta</SelectItem>
-                  <SelectItem value="cerrada">Con reclamación cerrada</SelectItem>
-                </SelectContent>
-              </Select>
-              <Select value={sortKey} onValueChange={(v) => setSortKey(v as SortKey)}>
-                <SelectTrigger className="h-8 w-[190px] text-xs">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="prioridad">Prioridad</SelectItem>
-                  <SelectItem value="fecha_prevista">Fecha prevista</SelectItem>
-                  <SelectItem value="fecha_inicio">Fecha inicio</SelectItem>
-                  <SelectItem value="fecha_fin">Fecha fin</SelectItem>
-                  <SelectItem value="titulo">Título</SelectItem>
-                  <SelectItem value="ubicacion">Apartamento/espacio</SelectItem>
-                  <SelectItem value="operario">Operario asignado</SelectItem>
-                </SelectContent>
-              </Select>
+              <div className="flex flex-wrap items-center gap-1.5 rounded-lg border bg-muted/40 px-2 py-1.5">
+                <span className="flex items-center gap-1 pl-0.5 text-[11px] font-semibold uppercase tracking-wide text-slate-600">
+                  <Filter className="h-3.5 w-3.5" /> Filtros
+                </span>
+                <Select value={filtro} onValueChange={(v) => setFiltro(v as TareasFilter)}>
+                  <SelectTrigger className="h-8 w-[190px] text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="asignadas_curso">Asignadas + en curso</SelectItem>
+                    <SelectItem value="en_curso">Solo en curso</SelectItem>
+                    <SelectItem value="finalizadas">Finalizadas</SelectItem>
+                    <SelectItem value="rechazadas">Rechazadas</SelectItem>
+                    <SelectItem value="todas">Todas</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Select
+                  value={grupoFilter === "todos" ? "todos" : String(grupoFilter)}
+                  onValueChange={(v) => {
+                    setGrupoFilter(v === "todos" ? "todos" : Number(v));
+                    setUbicacionFilter("todos");
+                  }}
+                >
+                  <SelectTrigger className="h-8 w-[160px] text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="todos">Todos los grupos</SelectItem>
+                    {(gruposQ.data ?? []).map((g) => (
+                      <SelectItem key={g.id_grupo} value={String(g.id_grupo)}>
+                        {g.nombre}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Select value={ubicacionFilter} onValueChange={(v) => setUbicacionFilter(v as UbicacionFilter)}>
+                  <SelectTrigger className="h-8 w-[190px] text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="todos">Todos los apt./espacios</SelectItem>
+                    {aptOptionsForFilter.length > 0 && (
+                      <SelectGroup>
+                        <SelectLabel>Apartamentos</SelectLabel>
+                        {aptOptionsForFilter.map((a) => (
+                          <SelectItem key={`apt-${a.id_apt}`} value={`apt-${a.id_apt}`}>
+                            {a.nombre}
+                          </SelectItem>
+                        ))}
+                      </SelectGroup>
+                    )}
+                    {espacioOptionsForFilter.length > 0 && (
+                      <SelectGroup>
+                        <SelectLabel>Espacios comunes</SelectLabel>
+                        {espacioOptionsForFilter.map((e) => (
+                          <SelectItem key={`esp-${e.id_tipo}`} value={`esp-${e.id_tipo}`}>
+                            {e.nombre}
+                          </SelectItem>
+                        ))}
+                      </SelectGroup>
+                    )}
+                  </SelectContent>
+                </Select>
+                <Select
+                  value={operarioFilter === "todos" || operarioFilter === "sin_asignar" ? operarioFilter : String(operarioFilter)}
+                  onValueChange={(v) => setOperarioFilter(v === "todos" || v === "sin_asignar" ? v : Number(v))}
+                >
+                  <SelectTrigger className="h-8 w-[190px] text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="todos">Todos los operarios</SelectItem>
+                    <SelectItem value="sin_asignar">Sin asignar</SelectItem>
+                    {operarioOptionsForFilter.map((w) => (
+                      <SelectItem key={w.id_persona} value={String(w.id_persona)}>
+                        {fullName(w)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Select value={reclamacionFilter} onValueChange={(v) => setReclamacionFilter(v as ReclamacionFilter)}>
+                  <SelectTrigger className="h-8 w-[190px] text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="todas">Todas</SelectItem>
+                    <SelectItem value="abierta">Con reclamación abierta</SelectItem>
+                    <SelectItem value="cerrada">Con reclamación cerrada</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="hidden h-6 w-px bg-border sm:block" />
+              <div className="flex items-center gap-1.5">
+                <span className="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-slate-600">
+                  <ArrowUpDown className="h-3.5 w-3.5" /> Ordenar por
+                </span>
+                <Select value={sortKey} onValueChange={(v) => setSortKey(v as SortKey)}>
+                  <SelectTrigger className="h-8 w-[190px] text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="prioridad">Prioridad</SelectItem>
+                    <SelectItem value="fecha_prevista">Fecha prevista</SelectItem>
+                    <SelectItem value="fecha_inicio">Fecha inicio</SelectItem>
+                    <SelectItem value="fecha_fin">Fecha fin</SelectItem>
+                    <SelectItem value="titulo">Título</SelectItem>
+                    <SelectItem value="ubicacion">Apartamento/espacio</SelectItem>
+                    <SelectItem value="operario">Operario asignado</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
           </div>
 
