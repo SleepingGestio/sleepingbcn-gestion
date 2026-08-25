@@ -433,7 +433,7 @@ function MantenimientoPage() {
           <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
             <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Tareas</h2>
             <div className="flex flex-wrap items-center gap-2">
-              <div className="flex flex-wrap items-center gap-1.5 rounded-lg border border-primary/30 bg-primary/15 px-2 py-1.5">
+              <div className="flex flex-wrap items-center gap-1.5 rounded-lg border border-lime-300 bg-lime-100 px-2 py-1.5">
                 <span className="flex items-center gap-1 pl-0.5 text-[11px] font-semibold uppercase tracking-wide text-foreground">
                   <Filter className="h-3.5 w-3.5" /> Filtros
                 </span>
