@@ -673,6 +673,8 @@ function ProgramacionLimpiezasPage() {
                                         motivo_anulacion: null,
                                         affected_by_kb_change: false,
                                         affected_reason: null,
+                                        affected_resolved_en: null,
+                                        affected_resolved_diff: null,
                                         proxima_reserva_numero: null,
                                         iniciada_en: null,
                                         finalizada_en: null,

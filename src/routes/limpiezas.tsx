@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { useState, useMemo } from "react";
+import { Fragment, useState, useMemo } from "react";
 import { AppShell } from "@/components/app-shell";
 import { Card } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -19,6 +19,9 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { formatHHMM } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 import { Sofa, Pencil } from "lucide-react";
+import { useKbChangeDiffs } from "@/hooks/use-kb-change-diffs";
+import { KbChangePendingBanner, KbChangeResolvedBanner } from "@/components/kb-change-banner";
+import { todayISO } from "@/lib/reservas";
 
 export const Route = createFileRoute("/limpiezas")({
   component: LimpiezasAsignadasPage,
@@ -159,6 +162,8 @@ function LimpiezasAsignadasPage() {
     return m;
   }, [filter.aptsQ.data, aptExtraQ.data]);
 
+  const kbDiffsQ = useKbChangeDiffs(q.data ?? [], aptById);
+
   const workerLabel = (id: number | null): string => {
     if (id == null) return "—";
     const p = limpiadoresQ.data?.find((x) => x.id_persona === id);
@@ -287,8 +292,13 @@ function LimpiezasAsignadasPage() {
                   sessionHours != null
                     ? sessionHours
                     : l.estado === "finalizada" ? elapsedHours(l.iniciada_en, l.finalizada_en) : null;
+                const isAffected = !!l.affected_by_kb_change;
+                const isResolvedToday =
+                  !isAffected && !!l.affected_resolved_en && l.affected_resolved_en.slice(0, 10) === todayISO();
+                const kbDiff = kbDiffsQ.data?.get(l.id_limpieza);
                 return (
-                  <TableRow key={l.id_limpieza}>
+                  <Fragment key={l.id_limpieza}>
+                  <TableRow>
                     <TableCell>{fmtDate(l.fecha_limpieza)}</TableCell>
                     <TableCell className="font-medium">
                       <Tooltip>
@@ -353,6 +363,25 @@ function LimpiezasAsignadasPage() {
                       </Button>
                     </TableCell>
                   </TableRow>
+                  {isAffected && (
+                    <TableRow>
+                      <TableCell colSpan={11} className="py-1 px-3">
+                        <KbChangePendingBanner
+                          changes={kbDiff?.changes ?? []}
+                          reasonNote={kbDiff?.reasonNote ?? null}
+                          loading={kbDiffsQ.isLoading && !kbDiff}
+                        />
+                      </TableCell>
+                    </TableRow>
+                  )}
+                  {isResolvedToday && (
+                    <TableRow>
+                      <TableCell colSpan={11} className="py-1 px-3">
+                        <KbChangeResolvedBanner diff={l.affected_resolved_diff ?? []} />
+                      </TableCell>
+                    </TableRow>
+                  )}
+                  </Fragment>
                 );
               })}
             </TableBody>

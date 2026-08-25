@@ -16,6 +16,8 @@ import { LimpiezaPopover, type Limpieza } from "@/components/limpieza-popover";
 import { usePermissions } from "@/hooks/use-permissions";
 import { toast } from "sonner";
 import { TimeBadge } from "@/components/time-badge";
+import { useKbChangeDiffs, type KbChangeDiffResult } from "@/hooks/use-kb-change-diffs";
+import { KbChangePendingBanner, KbChangeResolvedBanner } from "@/components/kb-change-banner";
 
 export const Route = createFileRoute("/comunicar-tareas")({
   component: ComunicarTareasPage,
@@ -213,6 +215,8 @@ function ComunicarTareasPage() {
     return m;
   }, [aptsQ.data]);
 
+  const kbDiffsQ = useKbChangeDiffs(tasksQ.data ?? [], aptById);
+
   const tasksByWorker = useMemo(() => {
     const m = new Map<number, Limpieza[]>();
     for (const t of tasksQ.data ?? []) {
@@ -357,6 +361,8 @@ function ComunicarTareasPage() {
                 aptById={aptById}
                 reservas={reservasQ.data ?? new Map()}
                 mantByApt={mantByAptQ.data ?? new Set()}
+                kbDiffs={kbDiffsQ.data}
+                kbDiffsLoading={kbDiffsQ.isLoading}
                 onCardClick={openCard}
                 onComunicar={() => comunicar(w.id_persona)}
                 onReorder={(from, to) => reorder(w.id_persona, from, to)}
@@ -406,6 +412,8 @@ function WorkerColumn({
   aptById,
   reservas,
   mantByApt,
+  kbDiffs,
+  kbDiffsLoading,
   onCardClick,
   onComunicar,
   onReorder,
@@ -418,6 +426,8 @@ function WorkerColumn({
   aptById: Map<number, Apartamento>;
   reservas: Map<string, ResvLite>;
   mantByApt: Set<number>;
+  kbDiffs: Map<number, KbChangeDiffResult> | undefined;
+  kbDiffsLoading: boolean;
   onCardClick: (l: Limpieza) => void;
   onComunicar: () => void;
   onReorder: (from: number, to: number) => void;
@@ -474,6 +484,8 @@ function WorkerColumn({
             apt={aptById.get(t.id_apt)}
             reservas={reservas}
             mantByApt={mantByApt}
+            kbDiff={kbDiffs?.get(t.id_limpieza)}
+            kbDiffsLoading={kbDiffsLoading}
             onClick={() => onCardClick(t)}
             draggable
             onDragStart={() => setDragIdx(idx)}
@@ -510,6 +522,8 @@ function TaskCard({
   apt,
   reservas,
   mantByApt,
+  kbDiff,
+  kbDiffsLoading,
   onClick,
   draggable,
   onDragStart,
@@ -520,6 +534,8 @@ function TaskCard({
   apt: Apartamento | undefined;
   reservas: Map<string, ResvLite>;
   mantByApt: Set<number>;
+  kbDiff: KbChangeDiffResult | undefined;
+  kbDiffsLoading: boolean;
   onClick: () => void;
   draggable?: boolean;
   onDragStart?: () => void;
@@ -557,6 +573,13 @@ function TaskCard({
 
   const estadoKey = (t.estado ?? "activa") as keyof typeof ESTADO_BADGE;
   const estadoCls = ESTADO_BADGE[estadoKey] ?? "bg-slate-200 text-slate-800";
+  // The underlying reservation changed after this cleaning was scheduled (new dates,
+  // guests, próxima reserva, cancelación…) — generar-limpiezas.ts deliberately leaves
+  // the stored fields untouched and only flags this, so anything rendered below (times,
+  // guests, NENTRAN) may be stale until a gestor resolves it from /programacion-limpiezas.
+  const isAffected = !!t.affected_by_kb_change;
+  const isResolvedToday =
+    !isAffected && !!t.affected_resolved_en && t.affected_resolved_en.slice(0, 10) === toISO(new Date());
 
   return (
     <Card
@@ -591,6 +614,20 @@ function TaskCard({
               {t.estado ?? "activa"}
             </span>
           </div>
+          {isAffected && (
+            <div className="mt-1">
+              <KbChangePendingBanner
+                changes={kbDiff?.changes ?? []}
+                reasonNote={kbDiff?.reasonNote ?? null}
+                loading={kbDiffsLoading && !kbDiff}
+              />
+            </div>
+          )}
+          {isResolvedToday && (
+            <div className="mt-1">
+              <KbChangeResolvedBanner diff={t.affected_resolved_diff ?? []} />
+            </div>
+          )}
           <div className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground flex-wrap">
             {isVacio ? (
               <span className="rounded px-1.5 py-0.5 text-[10px] font-semibold bg-rose-200 text-rose-900">VACÍA</span>

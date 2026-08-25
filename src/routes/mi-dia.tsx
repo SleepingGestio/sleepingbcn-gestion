@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useMemo, useState, useEffect, useRef } from "react";
+import { Fragment, useMemo, useState, useEffect, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import type { TablesInsert } from "@/integrations/supabase/types";
@@ -33,6 +33,9 @@ import { MantenimientoPopover } from "@/components/mantenimiento-popover";
 import { ApartamentoOcupacionCalendario } from "@/components/apartamento-ocupacion-calendario";
 import { cn, formatHHMM } from "@/lib/utils";
 import { toast } from "sonner";
+import { useKbChangeDiffs, type KbChangeDiffResult } from "@/hooks/use-kb-change-diffs";
+import { KbChangePendingBanner, KbChangeResolvedBanner } from "@/components/kb-change-banner";
+import type { KbChangeDiffEntry } from "@/lib/kb-change-diff";
 import { TimeBadge } from "@/components/time-badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ESTADO_LIMPIEZA_STYLE } from "@/components/estado-limpieza-badge";
@@ -89,11 +92,14 @@ type Limpieza = {
   motivo_rechazo: string | null;
   proxima_reserva_numero: string | null;
   huespedes_previstos: number | null;
+  affected_by_kb_change: boolean;
+  affected_resolved_en: string | null;
+  affected_resolved_diff: KbChangeDiffEntry[] | null;
 };
 
 type LimpiezaDia = Limpieza & { esPendienteAtrasada?: boolean };
 
-type Apartamento = { id_apt: number; nombre: string };
+type Apartamento = { id_apt: number; nombre: string; camas_fijas: number | null; tiene_sofa_cama: boolean | null };
 type ResvLite = { Número: string; "Check in": string | null; "Check-out": string | null; "Huéspedes": number | null };
 type ComDia = { worker: number; fecha: string; observaciones: string | null };
 type MiDiaNotificacion = {
@@ -473,7 +479,7 @@ function WorkerView({
     queryFn: async (): Promise<Apartamento[]> => {
       const { data, error } = await supabase
         .from("apartamentos")
-        .select("id_apt, nombre")
+        .select("id_apt, nombre, camas_fijas, tiene_sofa_cama")
         .in("id_apt", aptIds);
       if (error) throw error;
       return (data ?? []) as Apartamento[];
@@ -484,6 +490,8 @@ function WorkerView({
     for (const a of aptsQ.data ?? []) m.set(a.id_apt, a);
     return m;
   }, [aptsQ.data]);
+
+  const kbDiffsQ = useKbChangeDiffs(tasksQ.data ?? [], aptById);
 
   // Reservation lookups (for VACÍO / NENTRAN / ventana)
   const numeros = useMemo(() => {
@@ -953,7 +961,13 @@ function WorkerView({
   });
 
   type GrupoLite = { id_grupo: number; nombre: string; orden: number | null };
-  type AptLite = { id_apt: number; nombre: string; id_grupo: number | null };
+  type AptLite = {
+    id_apt: number;
+    nombre: string;
+    id_grupo: number | null;
+    camas_fijas: number | null;
+    tiene_sofa_cama: boolean | null;
+  };
 
   const gruposQ = useQuery({
     queryKey: ["mi-dia-grupos"],
@@ -973,13 +987,20 @@ function WorkerView({
     queryFn: async (): Promise<AptLite[]> => {
       const { data, error } = await supabase
         .from("apartamentos")
-        .select("id_apt, nombre, id_grupo")
+        .select("id_apt, nombre, id_grupo, camas_fijas, tiene_sofa_cama")
         .eq("activo", true)
         .order("nombre");
       if (error) throw error;
       return (data ?? []) as AptLite[];
     },
   });
+
+  const aptAllById = useMemo(() => {
+    const m = new Map<number, AptLite>();
+    for (const a of aptsAllQ.data ?? []) m.set(a.id_apt, a);
+    return m;
+  }, [aptsAllQ.data]);
+  const otherKbDiffsQ = useKbChangeDiffs(otherQ.data ?? [], aptAllById);
 
   const espaciosComunesQ = useQuery({
     queryKey: ["mi-dia-espacios-comunes"],
@@ -2094,6 +2115,8 @@ function WorkerView({
                 t={t}
                 apt={aptById.get(t.id_apt)}
                 resv={resvQ.data ?? new Map()}
+                kbDiff={kbDiffsQ.data?.get(t.id_limpieza)}
+                kbDiffsLoading={kbDiffsQ.isLoading}
                 notifTipo={notifByReferencia.get(t.id_limpieza)?.slice(-1)[0]?.tipo}
                 disabled={disabled}
                 finishing={finishingTask}
@@ -2169,6 +2192,8 @@ function WorkerView({
               t={detailTask}
               apt={aptById.get(detailTask.id_apt)}
               resv={resvQ.data ?? new Map()}
+              kbDiff={kbDiffsQ.data?.get(detailTask.id_limpieza)}
+              kbDiffsLoading={kbDiffsQ.isLoading}
               disabled={disabled}
               onClose={() => setDetailId(null)}
               onChanged={refetchAll}
@@ -2454,40 +2479,64 @@ function WorkerView({
                   const aptName = apt?.nombre ?? `Apt #${t.id_apt}`;
                   const next = t.proxima_reserva_numero ? otherResvQ.data?.get(t.proxima_reserva_numero) ?? null : null;
                   const isNentran = !next || next["Check in"] !== t.fecha_limpieza;
+                  const isAffected = !!t.affected_by_kb_change;
+                  const isResolvedToday =
+                    !isAffected && !!t.affected_resolved_en && t.affected_resolved_en.slice(0, 10) === toISO(new Date());
+                  const kbDiff = otherKbDiffsQ.data?.get(t.id_limpieza);
                   return (
-                    <TableRow key={t.id_limpieza} className="text-xs">
-                      <TableCell className="py-2 px-2">
-                        <span className="truncate block max-w-[160px]" title={aptName}>
-                          {shortAptName(aptName)}
-                        </span>
-                        {mantByAptQ.data?.has(t.id_apt) && (
-                          <span className="ml-1 inline-flex items-center gap-0.5 rounded-full bg-amber-100 px-1.5 py-0.5 text-[9px] font-medium text-amber-800">
-                            <Wrench className="h-2.5 w-2.5" /> Mant.
+                    <Fragment key={t.id_limpieza}>
+                      <TableRow className="text-xs">
+                        <TableCell className="py-2 px-2">
+                          <span className="truncate block max-w-[160px]" title={aptName}>
+                            {shortAptName(aptName)}
                           </span>
-                        )}
-                      </TableCell>
-                      <TableCell className="py-2 px-2">
-                        <CompactTipoBadge tipo={t.tipo} completa={t.check_limpieza_completa ?? false} />
-                      </TableCell>
-                      <TableCell className="py-2 px-2 text-[10px] font-medium">
-                        {workerCode(t.worker, otherWorkersQ.data ?? [])}
-                      </TableCell>
-                      <TableCell className="py-2 px-2">
-                        <TimeBadge time={t.hora_out_time} informed={t.hora_out_informed} size="xs" />
-                      </TableCell>
-                      <TableCell className="py-2 px-2">
-                        {isNentran ? (
-                          <span className="rounded px-1 py-px text-[9px] font-semibold bg-gray-200 text-gray-700">
-                            NE
-                          </span>
-                        ) : (
-                          <TimeBadge time={t.hora_in_time} informed={t.hora_in_informed} size="xs" />
-                        )}
-                      </TableCell>
-                      <TableCell className="py-2 px-2">
-                        <CompactEstadoBadge estado={t.estado} />
-                      </TableCell>
-                    </TableRow>
+                          {mantByAptQ.data?.has(t.id_apt) && (
+                            <span className="ml-1 inline-flex items-center gap-0.5 rounded-full bg-amber-100 px-1.5 py-0.5 text-[9px] font-medium text-amber-800">
+                              <Wrench className="h-2.5 w-2.5" /> Mant.
+                            </span>
+                          )}
+                        </TableCell>
+                        <TableCell className="py-2 px-2">
+                          <CompactTipoBadge tipo={t.tipo} completa={t.check_limpieza_completa ?? false} />
+                        </TableCell>
+                        <TableCell className="py-2 px-2 text-[10px] font-medium">
+                          {workerCode(t.worker, otherWorkersQ.data ?? [])}
+                        </TableCell>
+                        <TableCell className="py-2 px-2">
+                          <TimeBadge time={t.hora_out_time} informed={t.hora_out_informed} size="xs" />
+                        </TableCell>
+                        <TableCell className="py-2 px-2">
+                          {isNentran ? (
+                            <span className="rounded px-1 py-px text-[9px] font-semibold bg-gray-200 text-gray-700">
+                              NE
+                            </span>
+                          ) : (
+                            <TimeBadge time={t.hora_in_time} informed={t.hora_in_informed} size="xs" />
+                          )}
+                        </TableCell>
+                        <TableCell className="py-2 px-2">
+                          <CompactEstadoBadge estado={t.estado} />
+                        </TableCell>
+                      </TableRow>
+                      {isAffected && (
+                        <TableRow>
+                          <TableCell colSpan={6} className="py-1 px-2">
+                            <KbChangePendingBanner
+                              changes={kbDiff?.changes ?? []}
+                              reasonNote={kbDiff?.reasonNote ?? null}
+                              loading={otherKbDiffsQ.isLoading && !kbDiff}
+                            />
+                          </TableCell>
+                        </TableRow>
+                      )}
+                      {isResolvedToday && (
+                        <TableRow>
+                          <TableCell colSpan={6} className="py-1 px-2">
+                            <KbChangeResolvedBanner diff={t.affected_resolved_diff ?? []} />
+                          </TableCell>
+                        </TableRow>
+                      )}
+                    </Fragment>
                   );
                 })}
               </TableBody>
@@ -2535,11 +2584,13 @@ function TimeChip({ time, informed }: { time: string | null; informed: boolean |
 }
 
 function TaskCard({
-  t, apt, resv, notifTipo, disabled, finishing, onChanged, onOpenDetail, onFinish, onReportIncidencia,
+  t, apt, resv, kbDiff, kbDiffsLoading, notifTipo, disabled, finishing, onChanged, onOpenDetail, onFinish, onReportIncidencia,
 }: {
   t: LimpiezaDia;
   apt: Apartamento | undefined;
   resv: Map<string, ResvLite>;
+  kbDiff: KbChangeDiffResult | undefined;
+  kbDiffsLoading: boolean;
   notifTipo?: string;
   disabled: boolean;
   finishing: boolean;
@@ -2573,6 +2624,11 @@ function TaskCard({
   const isPriority = t.prioritaria_manual != null ? !!t.prioritaria_manual : !!t.prioritaria;
   const sfcMontar = !!t.sfc_montar;
   const sfcDesmontar = !!t.sfc_desmontar;
+  // The underlying reservation changed after this cleaning was scheduled — the times/
+  // guests shown below may be stale until a gestor resolves it from /programacion-limpiezas.
+  const isAffected = !!t.affected_by_kb_change;
+  const isResolvedToday =
+    !isAffected && !!t.affected_resolved_en && t.affected_resolved_en.slice(0, 10) === toISO(new Date());
 
   const update = async (patch: Partial<Limpieza>) => {
     setBusy(true);
@@ -2669,6 +2725,21 @@ function TaskCard({
             <StateBadge estado={t.estado} />
           </div>
         </div>
+
+        {isAffected && (
+          <div className="mt-2">
+            <KbChangePendingBanner
+              changes={kbDiff?.changes ?? []}
+              reasonNote={kbDiff?.reasonNote ?? null}
+              loading={kbDiffsLoading && !kbDiff}
+            />
+          </div>
+        )}
+        {isResolvedToday && (
+          <div className="mt-2">
+            <KbChangeResolvedBanner diff={t.affected_resolved_diff ?? []} />
+          </div>
+        )}
 
         {/* Times */}
         <div className="mt-2 flex items-center gap-2 text-xs text-slate-600 flex-wrap">
@@ -2991,11 +3062,13 @@ function MantenimientoTaskCard({
 /* ---------------- Detail view ---------------- */
 
 function DetailView({
-  t, apt, resv, disabled, onClose, onChanged,
+  t, apt, resv, kbDiff, kbDiffsLoading, disabled, onClose, onChanged,
 }: {
   t: Limpieza;
   apt: Apartamento | undefined;
   resv: Map<string, ResvLite>;
+  kbDiff: KbChangeDiffResult | undefined;
+  kbDiffsLoading: boolean;
   disabled: boolean;
   onClose: () => void;
   onChanged: () => void;
@@ -3015,6 +3088,11 @@ function DetailView({
   const isVacio = t.tipo === "salida" && src?.["Check-out"] && src["Check-out"] < t.fecha_limpieza;
   const nentran = !t.hora_in_time || !next || next["Check in"] !== t.fecha_limpieza;
   const win = windowHours(t.hora_out_time, t.hora_in_time, t.fecha_limpieza, next?.["Check in"] ?? null);
+  // The underlying reservation changed after this cleaning was scheduled — the times/
+  // guests shown below may be stale until a gestor resolves it from /programacion-limpiezas.
+  const isAffected = !!t.affected_by_kb_change;
+  const isResolvedToday =
+    !isAffected && !!t.affected_resolved_en && t.affected_resolved_en.slice(0, 10) === toISO(new Date());
 
   const updateField = async <K extends keyof Limpieza>(key: K, value: Limpieza[K]) => {
     if (disabled) return;
@@ -3102,6 +3180,15 @@ function DetailView({
       </header>
 
       <div className="p-4 space-y-5">
+        {isAffected && (
+          <KbChangePendingBanner
+            changes={kbDiff?.changes ?? []}
+            reasonNote={kbDiff?.reasonNote ?? null}
+            loading={kbDiffsLoading && !kbDiff}
+          />
+        )}
+        {isResolvedToday && <KbChangeResolvedBanner diff={t.affected_resolved_diff ?? []} />}
+
         {/* Horarios */}
         <section>
           <h3 className="text-xs uppercase tracking-wide text-slate-500 font-semibold mb-2">Horarios</h3>
