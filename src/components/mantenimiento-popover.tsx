@@ -393,12 +393,17 @@ export function MantenimientoPopover({
   const puedeEditarNotasGestion =
     editable || (selfAssignId != null && sesiones.some((s) => s.id_persona === selfAssignId));
   // Narrower than `editable` — lets the worker who reported an incidencia edit
-  // its Descripción and add adjuntos while it's still awaiting validation, without
-  // exposing the footer action bar or the reclamación section (both stay gated by
-  // `editable` only).
+  // its Descripción and add adjuntos on the same calendar day it was reported,
+  // regardless of estat (pendent_validacio, validada, en_curs, finalitzada or
+  // rebutjada — it closes again the next day), without exposing the footer
+  // action bar or the reclamación section (both stay gated by `editable` only).
   const puedeEditarComoReporter =
     editable ||
-    (inc != null && selfAssignId != null && inc.id_reporter === selfAssignId && inc.estat === "pendent_validacio");
+    (inc != null &&
+      selfAssignId != null &&
+      inc.id_reporter === selfAssignId &&
+      inc.creado_en != null &&
+      inc.creado_en.slice(0, 10) === todayISO());
   const notaDirty = inc != null && nota !== (inc.notas_gestor ?? "");
   const descripcioDirty = inc != null && descripcio !== (inc.descripcio ?? "");
   const notaFinalizacionDirty = inc != null && notaFinalizacion !== (inc.notas_finalizacion ?? "");

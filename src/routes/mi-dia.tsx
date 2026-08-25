@@ -2375,28 +2375,23 @@ function WorkerView({
           ) : (
             <div className="space-y-2 max-h-[320px] overflow-y-auto">
               {(misIncidenciasHoyQ.data ?? []).map((inc) => {
-                const clickable = inc.estat === "pendent_validacio";
+                // misIncidenciasHoyQ is already scoped to today + id_reporter === personalId,
+                // so every row here is editable by the reporter regardless of estat (kept in
+                // sync with `puedeEditarComoReporter` in MantenimientoPopover).
                 return (
                   <div
                     key={inc.id_incidencia}
-                    className={cn(
-                      "rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm",
-                      clickable && "cursor-pointer hover:bg-slate-50",
-                    )}
-                    onClick={
-                      clickable
-                        ? () => {
-                            setMantDetailId(inc.id_incidencia);
-                            setMisIncidenciasHoyOpen(false);
-                          }
-                        : undefined
-                    }
+                    className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm cursor-pointer hover:bg-slate-50"
+                    onClick={() => {
+                      setMantDetailId(inc.id_incidencia);
+                      setMisIncidenciasHoyOpen(false);
+                    }}
                   >
                     {inc.descripcio && <div className="text-sm text-slate-700 line-clamp-2">{inc.descripcio}</div>}
                     <div className="mt-1 flex items-center gap-1.5 flex-wrap">
                       <TipoBadge tipus={inc.tipus} />
                       <EstadoFullPill estat={inc.estat} />
-                      {!clickable && (
+                      {inc.estat !== "pendent_validacio" && (
                         <span className="text-xs text-muted-foreground">
                           Asignada a{" "}
                           {inc.id_assignat != null
