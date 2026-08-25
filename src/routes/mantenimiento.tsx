@@ -433,12 +433,12 @@ function MantenimientoPage() {
           <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
             <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Tareas</h2>
             <div className="flex flex-wrap items-center gap-2">
-              <div className="flex flex-wrap items-center gap-1.5 rounded-lg border border-lime-300 bg-lime-100 px-2 py-1.5">
+              <div className="flex flex-wrap items-center gap-1.5 rounded-lg border border-[#637863]/40 bg-[#637863]/15 px-2 py-1.5">
                 <span className="flex items-center gap-1 pl-0.5 text-[11px] font-semibold uppercase tracking-wide text-foreground">
                   <Filter className="h-3.5 w-3.5" /> Filtros
                 </span>
                 <Select value={filtro} onValueChange={(v) => setFiltro(v as TareasFilter)}>
-                  <SelectTrigger className="h-8 w-[190px] text-xs">
+                  <SelectTrigger className="h-8 w-[190px] text-xs bg-background">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -456,7 +456,7 @@ function MantenimientoPage() {
                     setUbicacionFilter("todos");
                   }}
                 >
-                  <SelectTrigger className="h-8 w-[160px] text-xs">
+                  <SelectTrigger className="h-8 w-[160px] text-xs bg-background">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -469,7 +469,7 @@ function MantenimientoPage() {
                   </SelectContent>
                 </Select>
                 <Select value={ubicacionFilter} onValueChange={(v) => setUbicacionFilter(v as UbicacionFilter)}>
-                  <SelectTrigger className="h-8 w-[190px] text-xs">
+                  <SelectTrigger className="h-8 w-[190px] text-xs bg-background">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -500,7 +500,7 @@ function MantenimientoPage() {
                   value={operarioFilter === "todos" || operarioFilter === "sin_asignar" ? operarioFilter : String(operarioFilter)}
                   onValueChange={(v) => setOperarioFilter(v === "todos" || v === "sin_asignar" ? v : Number(v))}
                 >
-                  <SelectTrigger className="h-8 w-[190px] text-xs">
+                  <SelectTrigger className="h-8 w-[190px] text-xs bg-background">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -514,7 +514,7 @@ function MantenimientoPage() {
                   </SelectContent>
                 </Select>
                 <Select value={reclamacionFilter} onValueChange={(v) => setReclamacionFilter(v as ReclamacionFilter)}>
-                  <SelectTrigger className="h-8 w-[190px] text-xs">
+                  <SelectTrigger className="h-8 w-[190px] text-xs bg-background">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -530,7 +530,7 @@ function MantenimientoPage() {
                   <ArrowUpDown className="h-3.5 w-3.5" /> Ordenar por
                 </span>
                 <Select value={sortKey} onValueChange={(v) => setSortKey(v as SortKey)}>
-                  <SelectTrigger className="h-8 w-[190px] text-xs">
+                  <SelectTrigger className="h-8 w-[190px] text-xs bg-background">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
