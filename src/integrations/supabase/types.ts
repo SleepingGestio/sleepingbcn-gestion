@@ -415,6 +415,8 @@ export type Database = {
           actualizado_en: string | null
           affected_by_kb_change: boolean
           affected_reason: string | null
+          affected_resolved_diff: Json | null
+          affected_resolved_en: string | null
           check_checkin: boolean
           check_limpieza_basica: boolean
           check_limpieza_completa: boolean
@@ -457,6 +459,8 @@ export type Database = {
           actualizado_en?: string | null
           affected_by_kb_change?: boolean
           affected_reason?: string | null
+          affected_resolved_diff?: Json | null
+          affected_resolved_en?: string | null
           check_checkin?: boolean
           check_limpieza_basica?: boolean
           check_limpieza_completa?: boolean
@@ -499,6 +503,8 @@ export type Database = {
           actualizado_en?: string | null
           affected_by_kb_change?: boolean
           affected_reason?: string | null
+          affected_resolved_diff?: Json | null
+          affected_resolved_en?: string | null
           check_checkin?: boolean
           check_limpieza_basica?: boolean
           check_limpieza_completa?: boolean
