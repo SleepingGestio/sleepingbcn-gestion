@@ -27,6 +27,12 @@ type Categoria = {
   activo: boolean | null;
 };
 
+type TipoLicencia = {
+  id_tipo_licencia: number;
+  nombre: string;
+  activo: boolean | null;
+};
+
 type Apartamento = {
   id_apt: number;
   nombre: string;
@@ -38,6 +44,7 @@ type Apartamento = {
   activo: boolean;
   notas: string | null;
   id_categoria: number | null;
+  id_tipo_licencia: number | null;
   tiempo_estandar_std_sin_sfc: number | null;
   tiempo_estandar_std_con_sfc: number | null;
   tiempo_estandar_extra_cr: number | null;
@@ -79,7 +86,7 @@ export function ApartamentosAdmin() {
       const { data, error } = await supabase
         .from("apartamentos")
         .select(
-          "id_apt,nombre,id_grupo,camas_fijas,tiene_sofa_cama,requiere_limpieza_intermedia,orden,activo,notas,id_categoria,tiempo_estandar_std_sin_sfc,tiempo_estandar_std_con_sfc,tiempo_estandar_extra_cr",
+          "id_apt,nombre,id_grupo,camas_fijas,tiene_sofa_cama,requiere_limpieza_intermedia,orden,activo,notas,id_categoria,id_tipo_licencia,tiempo_estandar_std_sin_sfc,tiempo_estandar_std_con_sfc,tiempo_estandar_extra_cr",
         )
         .order("orden", { ascending: true });
       if (error) throw error;
@@ -97,6 +104,18 @@ export function ApartamentosAdmin() {
         .order("nombre", { ascending: true });
       if (error) throw error;
       return (data ?? []) as (Categoria & { orden: number | null })[];
+    },
+  });
+
+  const tiposLicenciaQ = useQuery({
+    queryKey: ["cfg-tipos-licencia-turistica"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("tipos_licencia_turistica")
+        .select("id_tipo_licencia, nombre, activo")
+        .order("nombre", { ascending: true });
+      if (error) throw error;
+      return (data ?? []) as TipoLicencia[];
     },
   });
 
@@ -224,6 +243,7 @@ export function ApartamentosAdmin() {
     gruposQ.refetch();
     sinConfigQ.refetch();
     categoriasQ.refetch();
+    tiposLicenciaQ.refetch();
   };
 
   const sinConfigRows = sinConfigQ.data ?? [];
@@ -333,6 +353,7 @@ export function ApartamentosAdmin() {
           prefillName={prefillName}
           grupos={gruposQ.data ?? []}
           categorias={categoriasQ.data ?? []}
+          tiposLicencia={tiposLicenciaQ.data ?? []}
           avgByApt={avgByApt}
           avgByCategoria={avgByCategoria}
           onClose={() => {
@@ -368,6 +389,7 @@ function ApartamentoDialog({
   prefillName,
   grupos,
   categorias,
+  tiposLicencia,
   avgByApt,
   avgByCategoria,
   onClose,
@@ -377,6 +399,7 @@ function ApartamentoDialog({
   prefillName: string | null;
   grupos: Grupo[];
   categorias: Categoria[];
+  tiposLicencia: TipoLicencia[];
   avgByApt: Map<string, number>;
   avgByCategoria: Map<string, number>;
   onClose: () => void;
@@ -401,6 +424,7 @@ function ApartamentoDialog({
           activo: true,
           notas: "",
           id_categoria: null,
+          id_tipo_licencia: null,
           tiempo_estandar_std_sin_sfc: "",
           tiempo_estandar_std_con_sfc: "",
           tiempo_estandar_extra_cr: "",
@@ -431,6 +455,15 @@ function ApartamentoDialog({
     return active;
   }, [categorias, apt]);
 
+  const visibleTiposLicencia = useMemo(() => {
+    const active = tiposLicencia.filter((t) => t.activo);
+    if (apt?.id_tipo_licencia != null && !active.some((t) => t.id_tipo_licencia === apt.id_tipo_licencia)) {
+      const current = tiposLicencia.find((t) => t.id_tipo_licencia === apt.id_tipo_licencia);
+      if (current) return [...active, current];
+    }
+    return active;
+  }, [tiposLicencia, apt]);
+
   async function save() {
     setSaving(true);
     try {
@@ -444,6 +477,7 @@ function ApartamentoDialog({
         activo: !!form.activo,
         notas: form.notas ?? null,
         id_categoria: form.id_categoria ?? null,
+        id_tipo_licencia: form.id_tipo_licencia ?? null,
         tiempo_estandar_std_sin_sfc: numOrNull(form.tiempo_estandar_std_sin_sfc),
         tiempo_estandar_std_con_sfc: numOrNull(form.tiempo_estandar_std_con_sfc),
         tiempo_estandar_extra_cr: numOrNull(form.tiempo_estandar_extra_cr),
@@ -540,6 +574,23 @@ function ApartamentoDialog({
                   {visibleCategorias.map((c) => (
                     <option key={c.id_categoria} value={c.id_categoria}>
                       {c.nombre}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="col-span-2 space-y-1">
+                <Label className="text-xs">Tipo de licencia turística</Label>
+                <select
+                  className="w-full h-9 rounded-md border border-input bg-transparent px-3 text-sm"
+                  value={form.id_tipo_licencia ?? ""}
+                  onChange={(e) =>
+                    setForm({ ...form, id_tipo_licencia: e.target.value === "" ? null : Number(e.target.value) })
+                  }
+                >
+                  <option value="">Sin tipo de licencia</option>
+                  {visibleTiposLicencia.map((t) => (
+                    <option key={t.id_tipo_licencia} value={t.id_tipo_licencia}>
+                      {t.nombre}
                     </option>
                   ))}
                 </select>

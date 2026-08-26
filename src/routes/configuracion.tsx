@@ -13,6 +13,7 @@ import { ApartamentosAdmin } from "@/components/apartamentos-admin";
 import { RolesAdmin } from "@/components/roles-admin";
 import { TiposGenericasAdmin } from "@/components/tipos-genericas-admin";
 import { TiposEspacioComunAdmin } from "@/components/tipos-espacio-comun-admin";
+import { TarifasAdmin } from "@/components/tarifas-admin";
 import { usePermissions } from "@/hooks/use-permissions";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -28,6 +29,7 @@ function ConfigPage() {
     { value: "general", label: "General", visible: isAdmin || canView("config_general") },
     { value: "personal", label: "Personal", visible: isAdmin || canView("config_personal") },
     { value: "apartamentos", label: "Apartamentos", visible: isAdmin || canView("config_apartamentos") },
+    { value: "tarifas", label: "Tarifas", visible: isAdmin || canView("config_tarifas") || canEdit("config_tarifas") },
     { value: "tasques", label: "Tareas genéricas", visible: isAdmin || canView("config_tareas_genericas") || canEdit("config_tareas_genericas") },
     { value: "espacios", label: "Espacios comunes", visible: isAdmin || canView("config_espacios_comunes") || canEdit("config_espacios_comunes") },
     { value: "roles", label: "Roles", visible: isAdmin },
@@ -84,6 +86,11 @@ function ConfigPage() {
         <TabsContent value="apartamentos">
           <ApartamentosAdmin />
         </TabsContent>
+        {(isAdmin || canView("config_tarifas") || canEdit("config_tarifas")) && (
+          <TabsContent value="tarifas">
+            <TarifasAdmin readOnly={!isAdmin && !canEdit("config_tarifas")} />
+          </TabsContent>
+        )}
         {(isAdmin || canView("config_tareas_genericas") || canEdit("config_tareas_genericas")) && (
           <TabsContent value="tasques">
             <TiposGenericasAdmin readOnly={!isAdmin && !canEdit("config_tareas_genericas")} />
