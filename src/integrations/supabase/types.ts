@@ -22,6 +22,7 @@ export type Database = {
           id_apt: number
           id_categoria: number | null
           id_grupo: number | null
+          id_tipo_licencia: number | null
           nombre: string
           notas: string | null
           orden: number
@@ -38,6 +39,7 @@ export type Database = {
           id_apt?: number
           id_categoria?: number | null
           id_grupo?: number | null
+          id_tipo_licencia?: number | null
           nombre: string
           notas?: string | null
           orden?: number
@@ -54,6 +56,7 @@ export type Database = {
           id_apt?: number
           id_categoria?: number | null
           id_grupo?: number | null
+          id_tipo_licencia?: number | null
           nombre?: string
           notas?: string | null
           orden?: number
@@ -77,6 +80,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "grupos_apartamentos"
             referencedColumns: ["id_grupo"]
+          },
+          {
+            foreignKeyName: "apartamentos_id_tipo_licencia_fkey"
+            columns: ["id_tipo_licencia"]
+            isOneToOne: false
+            referencedRelation: "tipos_licencia_turistica"
+            referencedColumns: ["id_tipo_licencia"]
           },
         ]
       }
@@ -108,6 +118,30 @@ export type Database = {
             referencedColumns: ["id_apt"]
           },
         ]
+      }
+      canales_reserva: {
+        Row: {
+          activo: boolean
+          creado_en: string | null
+          id_canal: number
+          nombre: string
+          orden: number | null
+        }
+        Insert: {
+          activo?: boolean
+          creado_en?: string | null
+          id_canal?: never
+          nombre: string
+          orden?: number | null
+        }
+        Update: {
+          activo?: boolean
+          creado_en?: string | null
+          id_canal?: never
+          nombre?: string
+          orden?: number | null
+        }
+        Relationships: []
       }
       checklist_items: {
         Row: {
@@ -1500,45 +1534,60 @@ export type Database = {
       reservas_gestio: {
         Row: {
           AgCheckIN: number | null
+          CobroEfectivo: number | null
           EnLimpieza: boolean | null
           id_historico: number
           ImpTTAX: number | null
           NotasGestio: string | null
           Número: string
+          PagadoEstancia: number | null
+          PagadoLimpieza: number | null
           ParteeEnv: string | null
           ParteeRecl1: string | null
           ParteeRecl2: string | null
           ParteeRecl3: string | null
+          PctComisionOTA: number | null
+          PctPorCobro: number | null
           PersLImpAsig: number | null
           ReadyCheckIn: boolean | null
           TaxCobradas: number | null
         }
         Insert: {
           AgCheckIN?: number | null
+          CobroEfectivo?: number | null
           EnLimpieza?: boolean | null
           id_historico?: number
           ImpTTAX?: number | null
           NotasGestio?: string | null
           Número: string
+          PagadoEstancia?: number | null
+          PagadoLimpieza?: number | null
           ParteeEnv?: string | null
           ParteeRecl1?: string | null
           ParteeRecl2?: string | null
           ParteeRecl3?: string | null
+          PctComisionOTA?: number | null
+          PctPorCobro?: number | null
           PersLImpAsig?: number | null
           ReadyCheckIn?: boolean | null
           TaxCobradas?: number | null
         }
         Update: {
           AgCheckIN?: number | null
+          CobroEfectivo?: number | null
           EnLimpieza?: boolean | null
           id_historico?: number
           ImpTTAX?: number | null
           NotasGestio?: string | null
           Número?: string
+          PagadoEstancia?: number | null
+          PagadoLimpieza?: number | null
           ParteeEnv?: string | null
           ParteeRecl1?: string | null
           ParteeRecl2?: string | null
           ParteeRecl3?: string | null
+          PctComisionOTA?: number | null
+          PctPorCobro?: number | null
           PersLImpAsig?: number | null
           ReadyCheckIn?: boolean | null
           TaxCobradas?: number | null
@@ -1774,6 +1823,112 @@ export type Database = {
         }
         Relationships: []
       }
+      tarifas_cobro_canal: {
+        Row: {
+          activo: boolean
+          creado_en: string | null
+          id_canal: number
+          id_tarifa_cobro: number
+          pct_cobro: number
+        }
+        Insert: {
+          activo?: boolean
+          creado_en?: string | null
+          id_canal: number
+          id_tarifa_cobro?: never
+          pct_cobro: number
+        }
+        Update: {
+          activo?: boolean
+          creado_en?: string | null
+          id_canal?: number
+          id_tarifa_cobro?: never
+          pct_cobro?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tarifas_cobro_canal_id_canal_fkey"
+            columns: ["id_canal"]
+            isOneToOne: true
+            referencedRelation: "canales_reserva"
+            referencedColumns: ["id_canal"]
+          },
+        ]
+      }
+      tarifas_comision_ota: {
+        Row: {
+          activo: boolean
+          creado_en: string | null
+          id_canal: number
+          id_tarifa_comision: number
+          id_tipo_licencia: number
+          pct_comision: number
+        }
+        Insert: {
+          activo?: boolean
+          creado_en?: string | null
+          id_canal: number
+          id_tarifa_comision?: never
+          id_tipo_licencia: number
+          pct_comision: number
+        }
+        Update: {
+          activo?: boolean
+          creado_en?: string | null
+          id_canal?: number
+          id_tarifa_comision?: never
+          id_tipo_licencia?: number
+          pct_comision?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tarifas_comision_ota_id_canal_fkey"
+            columns: ["id_canal"]
+            isOneToOne: false
+            referencedRelation: "canales_reserva"
+            referencedColumns: ["id_canal"]
+          },
+          {
+            foreignKeyName: "tarifas_comision_ota_id_tipo_licencia_fkey"
+            columns: ["id_tipo_licencia"]
+            isOneToOne: false
+            referencedRelation: "tipos_licencia_turistica"
+            referencedColumns: ["id_tipo_licencia"]
+          },
+        ]
+      }
+      tarifas_limpieza: {
+        Row: {
+          activo: boolean
+          costo_limpieza: number
+          creado_en: string | null
+          id_categoria: number
+          id_tarifa_limpieza: number
+        }
+        Insert: {
+          activo?: boolean
+          costo_limpieza: number
+          creado_en?: string | null
+          id_categoria: number
+          id_tarifa_limpieza?: never
+        }
+        Update: {
+          activo?: boolean
+          costo_limpieza?: number
+          creado_en?: string | null
+          id_categoria?: number
+          id_tarifa_limpieza?: never
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tarifas_limpieza_id_categoria_fkey"
+            columns: ["id_categoria"]
+            isOneToOne: true
+            referencedRelation: "tipos_categoria_apartamento"
+            referencedColumns: ["id_categoria"]
+          },
+        ]
+      }
       tipologia_apartamento: {
         Row: {
           activo: boolean | null
@@ -1848,6 +2003,30 @@ export type Database = {
           creado_en?: string
           id_tipo?: number
           nombre?: string
+        }
+        Relationships: []
+      }
+      tipos_licencia_turistica: {
+        Row: {
+          activo: boolean
+          creado_en: string | null
+          id_tipo_licencia: number
+          nombre: string
+          orden: number | null
+        }
+        Insert: {
+          activo?: boolean
+          creado_en?: string | null
+          id_tipo_licencia?: never
+          nombre: string
+          orden?: number | null
+        }
+        Update: {
+          activo?: boolean
+          creado_en?: string | null
+          id_tipo_licencia?: never
+          nombre?: string
+          orden?: number | null
         }
         Relationships: []
       }
