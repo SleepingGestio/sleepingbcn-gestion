@@ -16,7 +16,8 @@ export type MenuKey =
   | "config_personal"
   | "config_apartamentos"
   | "config_tareas_genericas"
-  | "config_espacios_comunes";
+  | "config_espacios_comunes"
+  | "config_tarifas";
 
 export const ALL_MENUS: { key: MenuKey; label: string }[] = [
   { key: "reservas", label: "Reservas" },
@@ -33,6 +34,7 @@ export const ALL_MENUS: { key: MenuKey; label: string }[] = [
   { key: "config_apartamentos", label: "Configuración · Apartamentos" },
   { key: "config_tareas_genericas", label: "Configuración · Tareas genéricas" },
   { key: "config_espacios_comunes", label: "Configuración · Espacios comunes" },
+  { key: "config_tarifas", label: "Configuración · Tarifas y comisiones" },
 ];
 
 // Single source of truth for which top-level route maps to which menu
