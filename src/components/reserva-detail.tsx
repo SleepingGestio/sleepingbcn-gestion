@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,6 +9,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { EstadoBadge } from "@/components/estado-badge";
 import { fetchReserva, upsertGestio } from "@/lib/reservas";
 import { fetchAgentes, fetchLimpiadores } from "@/lib/catalogos";
+import {
+  fetchCanalesReserva, fetchTarifasCobroCanal, fetchTarifasComisionOta, fetchTarifasLimpieza,
+} from "@/lib/tarifas";
 import { fullName, type Reserva, type ReservaGestio } from "@/lib/types";
 import { toast } from "sonner";
 import { useQuery } from "@tanstack/react-query";
@@ -36,9 +39,41 @@ export function ReservaDetail({
 
   const agentesQ = useQuery({ queryKey: ["agentes"], queryFn: fetchAgentes });
   const limpiadoresQ = useQuery({ queryKey: ["limpiadores"], queryFn: fetchLimpiadores });
+  const canalesQ = useQuery({ queryKey: ["canales-reserva-detail"], queryFn: fetchCanalesReserva });
+  const tarifasLimpiezaQ = useQuery({ queryKey: ["tarifas-limpieza-detail"], queryFn: fetchTarifasLimpieza });
+  const tarifasComisionQ = useQuery({ queryKey: ["tarifas-comision-detail"], queryFn: fetchTarifasComisionOta });
+  const tarifasCobroQ = useQuery({ queryKey: ["tarifas-cobro-detail"], queryFn: fetchTarifasCobroCanal });
 
   const llegada = reserva ? resolveTime(reserva["Hora estimada de llegada"], "15:00:00") : null;
   const salida = reserva ? resolveTime(reserva["Hora estimada de salida"], "11:00:00") : null;
+
+  // Resolved by exact-match: canales_reserva.nombre <-> reservas_kb.Portal, same
+  // convention as apartamentos.nombre <-> Habitaciones. A spelling mismatch just
+  // means no suggestion — never an error.
+  const idCanal = useMemo(() => {
+    const portal = reserva?.["Portal"];
+    if (!portal) return null;
+    return canalesQ.data?.find((c) => c.nombre === portal)?.id_canal ?? null;
+  }, [reserva, canalesQ.data]);
+
+  const propuestaLimpieza = useMemo(() => {
+    const idCategoria = reserva?.apartamento?.id_categoria;
+    if (idCategoria == null) return null;
+    return tarifasLimpiezaQ.data?.find((t) => t.id_categoria === idCategoria)?.costo_limpieza ?? null;
+  }, [reserva, tarifasLimpiezaQ.data]);
+
+  const propuestaComision = useMemo(() => {
+    const idTipoLicencia = reserva?.apartamento?.id_tipo_licencia;
+    if (idTipoLicencia == null || idCanal == null) return null;
+    return tarifasComisionQ.data?.find(
+      (t) => t.id_tipo_licencia === idTipoLicencia && t.id_canal === idCanal,
+    )?.pct_comision ?? null;
+  }, [reserva, idCanal, tarifasComisionQ.data]);
+
+  const propuestaCobro = useMemo(() => {
+    if (idCanal == null) return null;
+    return tarifasCobroQ.data?.find((t) => t.id_canal === idCanal)?.pct_cobro ?? null;
+  }, [idCanal, tarifasCobroQ.data]);
 
   useEffect(() => {
     if (!numero || !open) return;
@@ -213,6 +248,60 @@ export function ReservaDetail({
               </div>
             </section>
 
+            {/* ── Cierre financiero ── */}
+            <section className="bg-muted/20 rounded-lg p-4 space-y-4">
+              <h3 className="font-medium text-sm">Cierre financiero</h3>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Pagado estancia (€)</Label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    value={g.PagadoEstancia ?? ""}
+                    onChange={(e) => setG({ ...g, PagadoEstancia: e.target.value === "" ? null : Number(e.target.value) })}
+                    disabled={readOnly}
+                  />
+                </div>
+                <SuggestibleNumberField
+                  label="Pagado limpieza (€)"
+                  value={g.PagadoLimpieza}
+                  propuesta={propuestaLimpieza}
+                  unit=" €"
+                  disabled={readOnly}
+                  onChange={(v) => setG({ ...g, PagadoLimpieza: v })}
+                />
+                <SuggestibleNumberField
+                  label="% comisión OTA"
+                  value={g.PctComisionOTA}
+                  propuesta={propuestaComision}
+                  unit="%"
+                  disabled={readOnly}
+                  onChange={(v) => setG({ ...g, PctComisionOTA: v })}
+                />
+                <SuggestibleNumberField
+                  label="% por cobro"
+                  value={g.PctPorCobro}
+                  propuesta={propuestaCobro}
+                  unit="%"
+                  disabled={readOnly}
+                  onChange={(v) => setG({ ...g, PctPorCobro: v })}
+                />
+                <div className="space-y-2">
+                  <Label>Cobro en efectivo (€)</Label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    value={g.CobroEfectivo ?? ""}
+                    onChange={(e) => setG({ ...g, CobroEfectivo: e.target.value === "" ? null : Number(e.target.value) })}
+                    disabled={readOnly}
+                  />
+                  <p className="text-[11px] text-muted-foreground">
+                    Cobro en efectivo fuera del circuito habitual, sin IVA.
+                  </p>
+                </div>
+              </div>
+            </section>
+
             {/* ── Footer ── */}
             <div className="flex items-center justify-between border-t pt-4">
               <Check
@@ -278,6 +367,54 @@ function Check({
       <Checkbox checked={checked} onCheckedChange={(v) => onChange(!!v)} disabled={disabled} />
       <span>{label}</span>
     </label>
+  );
+}
+
+/**
+ * Numeric field with a "propose, never force" suggestion: nothing pre-fills.
+ * When the field is empty and a reference value is available, a chip lets
+ * the user apply it explicitly. Once a value is saved, if the underlying
+ * reference value later diverges, a note surfaces the drift instead of
+ * silently overwriting the saved figure.
+ */
+function SuggestibleNumberField({
+  label,
+  value,
+  propuesta,
+  unit,
+  disabled,
+  onChange,
+}: {
+  label: string;
+  value: number | null | undefined;
+  propuesta: number | null;
+  unit: string;
+  disabled?: boolean;
+  onChange: (v: number | null) => void;
+}) {
+  return (
+    <div className="space-y-2">
+      <Label>{label}</Label>
+      <div className="flex items-center gap-2">
+        <Input
+          type="number"
+          step="0.01"
+          value={value ?? ""}
+          onChange={(e) => onChange(e.target.value === "" ? null : Number(e.target.value))}
+          disabled={disabled}
+        />
+        {!disabled && propuesta != null && value == null && (
+          <Button type="button" variant="outline" size="sm" className="shrink-0" onClick={() => onChange(propuesta)}>
+            Sugerido: {propuesta}{unit} · aplicar
+          </Button>
+        )}
+      </div>
+      {propuesta != null && value != null && propuesta !== value && (
+        <p className="text-[11px] text-muted-foreground">
+          Tarifa actual: {propuesta}{unit} (guardado: {value}{unit})
+        </p>
+      )}
+    </div>
   );
 }
 
