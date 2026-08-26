@@ -57,9 +57,9 @@ export function ReservaDetail({
   }, [reserva, canalesQ.data]);
 
   const propuestaLimpieza = useMemo(() => {
-    const idCategoria = reserva?.apartamento?.id_categoria;
-    if (idCategoria == null) return null;
-    return tarifasLimpiezaQ.data?.find((t) => t.id_categoria === idCategoria)?.costo_limpieza ?? null;
+    const idCategoriaLimpieza = reserva?.apartamento?.id_categoria_limpieza;
+    if (idCategoriaLimpieza == null) return null;
+    return tarifasLimpiezaQ.data?.find((t) => t.id_categoria_limpieza === idCategoriaLimpieza)?.costo_limpieza ?? null;
   }, [reserva, tarifasLimpiezaQ.data]);
 
   const propuestaComision = useMemo(() => {

@@ -33,6 +33,12 @@ type TipoLicencia = {
   activo: boolean | null;
 };
 
+type CategoriaLimpieza = {
+  id_categoria_limpieza: number;
+  nombre: string;
+  activo: boolean | null;
+};
+
 type Apartamento = {
   id_apt: number;
   nombre: string;
@@ -45,6 +51,7 @@ type Apartamento = {
   notas: string | null;
   id_categoria: number | null;
   id_tipo_licencia: number | null;
+  id_categoria_limpieza: number | null;
   tiempo_estandar_std_sin_sfc: number | null;
   tiempo_estandar_std_con_sfc: number | null;
   tiempo_estandar_extra_cr: number | null;
@@ -86,7 +93,7 @@ export function ApartamentosAdmin() {
       const { data, error } = await supabase
         .from("apartamentos")
         .select(
-          "id_apt,nombre,id_grupo,camas_fijas,tiene_sofa_cama,requiere_limpieza_intermedia,orden,activo,notas,id_categoria,id_tipo_licencia,tiempo_estandar_std_sin_sfc,tiempo_estandar_std_con_sfc,tiempo_estandar_extra_cr",
+          "id_apt,nombre,id_grupo,camas_fijas,tiene_sofa_cama,requiere_limpieza_intermedia,orden,activo,notas,id_categoria,id_tipo_licencia,id_categoria_limpieza,tiempo_estandar_std_sin_sfc,tiempo_estandar_std_con_sfc,tiempo_estandar_extra_cr",
         )
         .order("orden", { ascending: true });
       if (error) throw error;
@@ -116,6 +123,18 @@ export function ApartamentosAdmin() {
         .order("nombre", { ascending: true });
       if (error) throw error;
       return (data ?? []) as TipoLicencia[];
+    },
+  });
+
+  const categoriasLimpiezaQ = useQuery({
+    queryKey: ["cfg-tipos-categoria-limpieza"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("tipos_categoria_limpieza")
+        .select("id_categoria_limpieza, nombre, activo")
+        .order("nombre", { ascending: true });
+      if (error) throw error;
+      return (data ?? []) as CategoriaLimpieza[];
     },
   });
 
@@ -244,6 +263,7 @@ export function ApartamentosAdmin() {
     sinConfigQ.refetch();
     categoriasQ.refetch();
     tiposLicenciaQ.refetch();
+    categoriasLimpiezaQ.refetch();
   };
 
   const sinConfigRows = sinConfigQ.data ?? [];
@@ -354,6 +374,7 @@ export function ApartamentosAdmin() {
           grupos={gruposQ.data ?? []}
           categorias={categoriasQ.data ?? []}
           tiposLicencia={tiposLicenciaQ.data ?? []}
+          categoriasLimpieza={categoriasLimpiezaQ.data ?? []}
           avgByApt={avgByApt}
           avgByCategoria={avgByCategoria}
           onClose={() => {
@@ -390,6 +411,7 @@ function ApartamentoDialog({
   grupos,
   categorias,
   tiposLicencia,
+  categoriasLimpieza,
   avgByApt,
   avgByCategoria,
   onClose,
@@ -400,6 +422,7 @@ function ApartamentoDialog({
   grupos: Grupo[];
   categorias: Categoria[];
   tiposLicencia: TipoLicencia[];
+  categoriasLimpieza: CategoriaLimpieza[];
   avgByApt: Map<string, number>;
   avgByCategoria: Map<string, number>;
   onClose: () => void;
@@ -425,6 +448,7 @@ function ApartamentoDialog({
           notas: "",
           id_categoria: null,
           id_tipo_licencia: null,
+          id_categoria_limpieza: null,
           tiempo_estandar_std_sin_sfc: "",
           tiempo_estandar_std_con_sfc: "",
           tiempo_estandar_extra_cr: "",
@@ -464,6 +488,18 @@ function ApartamentoDialog({
     return active;
   }, [tiposLicencia, apt]);
 
+  const visibleCategoriasLimpieza = useMemo(() => {
+    const active = categoriasLimpieza.filter((c) => c.activo);
+    if (
+      apt?.id_categoria_limpieza != null &&
+      !active.some((c) => c.id_categoria_limpieza === apt.id_categoria_limpieza)
+    ) {
+      const current = categoriasLimpieza.find((c) => c.id_categoria_limpieza === apt.id_categoria_limpieza);
+      if (current) return [...active, current];
+    }
+    return active;
+  }, [categoriasLimpieza, apt]);
+
   async function save() {
     setSaving(true);
     try {
@@ -478,6 +514,7 @@ function ApartamentoDialog({
         notas: form.notas ?? null,
         id_categoria: form.id_categoria ?? null,
         id_tipo_licencia: form.id_tipo_licencia ?? null,
+        id_categoria_limpieza: form.id_categoria_limpieza ?? null,
         tiempo_estandar_std_sin_sfc: numOrNull(form.tiempo_estandar_std_sin_sfc),
         tiempo_estandar_std_con_sfc: numOrNull(form.tiempo_estandar_std_con_sfc),
         tiempo_estandar_extra_cr: numOrNull(form.tiempo_estandar_extra_cr),
@@ -591,6 +628,23 @@ function ApartamentoDialog({
                   {visibleTiposLicencia.map((t) => (
                     <option key={t.id_tipo_licencia} value={t.id_tipo_licencia}>
                       {t.nombre}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="col-span-2 space-y-1">
+                <Label className="text-xs">Categoría de limpieza (tarifas)</Label>
+                <select
+                  className="w-full h-9 rounded-md border border-input bg-transparent px-3 text-sm"
+                  value={form.id_categoria_limpieza ?? ""}
+                  onChange={(e) =>
+                    setForm({ ...form, id_categoria_limpieza: e.target.value === "" ? null : Number(e.target.value) })
+                  }
+                >
+                  <option value="">Sin categoría de limpieza</option>
+                  {visibleCategoriasLimpieza.map((c) => (
+                    <option key={c.id_categoria_limpieza} value={c.id_categoria_limpieza}>
+                      {c.nombre}
                     </option>
                   ))}
                 </select>
