@@ -103,8 +103,11 @@ export function ReservaDetail({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="text-sm font-normal text-muted-foreground">
-            Reserva <span className="font-mono">{numero}</span>
+          <DialogTitle className="flex items-center justify-between gap-3 text-sm font-normal text-muted-foreground">
+            <span>Reserva <span className="font-mono">{numero}</span></span>
+            {reserva && (
+              <span className="text-lg font-bold text-foreground">{reserva["Habitaciones"] ?? "—"}</span>
+            )}
           </DialogTitle>
           <DialogDescription className="sr-only">
             Detalle de la reserva {numero}
@@ -117,39 +120,44 @@ export function ReservaDetail({
           <div className="space-y-6">
             {/* ── Header card ── */}
             <div className="rounded-lg border bg-primary/5 px-4 py-3">
-              <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Apartamento</div>
-              <div className="text-lg font-bold text-foreground">{reserva["Habitaciones"] ?? "—"}</div>
-              <div className="mt-2 text-[11px] uppercase tracking-wide text-muted-foreground">Huésped</div>
-              <div className="text-base font-semibold">{reserva["Referencia"] ?? "—"}</div>
-              <div className="mt-1 flex flex-wrap gap-x-4 gap-y-0.5 text-sm text-muted-foreground">
-                {reserva["Email"] && <span>{reserva["Email"]}</span>}
-                {reserva["Teléfono"] && <span>{reserva["Teléfono"]}</span>}
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Huésped</div>
+                  <div className="text-base font-semibold">{reserva["Referencia"] ?? "—"}</div>
+                </div>
+                <div className="shrink-0 text-right flex flex-col gap-0.5 text-sm text-muted-foreground">
+                  {reserva["Email"] && <span>{reserva["Email"]}</span>}
+                  {reserva["Teléfono"] && <span>{reserva["Teléfono"]}</span>}
+                </div>
               </div>
 
-              <div className="mt-3 flex gap-6 border-t border-primary/10 pt-3">
+              <div className="mt-3 flex items-end gap-6 border-t border-primary/10 pt-3">
                 <InfoSmall label="Huéspedes" value={reserva["Huéspedes"]} />
                 <InfoSmall label="Portal" value={reserva["Portal"]} />
-                <InfoSmall
-                  label="Estado"
-                  value={<EstadoBadge estado={reserva["Estado"]} enLimpieza={reserva.gestio?.EnLimpieza} full />}
-                />
+                <EstadoBadge estado={reserva["Estado"]} enLimpieza={reserva.gestio?.EnLimpieza} full />
               </div>
             </div>
 
             {/* ── Dates & times ── */}
             <section className="space-y-2 text-sm">
               <div className="grid grid-cols-2 gap-3">
-                <InfoReadOnly label="Check-in" value={fmtDate(reserva["Check in"])} />
-                <InfoReadOnly label="Check-out" value={fmtDate(reserva["Check-out"])} />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
                 <InfoReadOnly
-                  label="Hora llegada (KB)"
-                  value={llegada && <TimeBadge value={llegada.value.slice(0, 5)} informed={llegada.informed} />}
+                  label="Check-in"
+                  value={
+                    <span className="inline-flex items-center gap-2">
+                      <span>{fmtDate(reserva["Check in"])}</span>
+                      {llegada && <TimeBadge value={llegada.value.slice(0, 5)} informed={llegada.informed} />}
+                    </span>
+                  }
                 />
                 <InfoReadOnly
-                  label="Hora salida (KB)"
-                  value={salida && <TimeBadge value={salida.value.slice(0, 5)} informed={salida.informed} />}
+                  label="Check-out"
+                  value={
+                    <span className="inline-flex items-center gap-2">
+                      <span>{fmtDate(reserva["Check-out"])}</span>
+                      {salida && <TimeBadge value={salida.value.slice(0, 5)} informed={salida.informed} />}
+                    </span>
+                  }
                 />
               </div>
             </section>
