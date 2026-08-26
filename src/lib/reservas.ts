@@ -1,5 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
-import type { Reserva, ReservaGestio, ReservaKB } from "./types";
+import type { ApartamentoInfo, Reserva, ReservaGestio, ReservaKB } from "./types";
 
 export async function fetchReservas(params?: {
   from?: string;
@@ -45,7 +45,17 @@ export async function fetchReserva(numero: string): Promise<Reserva | null> {
     .select("*")
     .eq("Número", numero)
     .maybeSingle();
-  return { ...(kb as ReservaKB), gestio: (gestio as ReservaGestio) ?? null };
+  const habitaciones = (kb as ReservaKB)["Habitaciones"];
+  let apartamento: ApartamentoInfo | null = null;
+  if (habitaciones) {
+    const { data: apt } = await supabase
+      .from("apartamentos")
+      .select("id_apt,id_categoria,id_tipo_licencia")
+      .eq("nombre", habitaciones)
+      .maybeSingle();
+    apartamento = (apt as ApartamentoInfo) ?? null;
+  }
+  return { ...(kb as ReservaKB), gestio: (gestio as ReservaGestio) ?? null, apartamento };
 }
 
 export async function upsertGestio(g: Partial<ReservaGestio> & { "Número": string }) {

@@ -40,6 +40,11 @@ export type ReservaGestio = {
   ReadyCheckIn: boolean | null;
   EnLimpieza: boolean | null;
   NotasGestio: string | null;
+  PagadoEstancia: number | null;
+  PagadoLimpieza: number | null;
+  PctComisionOTA: number | null;
+  PctPorCobro: number | null;
+  CobroEfectivo: number | null;
 };
 
 export type AgCheckIn = { id_persona: number; nombre: string | null; apellidos: string | null };
@@ -48,4 +53,7 @@ export type PersLimp = { id_persona: number; nombre: string | null; apellidos: s
 export const fullName = (p: { nombre: string | null; apellidos: string | null } | null | undefined) =>
   p ? [p.nombre, p.apellidos].filter(Boolean).join(" ").trim() || "—" : "—";
 
-export type Reserva = ReservaKB & { gestio: ReservaGestio | null };
+/** Apartment fields resolved for a reservation via the apartamentos.nombre <-> reservas_kb.Habitaciones exact-match convention. */
+export type ApartamentoInfo = { id_apt: number; id_categoria: number | null; id_tipo_licencia: number | null };
+
+export type Reserva = ReservaKB & { gestio: ReservaGestio | null; apartamento?: ApartamentoInfo | null };
