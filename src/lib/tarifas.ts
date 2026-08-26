@@ -2,7 +2,8 @@ import { supabase } from "@/integrations/supabase/client";
 
 export type TipoLicencia = { id_tipo_licencia: number; nombre: string; activo: boolean };
 export type CanalReserva = { id_canal: number; nombre: string; activo: boolean };
-export type TarifaLimpieza = { id_categoria: number; costo_limpieza: number };
+export type TipoCategoriaLimpieza = { id_categoria_limpieza: number; nombre: string; activo: boolean };
+export type TarifaLimpieza = { id_categoria_limpieza: number; costo_limpieza: number };
 export type TarifaComisionOta = { id_tipo_licencia: number; id_canal: number; pct_comision: number };
 export type TarifaCobroCanal = { id_canal: number; pct_cobro: number };
 
@@ -26,10 +27,20 @@ export async function fetchCanalesReserva(): Promise<CanalReserva[]> {
   return (data ?? []) as CanalReserva[];
 }
 
+export async function fetchTiposCategoriaLimpieza(): Promise<TipoCategoriaLimpieza[]> {
+  const { data, error } = await supabase
+    .from("tipos_categoria_limpieza")
+    .select("id_categoria_limpieza, nombre, activo")
+    .order("orden", { ascending: true })
+    .order("nombre", { ascending: true });
+  if (error) throw error;
+  return (data ?? []) as TipoCategoriaLimpieza[];
+}
+
 export async function fetchTarifasLimpieza(): Promise<TarifaLimpieza[]> {
   const { data, error } = await supabase
     .from("tarifas_limpieza")
-    .select("id_categoria, costo_limpieza")
+    .select("id_categoria_limpieza, costo_limpieza")
     .eq("activo", true);
   if (error) throw error;
   return (data ?? []) as TarifaLimpieza[];

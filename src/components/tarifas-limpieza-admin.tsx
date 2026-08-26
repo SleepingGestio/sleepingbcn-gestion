@@ -11,16 +11,16 @@ import {
 import { Pencil } from "lucide-react";
 import { toast } from "sonner";
 
-type Categoria = { id_categoria: number; nombre: string; activo: boolean | null };
-type TarifaLimpieza = { id_tarifa_limpieza: number; id_categoria: number; costo_limpieza: number; activo: boolean | null };
+type Categoria = { id_categoria_limpieza: number; nombre: string; activo: boolean | null };
+type TarifaLimpieza = { id_tarifa_limpieza: number; id_categoria_limpieza: number; costo_limpieza: number; activo: boolean | null };
 
 export function TarifasLimpiezaAdmin({ readOnly = false }: { readOnly?: boolean }) {
   const categoriasQ = useQuery({
-    queryKey: ["cfg-categorias-apartamento-for-tarifas"],
+    queryKey: ["cfg-categorias-limpieza-for-tarifas"],
     queryFn: async (): Promise<Categoria[]> => {
       const { data, error } = await supabase
-        .from("tipos_categoria_apartamento")
-        .select("id_categoria,nombre,activo")
+        .from("tipos_categoria_limpieza")
+        .select("id_categoria_limpieza,nombre,activo")
         .order("nombre");
       if (error) throw error;
       return (data ?? []) as Categoria[];
@@ -32,7 +32,7 @@ export function TarifasLimpiezaAdmin({ readOnly = false }: { readOnly?: boolean 
     queryFn: async (): Promise<TarifaLimpieza[]> => {
       const { data, error } = await supabase
         .from("tarifas_limpieza")
-        .select("id_tarifa_limpieza,id_categoria,costo_limpieza,activo");
+        .select("id_tarifa_limpieza,id_categoria_limpieza,costo_limpieza,activo");
       if (error) throw error;
       return (data ?? []) as TarifaLimpieza[];
     },
@@ -40,7 +40,7 @@ export function TarifasLimpiezaAdmin({ readOnly = false }: { readOnly?: boolean 
 
   const tarifaByCategoria = useMemo(() => {
     const m = new Map<number, TarifaLimpieza>();
-    for (const t of tarifasQ.data ?? []) m.set(t.id_categoria, t);
+    for (const t of tarifasQ.data ?? []) m.set(t.id_categoria_limpieza, t);
     return m;
   }, [tarifasQ.data]);
 
@@ -51,20 +51,22 @@ export function TarifasLimpiezaAdmin({ readOnly = false }: { readOnly?: boolean 
   return (
     <Card className="p-4 space-y-4">
       <div className="text-sm text-muted-foreground">
-        Coste de limpieza por categoría de apartamento. Se propone (sin forzar) al anotar
-        "Pagado limpieza" en el detalle de una reserva.
+        Coste de limpieza por categoría de limpieza (independiente de la categoría de
+        apartamento). Se propone (sin forzar) al anotar "Pagado limpieza" en el detalle de una
+        reserva.
       </div>
 
       <div className="rounded-md border divide-y">
         {(categoriasQ.data ?? []).length === 0 && (
           <div className="text-center text-sm text-muted-foreground py-8">
-            Todavía no hay categorías de apartamento definidas.
+            Todavía no hay categorías de limpieza definidas. Créalas en la pestaña "Categorías
+            de limpieza".
           </div>
         )}
         {(categoriasQ.data ?? []).map((c) => {
-          const tarifa = tarifaByCategoria.get(c.id_categoria);
+          const tarifa = tarifaByCategoria.get(c.id_categoria_limpieza);
           return (
-            <div key={c.id_categoria} className="flex items-center gap-3 px-4 py-3">
+            <div key={c.id_categoria_limpieza} className="flex items-center gap-3 px-4 py-3">
               <div className="flex-1 font-semibold uppercase tracking-wide text-sm">{c.nombre}</div>
               <div className="text-sm text-muted-foreground">
                 {tarifa ? `${tarifa.costo_limpieza} €` : "Sin definir"}
@@ -81,7 +83,7 @@ export function TarifasLimpiezaAdmin({ readOnly = false }: { readOnly?: boolean 
 
       <EditModal
         categoria={editing}
-        tarifa={editing ? tarifaByCategoria.get(editing.id_categoria) ?? null : null}
+        tarifa={editing ? tarifaByCategoria.get(editing.id_categoria_limpieza) ?? null : null}
         onOpenChange={(open) => { if (!open) setEditing(null); }}
         onSaved={refetch}
       />
@@ -100,7 +102,7 @@ function EditModal({
   const [costo, setCosto] = useState("");
   const [busy, setBusy] = useState(false);
 
-  const openId = categoria?.id_categoria ?? null;
+  const openId = categoria?.id_categoria_limpieza ?? null;
   useEffect(() => {
     setCosto(tarifa?.costo_limpieza != null ? String(tarifa.costo_limpieza) : "");
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -116,7 +118,10 @@ function EditModal({
     setBusy(true);
     const { error } = await supabase
       .from("tarifas_limpieza")
-      .upsert({ id_categoria: categoria.id_categoria, costo_limpieza: n, activo: true }, { onConflict: "id_categoria" });
+      .upsert(
+        { id_categoria_limpieza: categoria.id_categoria_limpieza, costo_limpieza: n, activo: true },
+        { onConflict: "id_categoria_limpieza" },
+      );
     setBusy(false);
     if (error) { toast.error("Error: " + error.message); return; }
     toast.success("Guardado");

@@ -50,7 +50,7 @@ export async function fetchReserva(numero: string): Promise<Reserva | null> {
   if (habitaciones) {
     const { data: apt } = await supabase
       .from("apartamentos")
-      .select("id_apt,id_categoria,id_tipo_licencia")
+      .select("id_apt,id_categoria,id_tipo_licencia,id_categoria_limpieza")
       .eq("nombre", habitaciones)
       .maybeSingle();
     apartamento = (apt as ApartamentoInfo) ?? null;

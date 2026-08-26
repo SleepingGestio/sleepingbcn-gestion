@@ -1,6 +1,7 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { TiposLicenciaTuristicaAdmin } from "@/components/tipos-licencia-turistica-admin";
 import { CanalesReservaAdmin } from "@/components/canales-reserva-admin";
+import { TiposCategoriaLimpiezaAdmin } from "@/components/tipos-categoria-limpieza-admin";
 import { TarifasLimpiezaAdmin } from "@/components/tarifas-limpieza-admin";
 import { TarifasComisionOtaAdmin } from "@/components/tarifas-comision-ota-admin";
 import { TarifasCobroCanalAdmin } from "@/components/tarifas-cobro-canal-admin";
@@ -14,6 +15,7 @@ export function TarifasAdmin({ readOnly = false }: { readOnly?: boolean }) {
         <TabsTrigger value="cobro">Cobro</TabsTrigger>
         <TabsTrigger value="licencias">Tipos de licencia</TabsTrigger>
         <TabsTrigger value="canales">Canales</TabsTrigger>
+        <TabsTrigger value="categorias-limpieza">Categorías de limpieza</TabsTrigger>
       </TabsList>
       <TabsContent value="limpieza">
         <TarifasLimpiezaAdmin readOnly={readOnly} />
@@ -29,6 +31,9 @@ export function TarifasAdmin({ readOnly = false }: { readOnly?: boolean }) {
       </TabsContent>
       <TabsContent value="canales">
         <CanalesReservaAdmin readOnly={readOnly} />
+      </TabsContent>
+      <TabsContent value="categorias-limpieza">
+        <TiposCategoriaLimpiezaAdmin readOnly={readOnly} />
       </TabsContent>
     </Tabs>
   );

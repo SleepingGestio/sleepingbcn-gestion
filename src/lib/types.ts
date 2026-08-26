@@ -54,6 +54,11 @@ export const fullName = (p: { nombre: string | null; apellidos: string | null } 
   p ? [p.nombre, p.apellidos].filter(Boolean).join(" ").trim() || "—" : "—";
 
 /** Apartment fields resolved for a reservation via the apartamentos.nombre <-> reservas_kb.Habitaciones exact-match convention. */
-export type ApartamentoInfo = { id_apt: number; id_categoria: number | null; id_tipo_licencia: number | null };
+export type ApartamentoInfo = {
+  id_apt: number;
+  id_categoria: number | null;
+  id_tipo_licencia: number | null;
+  id_categoria_limpieza: number | null;
+};
 
 export type Reserva = ReservaKB & { gestio: ReservaGestio | null; apartamento?: ApartamentoInfo | null };
