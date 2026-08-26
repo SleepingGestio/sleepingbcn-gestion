@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { EstadoBadge } from "@/components/estado-badge";
 import { fetchReserva, upsertGestio } from "@/lib/reservas";
 import { fetchAgentes, fetchLimpiadores } from "@/lib/catalogos";
@@ -36,6 +37,7 @@ export function ReservaDetail({
   const [reserva, setReserva] = useState<Reserva | null>(null);
   const [g, setG] = useState<Partial<ReservaGestio>>({});
   const [saving, setSaving] = useState(false);
+  const [activeTab, setActiveTab] = useState<"gestion" | "economica" | "huespedes">("gestion");
 
   const agentesQ = useQuery({ queryKey: ["agentes"], queryFn: fetchAgentes });
   const limpiadoresQ = useQuery({ queryKey: ["limpiadores"], queryFn: fetchLimpiadores });
@@ -170,9 +172,15 @@ export function ReservaDetail({
               </section>
             )}
 
-            {/* ── Gestión interna ── */}
-            <section className="bg-muted/20 rounded-lg p-4 space-y-4">
-              <h3 className="font-medium text-sm">Gestión interna</h3>
+            {/* ── Gestión / económica / huéspedes ── */}
+            <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as typeof activeTab)}>
+              <TabsList>
+                <TabsTrigger value="gestion">Notas de gestión</TabsTrigger>
+                <TabsTrigger value="economica">Inf. económica</TabsTrigger>
+                <TabsTrigger value="huespedes">Registro de huéspedes</TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="gestion" className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Agente check-in</Label>
@@ -254,11 +262,9 @@ export function ReservaDetail({
                   disabled={readOnly}
                 />
               </div>
-            </section>
+              </TabsContent>
 
-            {/* ── Cierre financiero ── */}
-            <section className="bg-muted/20 rounded-lg p-4 space-y-4">
-              <h3 className="font-medium text-sm">Cierre financiero</h3>
+              <TabsContent value="economica" className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Pagado estancia (€)</Label>
@@ -308,7 +314,14 @@ export function ReservaDetail({
                   </p>
                 </div>
               </div>
-            </section>
+              </TabsContent>
+
+              <TabsContent value="huespedes">
+                <div className="rounded-md border border-dashed p-8 text-center text-sm text-muted-foreground">
+                  Sin diseñar todavía — pendiente de definir qué campos van aquí.
+                </div>
+              </TabsContent>
+            </Tabs>
 
             {/* ── Footer ── */}
             <div className="flex items-center justify-between border-t pt-4">
