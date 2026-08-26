@@ -5,14 +5,16 @@ export async function fetchReservas(params?: {
   from?: string;
   to?: string;
   search?: string;
-  estado?: string;
+  /** undefined = no filter (all estados, including any not yet known); [] = match nothing. */
+  estados?: string[];
   dateField?: "Check in" | "Check-out";
 }): Promise<Reserva[]> {
+  if (params?.estados && params.estados.length === 0) return [];
   const dateField = params?.dateField ?? "Check in";
   let q = supabase.from("reservas_kb").select("*").order(dateField, { ascending: false });
   if (params?.from) q = q.gte(dateField, params.from);
   if (params?.to) q = q.lte(dateField, params.to);
-  if (params?.estado) q = q.eq("Estado", params.estado);
+  if (params?.estados && params.estados.length > 0) q = q.in("Estado", params.estados);
   if (params?.search) {
     q = q.or(`"Referencia".ilike.%${params.search}%,"Número".ilike.%${params.search}%`);
   }
@@ -30,6 +32,23 @@ export async function fetchReservas(params?: {
     ...(r as ReservaKB),
     gestio: gMap.get((r as ReservaKB)["Número"]) ?? null,
   }));
+}
+
+/** Distinct Estado values actually present in reservas_kb — kept dynamic so a
+ *  new status Krossbooking starts sending shows up in filters without a
+ *  code change. */
+export async function fetchDistinctEstados(): Promise<string[]> {
+  const { data, error } = await supabase
+    .from("reservas_kb")
+    .select("Estado")
+    .not("Estado", "is", null)
+    .limit(2000);
+  if (error) throw error;
+  const set = new Set<string>();
+  for (const r of (data ?? []) as { Estado: string | null }[]) {
+    if (r.Estado) set.add(r.Estado);
+  }
+  return Array.from(set).sort();
 }
 
 export async function fetchReserva(numero: string): Promise<Reserva | null> {

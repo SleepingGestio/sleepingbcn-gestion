@@ -13,6 +13,10 @@ const STYLES: Record<string, string> = {
   "Cancelada": "bg-red-600 text-white hover:bg-red-600",
 };
 
+/** Lifecycle-ish display order for anything that lists estados (e.g. filter
+ *  chips) — unknown values not in this list sort after, alphabetically. */
+export const ESTADO_ORDER = Object.keys(STYLES);
+
 const ABBR: Record<string, string> = {
   "Confirmada": "CONF",
   "En espera de confirmación": "PTE",

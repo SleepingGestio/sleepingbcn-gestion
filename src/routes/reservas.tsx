@@ -4,7 +4,6 @@ import { useQuery } from "@tanstack/react-query";
 import { fetchReservas } from "@/lib/reservas";
 import { AppShell } from "@/components/app-shell";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Card } from "@/components/ui/card";
 import { ReservaDetail } from "@/components/reserva-detail";
@@ -13,6 +12,7 @@ import { DateRangePicker, nextWeekRange } from "@/components/date-range-picker";
 import { fmtDate } from "@/lib/format";
 import { SortHeader } from "@/components/sort-header";
 import { GroupFilterChips, useGroupFilter } from "@/components/group-filter";
+import { EstadoFilterChips, useEstadoFilter } from "@/components/estado-filter";
 import { usePermissions } from "@/hooks/use-permissions";
 
 export const Route = createFileRoute("/reservas")({
@@ -23,20 +23,20 @@ type SortKey = "numero" | "referencia" | "habitaciones" | "checkin" | "checkout"
 
 function ReservasPage() {
   const [search, setSearch] = useState("");
-  const [estado, setEstado] = useState<string>("Confirmada");
   const [selected, setSelected] = useState<string | null>(null);
   const [range, setRange] = useState(nextWeekRange);
   const [sortKey, setSortKey] = useState<SortKey>("checkin");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const filter = useGroupFilter();
+  const estadoFilter = useEstadoFilter();
   const { canEdit } = usePermissions();
   const canEditReservas = canEdit("reservas");
 
   const q = useQuery({
-    queryKey: ["reservas", { estado, from: range.from, to: range.to }],
+    queryKey: ["reservas", { estados: estadoFilter.estadosParam, from: range.from, to: range.to }],
     queryFn: () =>
       fetchReservas({
-        estado: estado === "all" ? undefined : estado,
+        estados: estadoFilter.estadosParam,
         from: range.from,
         to: range.to,
         dateField: "Check in",
@@ -95,17 +95,10 @@ function ReservasPage() {
           onChange={(e) => setSearch(e.target.value)}
           className="max-w-md bg-white"
         />
-        <Select value={estado} onValueChange={setEstado}>
-          <SelectTrigger className="w-48 bg-white">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Todos los estados</SelectItem>
-            <SelectItem value="Confirmada">Confirmada</SelectItem>
-            <SelectItem value="Cancelada">Cancelada</SelectItem>
-            <SelectItem value="Pendiente">Pendiente</SelectItem>
-          </SelectContent>
-        </Select>
+      </div>
+      <div className="mb-3 flex flex-wrap items-center gap-2">
+        <span className="text-xs font-medium text-muted-foreground">Estado:</span>
+        <EstadoFilterChips {...estadoFilter} />
       </div>
       <GroupFilterChips {...filter} />
 
