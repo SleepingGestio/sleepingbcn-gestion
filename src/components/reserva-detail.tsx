@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,6 +19,9 @@ import {
 import {
   fullName, type Reserva, type ReservaGestio, type ReservaExtra, type ReservaExtraDraft,
 } from "@/lib/types";
+import {
+  comisionBase, computeComision, computeKbCheck, computeKbComparison, pagadoEstanciaEfectivo,
+} from "@/lib/comisiones";
 import { toast } from "sonner";
 import { useQuery } from "@tanstack/react-query";
 import { fmtDate, fmtEUR, fmtNum2, resolveTime } from "@/lib/format";
@@ -100,26 +103,49 @@ export function ReservaDetail({
     return { sinIva, conIva, total: sinIva + conIva };
   }, [g.PagadoEstancia, g.PagadoLimpieza, extras]);
 
-  // Commission amounts derived FROM the %, per the channel's modo_comision.
-  // base = KB "Cargo estancia" + Pagado limpieza (verified to the cent).
-  //   bruto (Booking): (pOta + pCobro) · base
-  //   neto  (Airbnb/Expedia): pOta · base / (1 − pOta);  pCobro does not apply.
+  // Commission amounts derived FROM the saved %, per the channel's
+  // modo_comision. base = Pagado estancia + Pagado limpieza (app-corrected
+  // figures — switched from KB's raw "Cargo estancia" this round; verified
+  // against real data, incl. the /(1-pOta) grossing-up still holding on the
+  // new base for neto channels). See prompt_inf_economica_comision_autovalidacion.
   const comision = useMemo(() => {
-    const base = (Number(reserva?.["Cargo estancia"]) || 0) + (g.PagadoLimpieza ?? 0);
-    const pOta = (g.PctComisionOTA ?? 0) / 100;
-    const pCobro = (g.PctPorCobro ?? 0) / 100;
-    if (modoComision === "neto") {
-      const ota = pOta > 0 && pOta < 1 ? (pOta * base) / (1 - pOta) : 0;
-      return { ota, cobro: 0, total: ota, aplicaCobro: false };
-    }
-    return { ota: pOta * base, cobro: pCobro * base, total: (pOta + pCobro) * base, aplicaCobro: true };
-  }, [reserva, g.PagadoLimpieza, g.PctComisionOTA, g.PctPorCobro, modoComision]);
+    const base = comisionBase(g.PagadoEstancia, g.PagadoLimpieza);
+    return computeComision(modoComision, g.PctComisionOTA, g.PctPorCobro, base);
+  }, [g.PagadoEstancia, g.PagadoLimpieza, g.PctComisionOTA, g.PctPorCobro, modoComision]);
+
+  // % actually being tested against KB below: the saved value, or — nothing
+  // saved yet — the suggested tariff. This lets the KB-mismatch warning (and
+  // the auto-fill effect further down) evaluate before anything is saved.
+  const pctOtaEfectivo = g.PctComisionOTA ?? propuestaComision;
+  const pctCobroEfectivo = g.PctPorCobro ?? propuestaCobro;
+
+  // KB reports its own real commission per reservation. The % (saved, or the
+  // suggested tariff when nothing's saved yet) stays the single source of
+  // truth (never derived from these KB amounts — see
+  // prompt_tarifas_comisiones_fuente_pct); this only surfaces a gap between
+  // what the % yields and what KB actually charged, so a wrong tariff /
+  // changed contract / import glitch is visible instead of silently trusted.
+  // Silent when the relevant % isn't available at all, or KB's figure is
+  // 0/null (no real datum to compare). Rounding margin: 2 cents.
+  const kbComparison = useMemo(() => {
+    if (!reserva) return { ota: null, cobro: null };
+    const base = comisionBase(g.PagadoEstancia, g.PagadoLimpieza);
+    const comisionTest = computeComision(modoComision, pctOtaEfectivo, pctCobroEfectivo, base);
+    return computeKbComparison(reserva, comisionTest, pctOtaEfectivo, pctCobroEfectivo);
+  }, [reserva, g.PagadoEstancia, g.PagadoLimpieza, pctOtaEfectivo, pctCobroEfectivo, modoComision]);
+
+  // One-shot guard for the auto-validate-and-fill effect below — reset every
+  // time a fresh fetch starts (including reopening the same reservation), so
+  // it re-evaluates against whatever's actually in the DB right now rather
+  // than skipping because it already ran on a previous open.
+  const autoFillDoneRef = useRef(false);
 
   useEffect(() => {
     if (!numero || !open) return;
     setReserva(null);
     setExtras([]);
     setExtrasOriginal([]);
+    autoFillDoneRef.current = false;
     fetchReserva(numero).then((r) => {
       setReserva(r);
       const gestio: Partial<ReservaGestio> = r?.gestio ?? {};
@@ -134,13 +160,7 @@ export function ReservaDetail({
       // so the single formula is correct everywhere — no modo_comision branch.
       // A saved value is never overwritten — same "don't rewrite a closed
       // figure" principle as the suggestion chips, just without the click.
-      const cargoEstancia = r?.["Cargo estancia"];
-      const comisionesRetenidas = r?.["Comisiones retenidas"];
-      const prefill =
-        typeof cargoEstancia === "number" && Number.isFinite(cargoEstancia)
-          ? cargoEstancia +
-            (typeof comisionesRetenidas === "number" && Number.isFinite(comisionesRetenidas) ? comisionesRetenidas : 0)
-          : null;
+      const prefill = pagadoEstanciaEfectivo(null, r?.["Cargo estancia"], r?.["Comisiones retenidas"]);
       // Tasa turística: KB "Cargo tasa turística" is frequently wrong and is
       // corrected here. Seed it exactly like Pagado estancia — only when
       // nothing is saved yet, never overwriting a corrected value.
@@ -159,6 +179,53 @@ export function ReservaDetail({
       })));
     });
   }, [numero, open]);
+
+  // Auto-validate-and-fill pass. Runs once per open, after Pagado estancia
+  // (prefilled above) AND every suggestion source (apartamento's tarifas,
+  // fetched separately from the reservation itself) have settled — waiting
+  // on isLoading avoids locking in a premature "nothing to suggest yet" via
+  // the one-shot guard. Two independent jobs, same pass:
+  //   1. Pagado limpieza: same prefill-when-null pattern as Pagado estancia.
+  //   2. Per line (OTA / cobro independently), test the suggested tariff
+  //      against KB's real figure; a CONFIRMED match (not just "no mismatch
+  //      shown" — computeKbCheck distinguishes the two) seeds the % field.
+  //      A real mismatch leaves the field open with the "Sugerido ·
+  //      aplicar" chip as a manual fallback, and the warning below fires
+  //      immediately using the suggested % as the tested value.
+  useEffect(() => {
+    if (!reserva || !numero) return;
+    if (
+      canalesQ.isLoading || tarifasLimpiezaQ.isLoading ||
+      tarifasComisionQ.isLoading || tarifasCobroQ.isLoading
+    ) return;
+    if (autoFillDoneRef.current) return;
+    autoFillDoneRef.current = true;
+
+    setG((prev) => {
+      const pagadoLimpieza = prev.PagadoLimpieza ?? propuestaLimpieza ?? null;
+      const base = comisionBase(prev.PagadoEstancia, pagadoLimpieza);
+
+      const pctOtaCandidato = prev.PctComisionOTA ?? propuestaComision ?? null;
+      const pctCobroCandidato = prev.PctPorCobro ?? propuestaCobro ?? null;
+      const comisionTest = computeComision(modoComision, pctOtaCandidato, pctCobroCandidato, base);
+      const check = computeKbCheck(reserva, comisionTest, pctOtaCandidato, pctCobroCandidato);
+
+      const next: Partial<ReservaGestio> = { ...prev, PagadoLimpieza: pagadoLimpieza };
+      if (prev.PctComisionOTA == null && propuestaComision != null && check.ota?.matches) {
+        next.PctComisionOTA = propuestaComision;
+      }
+      if (
+        modoComision !== "neto" && prev.PctPorCobro == null &&
+        propuestaCobro != null && check.cobro?.matches
+      ) {
+        next.PctPorCobro = propuestaCobro;
+      }
+      return next;
+    });
+  }, [
+    reserva, numero, modoComision, propuestaLimpieza, propuestaComision, propuestaCobro,
+    canalesQ.isLoading, tarifasLimpiezaQ.isLoading, tarifasComisionQ.isLoading, tarifasCobroQ.isLoading,
+  ]);
 
   function patchExtra(i: number, patch: Partial<ReservaExtraDraft>) {
     setExtras((prev) => prev.map((e, j) => (j === i ? { ...e, ...patch } : e)));
@@ -365,20 +432,9 @@ export function ReservaDetail({
                   <div className="w-3.5 shrink-0 text-[13px] text-muted-foreground">€</div>
                 </div>
 
-                {/* Pagado limpieza — Con IVA; chip de sugerencia en línea con la etiqueta */}
+                {/* Pagado limpieza — Con IVA; auto-prefill desde tarifas_limpieza, sin chip (igual que Pagado estancia) */}
                 <div className="flex items-center gap-2.5 border-t px-3.5 py-2.5">
-                  <div className="flex flex-1 items-center gap-2 text-sm">
-                    <span>Pagado limpieza</span>
-                    {!readOnly && propuestaLimpieza != null && g.PagadoLimpieza == null && (
-                      <button
-                        type="button"
-                        className="whitespace-nowrap text-[11px] text-primary hover:underline"
-                        onClick={() => setG({ ...g, PagadoLimpieza: propuestaLimpieza })}
-                      >
-                        Sugerido: {propuestaLimpieza} € · aplicar
-                      </button>
-                    )}
-                  </div>
+                  <div className="flex-1 text-sm">Pagado limpieza</div>
                   <div className="w-[78px] shrink-0" />
                   <LedgerInput
                     value={g.PagadoLimpieza}
@@ -465,73 +521,105 @@ export function ReservaDetail({
               </div>
 
               {/* ── Comisiones (se restan del total) ── */}
-              <div className="overflow-hidden rounded-md border">
-                <div className="flex items-center gap-2.5 px-3.5 py-2.5">
-                  <div className="w-3.5 shrink-0 text-center text-[15px] font-semibold text-muted-foreground">−</div>
-                  <div className="flex flex-1 items-center gap-2 text-sm">
-                    <span>Comisión OTA</span>
-                    <input
-                      className="w-11 border-0 border-b-[1.5px] border-input bg-transparent py-px text-right text-[13px] outline-none focus:border-primary disabled:opacity-60"
-                      type="number"
-                      step="0.01"
-                      value={g.PctComisionOTA ?? ""}
-                      disabled={readOnly}
-                      onChange={(e) => setG({ ...g, PctComisionOTA: e.target.value === "" ? null : Number(e.target.value) })}
-                    />
-                    <span className="text-[13px] text-muted-foreground">%</span>
-                    {!readOnly && propuestaComision != null && g.PctComisionOTA == null && (
-                      <button
-                        type="button"
-                        className="whitespace-nowrap text-[11px] text-primary hover:underline"
-                        onClick={() => setG({ ...g, PctComisionOTA: propuestaComision })}
-                      >
-                        Sugerido: {propuestaComision}% · aplicar
-                      </button>
+              <div className="flex items-stretch gap-2">
+                <div className="flex-1 overflow-hidden rounded-md border">
+                  <div className="flex items-center gap-2.5 px-3.5 py-2.5">
+                    <div className="w-3.5 shrink-0 text-center text-[15px] font-semibold text-muted-foreground">−</div>
+                    <div className="flex flex-1 items-center gap-2 text-sm">
+                      <span>Comisión OTA</span>
+                      <PctInput
+                        value={g.PctComisionOTA}
+                        disabled={readOnly}
+                        onChange={(v) => setG({ ...g, PctComisionOTA: v })}
+                      />
+                      <span className="text-[13px] text-muted-foreground">%</span>
+                      {!readOnly && propuestaComision != null && g.PctComisionOTA == null && (
+                        <button
+                          type="button"
+                          className="whitespace-nowrap text-[11px] text-primary hover:underline"
+                          onClick={() => setG({ ...g, PctComisionOTA: propuestaComision })}
+                        >
+                          Sugerido: {propuestaComision}% · aplicar
+                        </button>
+                      )}
+                    </div>
+                    <div className="w-[90px] shrink-0 pr-1.5 text-right text-sm tabular-nums">{fmtNum2(comision.ota)}</div>
+                    <div className="w-3.5 shrink-0 text-[13px] text-muted-foreground">€</div>
+                  </div>
+
+                  <div className="flex items-center gap-2.5 border-t px-3.5 py-2.5">
+                    <div className="w-3.5 shrink-0 text-center text-[15px] font-semibold text-muted-foreground">−</div>
+                    {comision.aplicaCobro ? (
+                      <>
+                        <div className="flex flex-1 items-center gap-2 text-sm">
+                          <span>Comisión por cobro</span>
+                          <PctInput
+                            value={g.PctPorCobro}
+                            disabled={readOnly}
+                            onChange={(v) => setG({ ...g, PctPorCobro: v })}
+                          />
+                          <span className="text-[13px] text-muted-foreground">%</span>
+                          {!readOnly && propuestaCobro != null && g.PctPorCobro == null && (
+                            <button
+                              type="button"
+                              className="whitespace-nowrap text-[11px] text-primary hover:underline"
+                              onClick={() => setG({ ...g, PctPorCobro: propuestaCobro })}
+                            >
+                              Sugerido: {propuestaCobro}% · aplicar
+                            </button>
+                          )}
+                        </div>
+                        <div className="w-[90px] shrink-0 pr-1.5 text-right text-sm tabular-nums">{fmtNum2(comision.cobro)}</div>
+                        <div className="w-3.5 shrink-0 text-[13px] text-muted-foreground">€</div>
+                      </>
+                    ) : (
+                      <>
+                        <div className="flex-1 text-sm text-muted-foreground">
+                          Comisión por cobro <span className="text-[12px]">· no aplica en este canal</span>
+                        </div>
+                        <div className="w-[90px] shrink-0 pr-1.5 text-right text-sm text-muted-foreground">0%</div>
+                        <div className="w-3.5 shrink-0 text-[13px] text-muted-foreground">—</div>
+                      </>
                     )}
                   </div>
-                  <div className="w-[90px] shrink-0 text-right text-sm tabular-nums">{fmtNum2(comision.ota)}</div>
-                  <div className="w-3.5 shrink-0 text-[13px] text-muted-foreground">€</div>
                 </div>
 
-                <div className="flex items-center gap-2.5 border-t px-3.5 py-2.5">
-                  <div className="w-3.5 shrink-0 text-center text-[15px] font-semibold text-muted-foreground">−</div>
-                  {comision.aplicaCobro ? (
-                    <>
-                      <div className="flex flex-1 items-center gap-2 text-sm">
-                        <span>Comisión por cobro</span>
-                        <input
-                          className="w-11 border-0 border-b-[1.5px] border-input bg-transparent py-px text-right text-[13px] outline-none focus:border-primary disabled:opacity-60"
-                          type="number"
-                          step="0.01"
-                          value={g.PctPorCobro ?? ""}
-                          disabled={readOnly}
-                          onChange={(e) => setG({ ...g, PctPorCobro: e.target.value === "" ? null : Number(e.target.value) })}
-                        />
-                        <span className="text-[13px] text-muted-foreground">%</span>
-                        {!readOnly && propuestaCobro != null && g.PctPorCobro == null && (
-                          <button
-                            type="button"
-                            className="whitespace-nowrap text-[11px] text-primary hover:underline"
-                            onClick={() => setG({ ...g, PctPorCobro: propuestaCobro })}
-                          >
-                            Sugerido: {propuestaCobro}% · aplicar
-                          </button>
-                        )}
-                      </div>
-                      <div className="w-[90px] shrink-0 text-right text-sm tabular-nums">{fmtNum2(comision.cobro)}</div>
-                      <div className="w-3.5 shrink-0 text-[13px] text-muted-foreground">€</div>
-                    </>
-                  ) : (
-                    <>
-                      <div className="flex-1 text-sm text-muted-foreground">
-                        Comisión por cobro <span className="text-[12px]">· no aplica en este canal</span>
-                      </div>
-                      <div className="w-[90px] shrink-0 text-right text-sm text-muted-foreground">0%</div>
-                      <div className="w-3.5 shrink-0 text-[13px] text-muted-foreground">—</div>
-                    </>
-                  )}
+                {/* Total comisiones — suma de OTA + por cobro */}
+                <div className="flex w-28 shrink-0 flex-col items-center justify-center gap-0.5 rounded-md border bg-muted px-2 text-center">
+                  <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Total comisiones</div>
+                  <div className="text-[15px] font-bold tabular-nums">{fmtEUR(comision.total)}</div>
                 </div>
               </div>
+
+              {/* Discrepancia contra el importe real que informa KB — grande y
+                  parpadeante para que no pase desapercibida (ver kbComparison). */}
+              {(kbComparison.ota || kbComparison.cobro) && (
+                <div className="space-y-1.5">
+                  {kbComparison.ota && (
+                    <div className="flex items-center gap-2 rounded-md bg-amber-100 px-2.5 py-1.5 text-amber-800">
+                      <span className="kb-mismatch-blink flex items-center gap-2">
+                        <span className="shrink-0 text-base leading-none" aria-hidden>⚠</span>
+                        <span className="text-[14px] font-bold">
+                          Comisión OTA — KB informa: {fmtNum2(kbComparison.ota.kb)} € (calculado:{" "}
+                          {fmtNum2(kbComparison.ota.calc)} €)
+                        </span>
+                      </span>
+                    </div>
+                  )}
+                  {kbComparison.cobro && (
+                    <div className="flex items-center gap-2 rounded-md bg-amber-100 px-2.5 py-1.5 text-amber-800">
+                      <span className="kb-mismatch-blink flex items-center gap-2">
+                        <span className="shrink-0 text-base leading-none" aria-hidden>⚠</span>
+                        <span className="text-[14px] font-bold">
+                          Comisión por cobro — KB informa: {fmtNum2(kbComparison.cobro.kb)} € (calculado:{" "}
+                          {fmtNum2(kbComparison.cobro.calc)} €)
+                        </span>
+                      </span>
+                    </div>
+                  )}
+                </div>
+              )}
+
               {((propuestaComision != null && g.PctComisionOTA != null && propuestaComision !== g.PctComisionOTA) ||
                 (comision.aplicaCobro && propuestaCobro != null && g.PctPorCobro != null && propuestaCobro !== g.PctPorCobro)) && (
                 <div className="space-y-0.5 px-1 text-[11px] text-muted-foreground">
@@ -545,35 +633,36 @@ export function ReservaDetail({
               )}
 
               {/* ── Tasa turística — informativa, fuera de la cuenta ── */}
-              <div className="space-y-2 rounded-md border border-dashed bg-muted/60 px-3 py-2.5">
-                <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Tasa turística</div>
-
-                <div className="flex items-center gap-2.5">
-                  <div className="flex-1 text-sm">Importe esperado</div>
-                  <LedgerInput
-                    value={g.TasaTuristica}
-                    disabled={readOnly}
-                    onChange={(v) => setG({ ...g, TasaTuristica: v })}
-                  />
-                  <div className="w-3.5 shrink-0 text-[13px] text-muted-foreground">€</div>
+              <div className="rounded-md border border-dashed bg-muted/60 px-3 py-2.5">
+                <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+                  <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Tasa turística</div>
+                  <div className="flex items-center gap-4">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[13px] text-muted-foreground">Esperado</span>
+                      <LedgerInput
+                        value={g.TasaTuristica}
+                        disabled={readOnly}
+                        onChange={(v) => setG({ ...g, TasaTuristica: v })}
+                      />
+                      <span className="text-[13px] text-muted-foreground">€</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[13px] text-muted-foreground">Cobrado</span>
+                      <LedgerInput
+                        value={g.TasaTuristicaCobrada}
+                        disabled={readOnly}
+                        onChange={(v) => setG({ ...g, TasaTuristicaCobrada: v })}
+                      />
+                      <span className="text-[13px] text-muted-foreground">€</span>
+                    </div>
+                  </div>
                 </div>
                 {Number.isFinite(tasaKB) && g.TasaTuristica != null && tasaKB !== g.TasaTuristica && (
-                  <div className="text-[11px] text-muted-foreground">
+                  <div className="mt-2 text-[11px] text-muted-foreground">
                     KB importó: {fmtNum2(tasaKB)} € (corregido: {fmtNum2(g.TasaTuristica)} €)
                   </div>
                 )}
-
-                <div className="flex items-center gap-2.5">
-                  <div className="flex-1 text-sm">Importe cobrado</div>
-                  <LedgerInput
-                    value={g.TasaTuristicaCobrada}
-                    disabled={readOnly}
-                    onChange={(v) => setG({ ...g, TasaTuristicaCobrada: v })}
-                  />
-                  <div className="w-3.5 shrink-0 text-[13px] text-muted-foreground">€</div>
-                </div>
-
-                <div className="text-[11px] text-muted-foreground">
+                <div className="mt-2 text-[11px] text-muted-foreground">
                   Informativa — no forma parte de la cuenta ni de las comisiones.
                 </div>
               </div>
@@ -688,6 +777,43 @@ function LedgerInput({
       value={value ?? ""}
       disabled={disabled}
       onChange={(e) => onChange(e.target.value === "" ? null : Number(e.target.value))}
+    />
+  );
+}
+
+/** Percentage input for the commission rows. Shows 2 decimals in es-ES form
+ *  ("15,00") while idle so a saved rate never displays as "15" / "1,3", but
+ *  keeps a raw text buffer while focused so reformatting never fights the
+ *  user's keystrokes. Accepts comma or dot; commits on every change so the
+ *  commission figures recalculate live, same as the old <input> did. */
+function PctInput({
+  value,
+  onChange,
+  disabled,
+}: {
+  value: number | null | undefined;
+  onChange: (v: number | null) => void;
+  disabled?: boolean;
+}) {
+  const [buffer, setBuffer] = useState<string | null>(null);
+  const display = buffer ?? (value == null ? "" : fmtNum2(value));
+  return (
+    <input
+      type="text"
+      inputMode="decimal"
+      className="w-[52px] shrink-0 border-0 border-b-[1.5px] border-input bg-transparent py-px text-right text-[13px] outline-none focus:border-primary disabled:opacity-60"
+      value={display}
+      disabled={disabled}
+      onFocus={() => setBuffer(value == null ? "" : String(value).replace(".", ","))}
+      onBlur={() => setBuffer(null)}
+      onChange={(e) => {
+        const raw = e.target.value;
+        setBuffer(raw);
+        const norm = raw.trim().replace(",", ".");
+        if (norm === "") return onChange(null);
+        const n = Number(norm);
+        if (Number.isFinite(n)) onChange(n);
+      }}
     />
   );
 }

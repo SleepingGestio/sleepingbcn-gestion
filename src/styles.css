@@ -157,3 +157,20 @@
     animation: none;
   }
 }
+
+/* KB commission-discrepancy warning in the "Inf. económica" tab — must not
+   pass unnoticed (Ramon: "más grande y parpadeante"). */
+@keyframes kb-mismatch-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+.kb-mismatch-blink {
+  animation: kb-mismatch-blink 1.3s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .kb-mismatch-blink {
+    animation: none;
+  }
+}

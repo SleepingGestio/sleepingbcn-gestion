@@ -92,6 +92,26 @@ export async function fetchTarifasCobroCanal(): Promise<TarifaCobroCanal[]> {
   return (data ?? []) as TarifaCobroCanal[];
 }
 
+/** Apartment fields needed to resolve suggested tariffs for a reservation,
+ *  keyed by nombre (same apartamentos.nombre <-> reservas_kb.Habitaciones
+ *  exact-match convention used everywhere else). Fetched whole (small table)
+ *  rather than per-reservation — used by the reservations list to compute the
+ *  "No cuadra" column for every visible row without N+1 queries. */
+export type ApartamentoRef = {
+  id_apt: number;
+  nombre: string;
+  id_categoria_limpieza: number | null;
+  id_tipo_licencia: number | null;
+};
+
+export async function fetchApartamentosRef(): Promise<ApartamentoRef[]> {
+  const { data, error } = await supabase
+    .from("apartamentos")
+    .select("id_apt, nombre, id_categoria_limpieza, id_tipo_licencia");
+  if (error) throw error;
+  return (data ?? []) as ApartamentoRef[];
+}
+
 /** Distinct Portal strings actually seen in reservas_kb — a live-data hint for
  *  keying canales_reserva.nombre to match, since nothing else in the app
  *  surfaces the real spellings Krossbooking sends. */
