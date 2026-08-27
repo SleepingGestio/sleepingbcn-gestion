@@ -1,7 +1,14 @@
 import { supabase } from "@/integrations/supabase/client";
 
 export type TipoLicencia = { id_tipo_licencia: number; nombre: string; activo: boolean };
-export type CanalReserva = { id_canal: number; nombre: string; activo: boolean };
+/** How KB reports the price for this channel, which formula ReservaDetail
+ *  uses to derive the commission amount:
+ *   - "bruto": "Cargo estancia" is pre-commission (Booking)
+ *   - "neto":  "Cargo estancia" is already net of commission (Airbnb, Expedia) */
+export type ModoComision = "bruto" | "neto";
+export type CanalReserva = {
+  id_canal: number; nombre: string; activo: boolean; modo_comision: ModoComision;
+};
 export type TipoCategoriaLimpieza = { id_categoria_limpieza: number; nombre: string; activo: boolean };
 export type TarifaLimpieza = { id_categoria_limpieza: number; costo_limpieza: number };
 export type TarifaComisionOta = { id_tipo_licencia: number; id_canal: number; pct_comision: number };
@@ -20,11 +27,32 @@ export async function fetchTiposLicencia(): Promise<TipoLicencia[]> {
 export async function fetchCanalesReserva(): Promise<CanalReserva[]> {
   const { data, error } = await supabase
     .from("canales_reserva")
-    .select("id_canal, nombre, activo")
+    .select("id_canal, nombre, activo, modo_comision")
     .order("orden", { ascending: true })
     .order("nombre", { ascending: true });
   if (error) throw error;
   return (data ?? []) as CanalReserva[];
+}
+
+/** App-wide constants from ajustes_app, as a { clave: valor } map. */
+export async function fetchAjustes(): Promise<Record<string, string>> {
+  const { data, error } = await supabase.from("ajustes_app").select("clave, valor");
+  if (error) throw error;
+  return Object.fromEntries(((data ?? []) as { clave: string; valor: string }[]).map((r) => [r.clave, r.valor]));
+}
+
+/** IVA rate as a fraction (10 % → 0.10). Falls back to 0.10 if unset/invalid. */
+export async function fetchIvaPct(): Promise<number> {
+  const a = await fetchAjustes();
+  const n = Number(a["iva_pct"]);
+  return Number.isFinite(n) && n >= 0 ? n / 100 : 0.1;
+}
+
+export async function upsertAjuste(clave: string, valor: string) {
+  const { error } = await supabase
+    .from("ajustes_app")
+    .upsert({ clave, valor, actualizado_en: new Date().toISOString() }, { onConflict: "clave" });
+  if (error) throw error;
 }
 
 export async function fetchTiposCategoriaLimpieza(): Promise<TipoCategoriaLimpieza[]> {

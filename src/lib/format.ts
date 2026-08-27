@@ -1,3 +1,15 @@
+/** "1234.5" → "1.234,50 €". Returns "—" for null/NaN. */
+export function fmtEUR(n: number | null | undefined): string {
+  if (n == null || Number.isNaN(n)) return "—";
+  return n.toLocaleString("es-ES", { style: "currency", currency: "EUR" });
+}
+
+/** "1234.5" → "1.234,50" (no currency symbol; for ledger cells). "—" for null/NaN. */
+export function fmtNum2(n: number | null | undefined): string {
+  if (n == null || Number.isNaN(n)) return "—";
+  return n.toLocaleString("es-ES", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
 export function fmtDate(v: string | Date | null | undefined): string {
   if (v == null || v === "") return "—";
   let d: Date;

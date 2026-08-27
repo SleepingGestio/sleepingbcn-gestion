@@ -5,6 +5,7 @@ import { TiposCategoriaLimpiezaAdmin } from "@/components/tipos-categoria-limpie
 import { TarifasLimpiezaAdmin } from "@/components/tarifas-limpieza-admin";
 import { TarifasComisionOtaAdmin } from "@/components/tarifas-comision-ota-admin";
 import { TarifasCobroCanalAdmin } from "@/components/tarifas-cobro-canal-admin";
+import { AjustesFinancierosAdmin } from "@/components/ajustes-financieros-admin";
 
 export function TarifasAdmin({ readOnly = false }: { readOnly?: boolean }) {
   return (
@@ -13,6 +14,7 @@ export function TarifasAdmin({ readOnly = false }: { readOnly?: boolean }) {
         <TabsTrigger value="limpieza">Limpieza</TabsTrigger>
         <TabsTrigger value="comision">Comisión OTA</TabsTrigger>
         <TabsTrigger value="cobro">Cobro</TabsTrigger>
+        <TabsTrigger value="ajustes">IVA y ajustes</TabsTrigger>
         <TabsTrigger value="licencias">Tipos de licencia</TabsTrigger>
         <TabsTrigger value="canales">Canales</TabsTrigger>
         <TabsTrigger value="categorias-limpieza">Categorías de limpieza</TabsTrigger>
@@ -25,6 +27,9 @@ export function TarifasAdmin({ readOnly = false }: { readOnly?: boolean }) {
       </TabsContent>
       <TabsContent value="cobro">
         <TarifasCobroCanalAdmin readOnly={readOnly} />
+      </TabsContent>
+      <TabsContent value="ajustes">
+        <AjustesFinancierosAdmin readOnly={readOnly} />
       </TabsContent>
       <TabsContent value="licencias">
         <TiposLicenciaTuristicaAdmin readOnly={readOnly} />

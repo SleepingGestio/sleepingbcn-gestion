@@ -13,10 +13,17 @@ import {
 import { Pencil, Plus } from "lucide-react";
 import { toast } from "sonner";
 
+type ModoComision = "bruto" | "neto";
 type CanalReserva = {
   id_canal: number;
   nombre: string;
   activo: boolean | null;
+  modo_comision: ModoComision;
+};
+
+const MODO_COMISION_LABEL: Record<ModoComision, string> = {
+  bruto: "Precio KB antes de comisión (Booking)",
+  neto: "Precio KB ya neto de comisión (Airbnb, Expedia)",
 };
 
 export function CanalesReservaAdmin({ readOnly = false }: { readOnly?: boolean }) {
@@ -28,7 +35,7 @@ export function CanalesReservaAdmin({ readOnly = false }: { readOnly?: boolean }
     queryFn: async (): Promise<CanalReserva[]> => {
       const { data, error } = await supabase
         .from("canales_reserva")
-        .select("id_canal,nombre,activo")
+        .select("id_canal,nombre,activo,modo_comision")
         .order("nombre");
       if (error) throw error;
       return (data ?? []) as CanalReserva[];
@@ -78,8 +85,11 @@ export function CanalesReservaAdmin({ readOnly = false }: { readOnly?: boolean }
         )}
         {(q.data ?? []).map((c) => (
           <div key={c.id_canal} className="flex items-center gap-3 px-4 py-3">
-            <div className="flex-1 font-semibold uppercase tracking-wide text-sm">
-              {c.nombre.toUpperCase()}
+            <div className="flex-1">
+              <div className="font-semibold uppercase tracking-wide text-sm">{c.nombre.toUpperCase()}</div>
+              <div className="text-xs text-muted-foreground">
+                Comisión: {c.modo_comision === "neto" ? "precio KB neto" : "precio KB bruto"}
+              </div>
             </div>
             <span
               className={
@@ -113,15 +123,16 @@ function CreateModal({
   onCreated: () => void;
 }) {
   const [nombre, setNombre] = useState("");
+  const [modo, setModo] = useState<ModoComision>("bruto");
   const [busy, setBusy] = useState(false);
 
-  function reset() { setNombre(""); }
+  function reset() { setNombre(""); setModo("bruto"); }
 
   async function crear() {
     const n = nombre.trim();
     if (!n) { toast.error("Indica un nombre"); return; }
     setBusy(true);
-    const { error } = await supabase.from("canales_reserva").insert({ nombre: n, activo: true });
+    const { error } = await supabase.from("canales_reserva").insert({ nombre: n, activo: true, modo_comision: modo });
     setBusy(false);
     if (error) { toast.error("Error: " + error.message); return; }
     toast.success("Canal creado");
@@ -142,6 +153,7 @@ function CreateModal({
             <Label>Nombre (debe coincidir con "Portal" en Krossbooking)</Label>
             <Input value={nombre} onChange={(e) => setNombre(e.target.value)} placeholder="Ej. Booking.com" />
           </div>
+          <ModoComisionField value={modo} onChange={setModo} />
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={busy}>Cancelar</Button>
@@ -163,12 +175,14 @@ function EditModal({
 }) {
   const [nombre, setNombre] = useState("");
   const [activo, setActivo] = useState(true);
+  const [modo, setModo] = useState<ModoComision>("bruto");
   const [busy, setBusy] = useState(false);
 
   const openId = canal?.id_canal ?? null;
   useEffect(() => {
     setNombre(canal?.nombre ?? "");
     setActivo(!!canal?.activo);
+    setModo(canal?.modo_comision ?? "bruto");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [openId]);
 
@@ -179,7 +193,7 @@ function EditModal({
     setBusy(true);
     const { error } = await supabase
       .from("canales_reserva")
-      .update({ nombre: n, activo })
+      .update({ nombre: n, activo, modo_comision: modo })
       .eq("id_canal", canal.id_canal);
     setBusy(false);
     if (error) { toast.error("Error: " + error.message); return; }
@@ -200,6 +214,7 @@ function EditModal({
             <Label>Nombre (debe coincidir con "Portal" en Krossbooking)</Label>
             <Input value={nombre} onChange={(e) => setNombre(e.target.value)} />
           </div>
+          <ModoComisionField value={modo} onChange={setModo} />
           <div className="flex items-center justify-between rounded-md border px-3 py-2">
             <Label className="cursor-pointer">Activo</Label>
             <Switch checked={activo} onCheckedChange={setActivo} />
@@ -211,5 +226,25 @@ function EditModal({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function ModoComisionField({ value, onChange }: { value: ModoComision; onChange: (v: ModoComision) => void }) {
+  return (
+    <div className="space-y-1.5">
+      <Label>Modo de comisión</Label>
+      <select
+        className="w-full h-9 rounded-md border border-input bg-transparent px-3 text-sm"
+        value={value}
+        onChange={(e) => onChange(e.target.value as ModoComision)}
+      >
+        <option value="bruto">{MODO_COMISION_LABEL.bruto}</option>
+        <option value="neto">{MODO_COMISION_LABEL.neto}</option>
+      </select>
+      <p className="text-[11px] text-muted-foreground">
+        Determina la fórmula del importe de comisión en el detalle de la reserva. Los canales nuevos
+        empiezan en "bruto"; revísalo al crearlos.
+      </p>
+    </div>
   );
 }

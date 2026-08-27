@@ -10,10 +10,31 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "14.5"
+    PostgrestVersion: "14.17"
   }
   public: {
     Tables: {
+      ajustes_app: {
+        Row: {
+          actualizado_en: string | null
+          clave: string
+          descripcion: string | null
+          valor: string
+        }
+        Insert: {
+          actualizado_en?: string | null
+          clave: string
+          descripcion?: string | null
+          valor: string
+        }
+        Update: {
+          actualizado_en?: string | null
+          clave?: string
+          descripcion?: string | null
+          valor?: string
+        }
+        Relationships: []
+      }
       apartamentos: {
         Row: {
           activo: boolean
@@ -134,6 +155,7 @@ export type Database = {
           activo: boolean
           creado_en: string | null
           id_canal: number
+          modo_comision: string
           nombre: string
           orden: number | null
         }
@@ -141,6 +163,7 @@ export type Database = {
           activo?: boolean
           creado_en?: string | null
           id_canal?: never
+          modo_comision?: string
           nombre: string
           orden?: number | null
         }
@@ -148,6 +171,7 @@ export type Database = {
           activo?: boolean
           creado_en?: string | null
           id_canal?: never
+          modo_comision?: string
           nombre?: string
           orden?: number | null
         }
@@ -1541,10 +1565,52 @@ export type Database = {
           },
         ]
       }
+      reservas_extras: {
+        Row: {
+          con_iva: boolean
+          concepto: string
+          creado_en: string | null
+          id_extra: number
+          importe: number
+          numero_reserva: string
+        }
+        Insert: {
+          con_iva?: boolean
+          concepto: string
+          creado_en?: string | null
+          id_extra?: never
+          importe: number
+          numero_reserva: string
+        }
+        Update: {
+          con_iva?: boolean
+          concepto?: string
+          creado_en?: string | null
+          id_extra?: never
+          importe?: number
+          numero_reserva?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "reservas_extras_numero_reserva_fkey"
+            columns: ["numero_reserva"]
+            isOneToOne: false
+            referencedRelation: "reservas_kb"
+            referencedColumns: ["Número"]
+          },
+          {
+            foreignKeyName: "reservas_extras_numero_reserva_fkey"
+            columns: ["numero_reserva"]
+            isOneToOne: false
+            referencedRelation: "v_reservas_por_apartamento"
+            referencedColumns: ["Número"]
+          },
+        ]
+      }
       reservas_gestio: {
         Row: {
           AgCheckIN: number | null
-          CobroEfectivo: number | null
+          CuentaVerificada: boolean | null
           EnLimpieza: boolean | null
           id_historico: number
           ImpTTAX: number | null
@@ -1560,11 +1626,13 @@ export type Database = {
           PctPorCobro: number | null
           PersLImpAsig: number | null
           ReadyCheckIn: boolean | null
+          TasaTuristica: number | null
+          TasaTuristicaCobrada: number | null
           TaxCobradas: number | null
         }
         Insert: {
           AgCheckIN?: number | null
-          CobroEfectivo?: number | null
+          CuentaVerificada?: boolean | null
           EnLimpieza?: boolean | null
           id_historico?: number
           ImpTTAX?: number | null
@@ -1580,11 +1648,13 @@ export type Database = {
           PctPorCobro?: number | null
           PersLImpAsig?: number | null
           ReadyCheckIn?: boolean | null
+          TasaTuristica?: number | null
+          TasaTuristicaCobrada?: number | null
           TaxCobradas?: number | null
         }
         Update: {
           AgCheckIN?: number | null
-          CobroEfectivo?: number | null
+          CuentaVerificada?: boolean | null
           EnLimpieza?: boolean | null
           id_historico?: number
           ImpTTAX?: number | null
@@ -1600,6 +1670,8 @@ export type Database = {
           PctPorCobro?: number | null
           PersLImpAsig?: number | null
           ReadyCheckIn?: boolean | null
+          TasaTuristica?: number | null
+          TasaTuristicaCobrada?: number | null
           TaxCobradas?: number | null
         }
         Relationships: [

@@ -44,7 +44,30 @@ export type ReservaGestio = {
   PagadoLimpieza: number | null;
   PctComisionOTA: number | null;
   PctPorCobro: number | null;
-  CobroEfectivo: number | null;
+  /** "Cuenta verificada y cerrada" — scoped to the Inf. económica tab. */
+  CuentaVerificada: boolean | null;
+  /** Expected tourist-tax amount; prefilled from KB "Cargo tasa turística", then editable. Informational. */
+  TasaTuristica: number | null;
+  /** Tourist tax actually collected in cash — manual entry, informational. */
+  TasaTuristicaCobrada: number | null;
+};
+
+/** A persisted extra charge line for a reservation (reservas_extras row). */
+export type ReservaExtra = {
+  id_extra: number;
+  numero_reserva: string;
+  concepto: string;
+  importe: number;
+  con_iva: boolean;
+};
+
+/** Editable draft of an extra line in the detail popover; id_extra is absent
+ *  until the line has been persisted at least once. */
+export type ReservaExtraDraft = {
+  id_extra?: number;
+  concepto: string;
+  importe: number | null;
+  con_iva: boolean;
 };
 
 export type AgCheckIn = { id_persona: number; nombre: string | null; apellidos: string | null };
