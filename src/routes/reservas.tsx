@@ -17,6 +17,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Card } from "@/components/ui/card";
 import { ReservaDetail } from "@/components/reserva-detail";
 import { EstadoBadge } from "@/components/estado-badge";
+import { CheckCircle2, Circle } from "lucide-react";
 import { DateRangePicker, nextWeekRange } from "@/components/date-range-picker";
 import { fmtDate } from "@/lib/format";
 import { SortHeader } from "@/components/sort-header";
@@ -295,17 +296,18 @@ function ReservasPage() {
               <TableHead><SortHeader label="Portal" active={sortKey === "portal"} dir={sortDir} onClick={() => toggleSort("portal")} /></TableHead>
               <TableHead><SortHeader label="Estado" active={sortKey === "estado"} dir={sortDir} onClick={() => toggleSort("estado")} /></TableHead>
               <TableHead>Comisión</TableHead>
+              <TableHead title="Cuenta verificada y cerrada">Cuenta</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {sourceLoading && (
-              <TableRow><TableCell colSpan={9} className="text-center py-8 text-muted-foreground">Cargando…</TableCell></TableRow>
+              <TableRow><TableCell colSpan={10} className="text-center py-8 text-muted-foreground">Cargando…</TableCell></TableRow>
             )}
             {sourceError && (
-              <TableRow><TableCell colSpan={9} className="text-center py-8 text-destructive">{(sourceError as Error).message}</TableCell></TableRow>
+              <TableRow><TableCell colSpan={10} className="text-center py-8 text-destructive">{(sourceError as Error).message}</TableCell></TableRow>
             )}
             {!sourceLoading && filtered.length === 0 && (
-              <TableRow><TableCell colSpan={9} className="text-center py-8 text-muted-foreground">Sin reservas</TableCell></TableRow>
+              <TableRow><TableCell colSpan={10} className="text-center py-8 text-muted-foreground">Sin reservas</TableCell></TableRow>
             )}
             {filtered.map((r) => (
               <TableRow
@@ -324,6 +326,17 @@ function ReservasPage() {
                 <TableCell>
                   {noCuadraMap.get(r["Número"]) && (
                     <span className="whitespace-nowrap text-xs font-semibold text-amber-700">⚠ No cuadra</span>
+                  )}
+                </TableCell>
+                <TableCell>
+                  {r.gestio?.CuentaVerificada ? (
+                    <span title="Cuenta verificada y cerrada">
+                      <CheckCircle2 className="h-4 w-4 text-green-600" aria-label="Cuenta verificada y cerrada" />
+                    </span>
+                  ) : (
+                    <span title="Cuenta pendiente de verificar">
+                      <Circle className="h-4 w-4 text-muted-foreground/40" aria-label="Cuenta pendiente de verificar" />
+                    </span>
                   )}
                 </TableCell>
               </TableRow>
