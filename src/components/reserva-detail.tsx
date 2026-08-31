@@ -105,9 +105,10 @@ export function ReservaDetail({
 
   // Commission amounts derived FROM the saved %, per the channel's
   // modo_comision. base = Pagado estancia + Pagado limpieza (app-corrected
-  // figures — switched from KB's raw "Cargo estancia" this round; verified
-  // against real data, incl. the /(1-pOta) grossing-up still holding on the
-  // new base for neto channels). See prompt_inf_economica_comision_autovalidacion.
+  // figures, not KB's raw "Cargo estancia"). The % applies straight to base
+  // for both modos — no grossing-up: base is already the gross figure the
+  // guest paid (see computeComision; the old neto /(1-pOta) overstated the
+  // OTA cut and matched 0/75 real Airbnb reservations, fixed 2026-08-31).
   const comision = useMemo(() => {
     const base = comisionBase(g.PagadoEstancia, g.PagadoLimpieza);
     return computeComision(modoComision, g.PctComisionOTA, g.PctPorCobro, base);

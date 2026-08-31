@@ -35,11 +35,18 @@ export function comisionBase(
 }
 
 /** Commission amounts derived FROM a %, per the channel's modo_comision.
- *   bruto (Booking): (pOta + pCobro) · base
- *   neto  (Airbnb/Expedia): pOta · base / (1 − pOta); pCobro does not apply.
- *  Confirmed against real data (2026-08-29): the /(1-pOta) grossing-up is
- *  still needed over the new base — Pagado estancia already being the
- *  corrected gross figure for neto channels does not make it redundant. */
+ *   bruto (Booking): OTA = pOta · base,  cobro = pCobro · base
+ *   neto  (Airbnb/Expedia): OTA = pOta · base;  pCobro does not apply.
+ *  Both modos apply the % straight to `base` — no grossing-up. `base`
+ *  (Pagado estancia + Pagado limpieza) is ALWAYS the gross figure the guest
+ *  paid: for neto channels Pagado estancia is prefilled as KB "Cargo
+ *  estancia" + "Comisiones retenidas" (see pagadoEstanciaEfectivo), i.e.
+ *  already commission-inclusive, so the old neto formula pOta·base/(1−pOta)
+ *  double-counted and systematically overstated the OTA cut. Verified
+ *  against real data (2026-08-31, 88 Airbnb reservations with a known KB
+ *  figure): pOta·base matches KB's "Comisiones retenidas" where the % is
+ *  current, whereas /(1−pOta) matched 0 of 75. The only difference between
+ *  the two modos now is that neto has no cobro line. */
 export function computeComision(
   modoComision: ModoComision,
   pctOta: number | null | undefined,
@@ -49,7 +56,7 @@ export function computeComision(
   const pOta = (pctOta ?? 0) / 100;
   const pCobro = (pctCobro ?? 0) / 100;
   if (modoComision === "neto") {
-    const ota = pOta > 0 && pOta < 1 ? (pOta * base) / (1 - pOta) : 0;
+    const ota = pOta * base;
     return { ota, cobro: 0, total: ota, aplicaCobro: false };
   }
   return { ota: pOta * base, cobro: pCobro * base, total: (pOta + pCobro) * base, aplicaCobro: true };
