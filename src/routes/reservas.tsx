@@ -17,7 +17,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Card } from "@/components/ui/card";
 import { ReservaDetail } from "@/components/reserva-detail";
 import { EstadoBadge } from "@/components/estado-badge";
-import { CheckCircle2, Circle } from "lucide-react";
+import { Check } from "lucide-react";
 import { DateRangePicker, nextWeekRange } from "@/components/date-range-picker";
 import { fmtDate } from "@/lib/format";
 import { SortHeader } from "@/components/sort-header";
@@ -295,8 +295,8 @@ function ReservasPage() {
               <TableHead><SortHeader label="Pers." active={sortKey === "huespedes"} dir={sortDir} onClick={() => toggleSort("huespedes")} /></TableHead>
               <TableHead><SortHeader label="Portal" active={sortKey === "portal"} dir={sortDir} onClick={() => toggleSort("portal")} /></TableHead>
               <TableHead><SortHeader label="Estado" active={sortKey === "estado"} dir={sortDir} onClick={() => toggleSort("estado")} /></TableHead>
-              <TableHead>Comisión</TableHead>
-              <TableHead title="Cuenta verificada y cerrada">Cuenta</TableHead>
+              <TableHead title="Comisión">CUADRE</TableHead>
+              <TableHead title="Cuenta verificada y cerrada">VERIF</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -330,13 +330,19 @@ function ReservasPage() {
                 </TableCell>
                 <TableCell>
                   {r.gestio?.CuentaVerificada ? (
-                    <span title="Cuenta verificada y cerrada">
-                      <CheckCircle2 className="h-4 w-4 text-green-600" aria-label="Cuenta verificada y cerrada" />
+                    <span
+                      title="Cuenta verificada y cerrada"
+                      aria-label="Cuenta verificada y cerrada"
+                      className="inline-grid h-4 w-4 shrink-0 place-content-center rounded-sm border border-primary bg-primary text-primary-foreground shadow"
+                    >
+                      <Check className="h-3.5 w-3.5" />
                     </span>
                   ) : (
-                    <span title="Cuenta pendiente de verificar">
-                      <Circle className="h-4 w-4 text-muted-foreground/40" aria-label="Cuenta pendiente de verificar" />
-                    </span>
+                    <span
+                      title="Cuenta pendiente de verificar"
+                      aria-label="Cuenta pendiente de verificar"
+                      className="inline-block h-4 w-4 shrink-0 rounded-sm border border-muted-foreground/30"
+                    />
                   )}
                 </TableCell>
               </TableRow>
