@@ -30,7 +30,9 @@ export const Route = createFileRoute("/reservas")({
   component: ReservasPage,
 });
 
-type SortKey = "numero" | "referencia" | "habitaciones" | "checkin" | "checkout" | "huespedes" | "portal" | "estado";
+type SortKey =
+  | "numero" | "referencia" | "habitaciones" | "checkin" | "checkout" | "huespedes" | "portal" | "estado"
+  | "cuadre" | "verif";
 
 const DATE_MODE_OPTIONS: { value: DateMode; label: string }[] = [
   { value: "checkin", label: "Check-in" },
@@ -183,6 +185,8 @@ function ReservasPage() {
         case "huespedes": return r["Huéspedes"] ?? "";
         case "portal": return r["Portal"] ?? "";
         case "estado": return r["Estado"] ?? "";
+        case "cuadre": return noCuadraMap.get(r["Número"]) ? 1 : 0;
+        case "verif": return r.gestio?.CuentaVerificada ? 1 : 0;
       }
     };
     arr.sort((a, b) => {
@@ -295,8 +299,8 @@ function ReservasPage() {
               <TableHead><SortHeader label="Pers." active={sortKey === "huespedes"} dir={sortDir} onClick={() => toggleSort("huespedes")} /></TableHead>
               <TableHead><SortHeader label="Portal" active={sortKey === "portal"} dir={sortDir} onClick={() => toggleSort("portal")} /></TableHead>
               <TableHead><SortHeader label="Estado" active={sortKey === "estado"} dir={sortDir} onClick={() => toggleSort("estado")} /></TableHead>
-              <TableHead title="Comisión">CUADRE</TableHead>
-              <TableHead title="Cuenta verificada y cerrada">VERIF</TableHead>
+              <TableHead title="Comisión"><SortHeader label="CUADRE" active={sortKey === "cuadre"} dir={sortDir} onClick={() => toggleSort("cuadre")} /></TableHead>
+              <TableHead title="Cuenta verificada y cerrada"><SortHeader label="VERIF" active={sortKey === "verif"} dir={sortDir} onClick={() => toggleSort("verif")} /></TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -325,7 +329,7 @@ function ReservasPage() {
                 <TableCell><EstadoBadge estado={r["Estado"]} enLimpieza={r.gestio?.EnLimpieza} /></TableCell>
                 <TableCell>
                   {noCuadraMap.get(r["Número"]) && (
-                    <span className="whitespace-nowrap text-xs font-semibold text-amber-700">⚠ No cuadra</span>
+                    <span className="whitespace-nowrap text-xs font-semibold text-amber-700">⚠ NO</span>
                   )}
                 </TableCell>
                 <TableCell>
