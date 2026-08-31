@@ -100,10 +100,17 @@ export function useGroupFilter() {
   };
 }
 
+// Olive-green box convention: #637863 — sampled from Krossbooking's own
+// filter pill, same treatment as the "Filtros" box in /mantenimiento.
+// Giving Estado and Grupo each their own labeled box (instead of two bare
+// rows of otherwise-identical pills) is what makes them read as two
+// distinct, independent filters.
 export function GroupFilterChips(props: ReturnType<typeof useGroupFilter>) {
   const { gruposQ, filterMode, setFilterMode, visibleGroupIds, toggleGroup } = props;
   return (
-    <div className="mb-3 flex flex-wrap items-center gap-2">
+    <div className="mb-3 flex flex-wrap items-center gap-2 rounded-lg border border-[#637863]/40 bg-[#637863]/15 px-2 py-1.5">
+      <span className="pl-0.5 text-[11px] font-semibold uppercase tracking-wide text-foreground">Grupo</span>
+      <span className="h-5 w-px bg-[#637863]/40" />
       <button
         type="button"
         onClick={() => setFilterMode("default")}

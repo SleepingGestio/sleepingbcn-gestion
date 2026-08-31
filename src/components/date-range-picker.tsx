@@ -27,6 +27,26 @@ export function nextWeekRange(): Range {
   return { from: toISO(today), to: toISO(end) };
 }
 
+/** Calendar month containing today, 1st to last day — default range for the
+ *  "Informe económico" list (a monthly report, unlike the operational
+ *  /reservas list which defaults to next week). */
+export function currentMonthRange(): Range {
+  const today = new Date();
+  const from = new Date(today.getFullYear(), today.getMonth(), 1);
+  const to = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+  return { from: toISO(from), to: toISO(to) };
+}
+
+/** The last CLOSED calendar month — e.g. queried on any day of August, this
+ *  is July 1–31, as distinct from `currentMonthRange` (the in-progress
+ *  month, August). */
+export function previousMonthRange(): Range {
+  const today = new Date();
+  const from = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+  const to = new Date(today.getFullYear(), today.getMonth(), 0);
+  return { from: toISO(from), to: toISO(to) };
+}
+
 function addDays(base: Date, n: number) {
   const d = new Date(base);
   d.setDate(d.getDate() + n);
@@ -64,6 +84,18 @@ export function DateRangePicker({
     setOpen(false);
   };
 
+  const setMesActual = () => {
+    setDraft(undefined);
+    onChange(currentMonthRange());
+    setOpen(false);
+  };
+
+  const setUltimoMes = () => {
+    setDraft(undefined);
+    onChange(previousMonthRange());
+    setOpen(false);
+  };
+
   const committed: DateRange = { from: fromD, to: toD };
   const displayed: DateRange = draft ?? committed;
 
@@ -81,6 +113,9 @@ export function DateRangePicker({
             <Button variant="ghost" size="sm" className="justify-start" onClick={() => setPreset(1)}>Hoy</Button>
             <Button variant="ghost" size="sm" className="justify-start" onClick={() => setPreset(3)}>Próximos 3 días</Button>
             <Button variant="ghost" size="sm" className="justify-start" onClick={() => setPreset(7)}>Próxima semana</Button>
+            <span className="my-1 h-px bg-border" />
+            <Button variant="ghost" size="sm" className="justify-start" onClick={setMesActual}>Mes actual</Button>
+            <Button variant="ghost" size="sm" className="justify-start" onClick={setUltimoMes}>Último mes</Button>
           </div>
           <Calendar
             mode="range"

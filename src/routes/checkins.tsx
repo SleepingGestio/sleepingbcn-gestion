@@ -33,8 +33,7 @@ function CheckinsPage() {
 
   const q = useQuery({
     queryKey: ["checkins", range.from, range.to],
-    queryFn: () =>
-      fetchReservas({ from: range.from, to: range.to, dateField: "Check in" }),
+    queryFn: () => fetchReservas({ from: range.from, to: range.to }),
   });
 
   const toggleM = useMutation({

@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { fetchReservas } from "@/lib/reservas";
+import { fetchReservas, type DateMode } from "@/lib/reservas";
 import {
   fetchApartamentosRef, fetchCanalesReserva, fetchTarifasCobroCanal, fetchTarifasComisionOta,
   fetchTarifasLimpieza, type ApartamentoRef, type CanalReserva,
@@ -12,6 +12,7 @@ import {
 import type { Reserva } from "@/lib/types";
 import { AppShell } from "@/components/app-shell";
 import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Card } from "@/components/ui/card";
 import { ReservaDetail } from "@/components/reserva-detail";
@@ -29,6 +30,13 @@ export const Route = createFileRoute("/reservas")({
 });
 
 type SortKey = "numero" | "referencia" | "habitaciones" | "checkin" | "checkout" | "huespedes" | "portal" | "estado";
+
+const DATE_MODE_OPTIONS: { value: DateMode; label: string }[] = [
+  { value: "checkin", label: "Check-in" },
+  { value: "checkout", label: "Check-out" },
+  { value: "periodo", label: "Check-in/out dentro del periodo" },
+  { value: "alta", label: "Alta reserva" },
+];
 
 /** Same logic as reserva-detail.tsx's kbComparison, generalized for a list
  *  row: candidate % = saved (reservas_gestio) ?? suggested tariff (looked up
@@ -80,19 +88,45 @@ function ReservasPage() {
   const filter = useGroupFilter();
   const estadoFilter = useEstadoFilter();
   const [soloNoCuadran, setSoloNoCuadran] = useState(false);
+  const [dateMode, setDateMode] = useState<DateMode>("checkin");
+  // Whether an active search text should still respect the Estado/Grupo/
+  // Fechas filters. Off by default: typing a search is almost always "find
+  // this reservation wherever it is", not "find it within what I'm
+  // currently filtering to" — see Ramon's request 2026-08-31. Irrelevant
+  // (every filter always applies) when the search box is empty.
+  const [aplicarEstadoEnBusqueda, setAplicarEstadoEnBusqueda] = useState(false);
+  const [aplicarGrupoEnBusqueda, setAplicarGrupoEnBusqueda] = useState(false);
+  const [aplicarFechasEnBusqueda, setAplicarFechasEnBusqueda] = useState(false);
   const { canEdit } = usePermissions();
   const canEditReservas = canEdit("reservas");
 
+  const sTrim = search.trim();
+  const s = sTrim.toLowerCase();
+  const fechasActivo = !sTrim || aplicarFechasEnBusqueda;
+  // Search ignoring Fechas needs its own query — the date-bound `q` below
+  // physically doesn't contain rows outside `range`. Scoped server-side by
+  // `search` (not a full-table fetch) so it stays fast and doesn't depend
+  // on how high fetchReservas' row cap is.
+  const usandoBusquedaAmplia = sTrim !== "" && !fechasActivo;
+
+  // Estado is filtered client-side (like Grupo already was), not via a
+  // query param — needed so a search can bypass it. Fetches the whole date
+  // range regardless of the Estado chips; same ~600-row budget the "No
+  // cuadra" column already accepts for client-side work.
   const q = useQuery({
-    queryKey: ["reservas", { estados: estadoFilter.estadosParam, from: range.from, to: range.to }],
-    queryFn: () =>
-      fetchReservas({
-        estados: estadoFilter.estadosParam,
-        from: range.from,
-        to: range.to,
-        dateField: "Check in",
-      }),
+    queryKey: ["reservas", { from: range.from, to: range.to, dateMode }],
+    queryFn: () => fetchReservas({ from: range.from, to: range.to, dateMode }),
   });
+
+  const searchQ = useQuery({
+    queryKey: ["reservas-search", sTrim],
+    queryFn: () => fetchReservas({ search: sTrim }),
+    enabled: usandoBusquedaAmplia,
+  });
+
+  const sourceData = usandoBusquedaAmplia ? searchQ.data : q.data;
+  const sourceLoading = usandoBusquedaAmplia ? searchQ.isLoading : q.isLoading;
+  const sourceError = usandoBusquedaAmplia ? searchQ.error : q.error;
 
   // Small reference tables (whole-table fetches, cached by react-query) —
   // enough to resolve the suggested tariff per row client-side, no per-row
@@ -103,33 +137,40 @@ function ReservasPage() {
   const tarifasComisionQ = useQuery({ queryKey: ["tarifas-comision-list"], queryFn: fetchTarifasComisionOta });
   const tarifasCobroQ = useQuery({ queryKey: ["tarifas-cobro-list"], queryFn: fetchTarifasCobroCanal });
 
-  // Número -> "No cuadra" flag, recomputed only when the reservations or any
-  // reference table changes — not on every render/sort/filter tweak.
+  // Número -> "No cuadra" flag, recomputed only when the visible reservation
+  // set (whichever source is active) or any reference table changes.
   const noCuadraMap = useMemo(() => {
     const map = new Map<string, boolean>();
-    for (const r of q.data ?? []) {
+    for (const r of sourceData ?? []) {
       map.set(
         r["Número"],
         noCuadra(r, canalesQ.data, apartamentosQ.data, tarifasLimpiezaQ.data, tarifasComisionQ.data, tarifasCobroQ.data),
       );
     }
     return map;
-  }, [q.data, canalesQ.data, apartamentosQ.data, tarifasLimpiezaQ.data, tarifasComisionQ.data, tarifasCobroQ.data]);
+  }, [sourceData, canalesQ.data, apartamentosQ.data, tarifasLimpiezaQ.data, tarifasComisionQ.data, tarifasCobroQ.data]);
 
   const filtered = useMemo(() => {
-    if (!q.data) return [];
-    const s = search.trim().toLowerCase();
-    const byGroup = q.data.filter(
-      (r) => r["Habitaciones"] != null && filter.allowedAptNames.has(r["Habitaciones"]),
-    );
-    const bySearch = !s
-      ? byGroup
-      : byGroup.filter((r) =>
-          [r["Referencia"], r["Número"], r["Habitaciones"]].some(
-            (v) => v && String(v).toLowerCase().includes(s),
-          ),
-        );
-    const base = !soloNoCuadran ? bySearch : bySearch.filter((r) => noCuadraMap.get(r["Número"]));
+    if (!sourceData) return [];
+    // Both filters always apply when there's no search text; while
+    // searching, each only applies if its own toggle is on. Fechas doesn't
+    // need a client-side check here — it's already baked into which query
+    // (`q`, date-bound, or `searchQ`, unbound) fed `sourceData`.
+    const estadoActivo = !s || aplicarEstadoEnBusqueda;
+    const grupoActivo = !s || aplicarGrupoEnBusqueda;
+    let base: Reserva[] = sourceData;
+    if (estadoActivo) base = base.filter((r) => estadoFilter.selectedSet.has(r["Estado"] ?? ""));
+    if (grupoActivo) {
+      base = base.filter((r) => r["Habitaciones"] != null && filter.allowedAptNames.has(r["Habitaciones"]));
+    }
+    if (s) {
+      base = base.filter((r) =>
+        [r["Referencia"], r["Número"], r["Habitaciones"]].some(
+          (v) => v && String(v).toLowerCase().includes(s),
+        ),
+      );
+    }
+    if (soloNoCuadran) base = base.filter((r) => noCuadraMap.get(r["Número"]));
     const arr = [...base];
     const pick = (r: (typeof base)[number]) => {
       switch (sortKey) {
@@ -152,7 +193,10 @@ function ReservasPage() {
       return sortDir === "asc" ? c : -c;
     });
     return arr;
-  }, [q.data, search, sortKey, sortDir, filter.allowedAptNames, soloNoCuadran, noCuadraMap]);
+  }, [
+    sourceData, s, sortKey, sortDir, filter.allowedAptNames, soloNoCuadran, noCuadraMap,
+    estadoFilter.selectedSet, aplicarEstadoEnBusqueda, aplicarGrupoEnBusqueda,
+  ]);
 
   const toggleSort = (k: SortKey) => {
     if (sortKey === k) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
@@ -163,17 +207,66 @@ function ReservasPage() {
     <AppShell title="Reservas">
       <div className="flex flex-col sm:flex-row gap-3 mb-4">
         <DateRangePicker value={range} onChange={setRange} />
+        <Select value={dateMode} onValueChange={(v) => setDateMode(v as DateMode)}>
+          <SelectTrigger className="w-auto min-w-[220px] bg-white">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {DATE_MODE_OPTIONS.map((o) => (
+              <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
         <Input
           placeholder="Buscar por huésped, número o apartamento…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           className="max-w-md bg-white"
         />
+        {search.trim() !== "" && (
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs text-muted-foreground">Buscar con filtros:</span>
+            <button
+              type="button"
+              onClick={() => setAplicarEstadoEnBusqueda((v) => !v)}
+              className={cn(
+                "px-3 py-1 rounded-full text-xs border transition-colors",
+                aplicarEstadoEnBusqueda
+                  ? "bg-slate-900 text-white border-slate-900"
+                  : "bg-white text-muted-foreground hover:bg-muted",
+              )}
+            >
+              Estado
+            </button>
+            <button
+              type="button"
+              onClick={() => setAplicarGrupoEnBusqueda((v) => !v)}
+              className={cn(
+                "px-3 py-1 rounded-full text-xs border transition-colors",
+                aplicarGrupoEnBusqueda
+                  ? "bg-slate-900 text-white border-slate-900"
+                  : "bg-white text-muted-foreground hover:bg-muted",
+              )}
+            >
+              Grupo
+            </button>
+            <button
+              type="button"
+              onClick={() => setAplicarFechasEnBusqueda((v) => !v)}
+              className={cn(
+                "px-3 py-1 rounded-full text-xs border transition-colors",
+                aplicarFechasEnBusqueda
+                  ? "bg-slate-900 text-white border-slate-900"
+                  : "bg-white text-muted-foreground hover:bg-muted",
+              )}
+            >
+              Fechas
+            </button>
+          </div>
+        )}
       </div>
       <div className="mb-3 flex flex-wrap items-center gap-2">
-        <span className="text-xs font-medium text-muted-foreground">Estado:</span>
         <EstadoFilterChips {...estadoFilter} />
-        <span className="mx-1 h-5 w-px bg-border" />
         <button
           type="button"
           onClick={() => setSoloNoCuadran((v) => !v)}
@@ -205,13 +298,13 @@ function ReservasPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {q.isLoading && (
+            {sourceLoading && (
               <TableRow><TableCell colSpan={9} className="text-center py-8 text-muted-foreground">Cargando…</TableCell></TableRow>
             )}
-            {q.error && (
-              <TableRow><TableCell colSpan={9} className="text-center py-8 text-destructive">{(q.error as Error).message}</TableCell></TableRow>
+            {sourceError && (
+              <TableRow><TableCell colSpan={9} className="text-center py-8 text-destructive">{(sourceError as Error).message}</TableCell></TableRow>
             )}
-            {!q.isLoading && filtered.length === 0 && (
+            {!sourceLoading && filtered.length === 0 && (
               <TableRow><TableCell colSpan={9} className="text-center py-8 text-muted-foreground">Sin reservas</TableCell></TableRow>
             )}
             {filtered.map((r) => (
@@ -243,7 +336,7 @@ function ReservasPage() {
         numero={selected}
         open={!!selected}
         onOpenChange={(o) => !o && setSelected(null)}
-        onSaved={() => q.refetch()}
+        onSaved={() => { q.refetch(); if (usandoBusquedaAmplia) searchQ.refetch(); }}
         readOnly={!canEditReservas}
       />
     </AppShell>

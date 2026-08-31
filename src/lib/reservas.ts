@@ -1,24 +1,53 @@
 import { supabase } from "@/integrations/supabase/client";
 import type { ApartamentoInfo, Reserva, ReservaGestio, ReservaKB } from "./types";
 
+/** Which reservation date the from/to range filters on:
+ *   - checkin/checkout: a single KB date field, as before.
+ *   - periodo: the STAY overlaps [from, to] (Check in <= to AND Check-out
+ *     >= from) — catches reservations spanning into/out of the period, not
+ *     just ones starting or ending inside it.
+ *   - alta: "Fecha de creación" (when the booking itself was made in KB),
+ *     unrelated to the stay dates. */
+export type DateMode = "checkin" | "checkout" | "periodo" | "alta";
+
 export async function fetchReservas(params?: {
   from?: string;
   to?: string;
   search?: string;
   /** undefined = no filter (all estados, including any not yet known); [] = match nothing. */
   estados?: string[];
-  dateField?: "Check in" | "Check-out";
+  dateMode?: DateMode;
 }): Promise<Reserva[]> {
   if (params?.estados && params.estados.length === 0) return [];
-  const dateField = params?.dateField ?? "Check in";
-  let q = supabase.from("reservas_kb").select("*").order(dateField, { ascending: false });
-  if (params?.from) q = q.gte(dateField, params.from);
-  if (params?.to) q = q.lte(dateField, params.to);
+  const mode = params?.dateMode ?? "checkin";
+  let q = supabase.from("reservas_kb").select("*");
+  if (mode === "periodo") {
+    q = q.order("Check in", { ascending: false });
+    if (params?.to) q = q.lte("Check in", params.to);
+    if (params?.from) q = q.gte("Check-out", params.from);
+  } else if (mode === "alta") {
+    // "Fecha de creación" es un timestamp, no una fecha pura — el límite
+    // superior debe cubrir el día entero (hasta las 23:59:59), no solo su
+    // medianoche, o se perdería todo lo dado de alta ese mismo día.
+    q = q.order("Fecha de creación", { ascending: false });
+    if (params?.from) q = q.gte("Fecha de creación", params.from);
+    if (params?.to) q = q.lte("Fecha de creación", `${params.to}T23:59:59.999`);
+  } else {
+    const field = mode === "checkout" ? "Check-out" : "Check in";
+    q = q.order(field, { ascending: false });
+    if (params?.from) q = q.gte(field, params.from);
+    if (params?.to) q = q.lte(field, params.to);
+  }
   if (params?.estados && params.estados.length > 0) q = q.in("Estado", params.estados);
   if (params?.search) {
-    q = q.or(`"Referencia".ilike.%${params.search}%,"Número".ilike.%${params.search}%`);
+    q = q.or(
+      `"Referencia".ilike.%${params.search}%,"Número".ilike.%${params.search}%,"Habitaciones".ilike.%${params.search}%`,
+    );
   }
-  const { data: kb, error } = await q.limit(500);
+  // 500 -> 2000: ahora hay consultas sin límite de fechas (búsqueda "sin
+  // tener en cuenta Fechas" en /reservas), y la tabla ya supera las 500
+  // filas — mismo límite que fetchDistinctEstados más abajo, por prudencia.
+  const { data: kb, error } = await q.limit(2000);
   if (error) throw error;
   const nums = (kb ?? []).map((r) => (r as ReservaKB)["Número"]);
   if (!nums.length) return [];
