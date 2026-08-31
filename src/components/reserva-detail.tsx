@@ -135,19 +135,24 @@ export function ReservaDetail({
     return computeKbComparison(reserva, comisionTest, pctOtaEfectivo, pctCobroEfectivo);
   }, [reserva, g.PagadoEstancia, g.PagadoLimpieza, pctOtaEfectivo, pctCobroEfectivo, modoComision]);
 
-  // One-shot guard for the auto-validate-and-fill effect below — reset every
-  // time a fresh fetch starts (including reopening the same reservation), so
-  // it re-evaluates against whatever's actually in the DB right now rather
-  // than skipping because it already ran on a previous open.
+  // One-shot guard for the auto-validate-and-fill effect below. Re-armed (set
+  // back to false) only once the fresh reservation + gestio are actually in
+  // state — inside the fetch callback, NOT synchronously when the fetch
+  // starts. Re-arming early let the effect fire during the tick where
+  // `reserva` still held the previous reservation, burn the one-shot, and
+  // then skip the real reservation once it loaded.
   const autoFillDoneRef = useRef(false);
 
   useEffect(() => {
     if (!numero || !open) return;
+    // Ignore a fetch still in flight from a previous `numero` — without this,
+    // opening B before A resolved could let A's response overwrite B.
+    let cancelled = false;
     setReserva(null);
     setExtras([]);
     setExtrasOriginal([]);
-    autoFillDoneRef.current = false;
     fetchReserva(numero).then((r) => {
+      if (cancelled) return;
       setReserva(r);
       const gestio: Partial<ReservaGestio> = r?.gestio ?? {};
       // One-time prefill (local state only, not a DB write): for a reservation
@@ -172,13 +177,18 @@ export function ReservaDetail({
         PagadoEstancia: gestio.PagadoEstancia ?? prefill,
         TasaTuristica: gestio.TasaTuristica ?? tasaPrefill,
       });
+      // Re-arm now that this reservation's data is in state, so the auto-fill
+      // effect runs against it (and not against the one shown a tick ago).
+      autoFillDoneRef.current = false;
     });
     fetchReservaExtras(numero).then((rows) => {
+      if (cancelled) return;
       setExtrasOriginal(rows);
       setExtras(rows.map((x) => ({
         id_extra: x.id_extra, concepto: x.concepto, importe: x.importe, con_iva: x.con_iva,
       })));
     });
+    return () => { cancelled = true; };
   }, [numero, open]);
 
   // Auto-validate-and-fill pass. Runs once per open, after Pagado estancia
@@ -194,7 +204,13 @@ export function ReservaDetail({
   //      aplicar" chip as a manual fallback, and the warning below fires
   //      immediately using the suggested % as the tested value.
   useEffect(() => {
-    if (!reserva || !numero) return;
+    // `reserva` lags `numero` by one fetch: when `numero` changes it still
+    // holds the PREVIOUS reservation for a tick. On the first open after a
+    // page load the ref-data queries below are still loading, so the guard
+    // there covered it; once they're cached (every later open) this effect
+    // would otherwise run against the stale `reserva`, burn the one-shot
+    // ref, and skip the real auto-fill for the reservation now on screen.
+    if (!reserva || !numero || reserva["Número"] !== numero) return;
     if (
       canalesQ.isLoading || tarifasLimpiezaQ.isLoading ||
       tarifasComisionQ.isLoading || tarifasCobroQ.isLoading
