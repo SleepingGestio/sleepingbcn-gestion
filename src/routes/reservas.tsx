@@ -164,7 +164,16 @@ function ReservasPage() {
     let base: Reserva[] = sourceData;
     if (estadoActivo) base = base.filter((r) => estadoFilter.selectedSet.has(r["Estado"] ?? ""));
     if (grupoActivo) {
-      base = base.filter((r) => r["Habitaciones"] != null && filter.allowedAptNames.has(r["Habitaciones"]));
+      // "Habitaciones" puede ser una lista separada por comas cuando una
+      // reserva ocupa varias habitaciones/apartamentos a la vez (p. ej.
+      // "HABITACION 1.3, HABITACION 3.3"). La reserva pasa el filtro si
+      // CUALQUIERA de los nombres individuales está permitido. Con un solo
+      // nombre (sin comas) esto se comporta exactamente igual que antes.
+      base = base.filter(
+        (r) =>
+          r["Habitaciones"] != null &&
+          String(r["Habitaciones"]).split(",").some((n) => filter.allowedAptNames.has(n.trim())),
+      );
     }
     if (s) {
       base = base.filter((r) =>
