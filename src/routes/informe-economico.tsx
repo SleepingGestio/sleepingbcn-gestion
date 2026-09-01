@@ -35,6 +35,7 @@ import { EstadoBadge } from "@/components/estado-badge";
 import { DateRangePicker, currentMonthRange } from "@/components/date-range-picker";
 import { GroupFilterChips, useGroupFilter } from "@/components/group-filter";
 import { fmtDate, fmtEUR } from "@/lib/format";
+import { cn } from "@/lib/utils";
 import { Check, Download } from "lucide-react";
 
 export const Route = createFileRoute("/informe-economico")({
@@ -243,6 +244,29 @@ function sumar(filas: Fila[]): Subtotal {
   return t;
 }
 
+/** "15" → "15,00%"; "15.5" → "15,50%". Evita que un % amb residu de coma
+ *  flotant (p. ex. vingut d'un càlcul, no d'un valor desat pla) es mostri
+ *  amb un munt de decimals a la taula. */
+function fmtPct(n: number | null | undefined): string {
+  if (n == null || Number.isNaN(n)) return "—";
+  return `${n.toLocaleString("es-ES", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%`;
+}
+
+/** Agrupa un array de files JA ordenat per apartament (tandes consecutives)
+ *  en blocs { nombre, filas } — un bloc per cada tram consecutiu del mateix
+ *  apartament. No fa cap ordenació pròpia: depèn que `filas` ja vingui
+ *  ordenat per habitaciones abans de cridar-la. */
+function agruparPorApartamento(filasGrupo: Fila[]): { nombre: string; filas: Fila[] }[] {
+  const out: { nombre: string; filas: Fila[] }[] = [];
+  for (const f of filasGrupo) {
+    const nombre = f.habitaciones ?? "Sin apartamento";
+    const last = out[out.length - 1];
+    if (last && last.nombre === nombre) last.filas.push(f);
+    else out.push({ nombre, filas: [f] });
+  }
+  return out;
+}
+
 function VerifBadge({ verificada }: { verificada: boolean }) {
   return verificada ? (
     <span
@@ -258,6 +282,52 @@ function VerifBadge({ verificada }: { verificada: boolean }) {
       aria-label="Cuenta pendiente de verificar"
       className="inline-block h-4 w-4 shrink-0 rounded-sm border border-muted-foreground/30"
     />
+  );
+}
+
+/** Fila de subtotal/total reutilitzada per als 3 nivells (apartament, GRUP,
+ *  gran total) — evita triplicar les ~20 cel·les numèriques (i el risc de
+ *  desquadrar-les entre els 3 llocs en tocar-hi res). `labelColSpan` cobreix
+ *  sempre el bloc "Identificación" (7 columnes). */
+function SubtotalRow({
+  label,
+  s,
+  mostrarExtraConIva,
+  className,
+}: {
+  label: string;
+  s: Subtotal;
+  mostrarExtraConIva: boolean;
+  className?: string;
+}) {
+  return (
+    <TableRow className={className}>
+      <TableCell colSpan={7}>{label}</TableCell>
+      <TableCell className="text-right">{fmtEUR(s.pagadoEstancia)}</TableCell>
+      <TableCell className="text-right">{fmtEUR(s.pagadoLimpieza)}</TableCell>
+      <TableCell className="text-right">{fmtEUR(s.tasaTuristica)}</TableCell>
+      <TableCell className="text-right">{fmtEUR(s.totalPagadoCliente)}</TableCell>
+      <TableCell />
+      <TableCell />
+      <TableCell />
+      <TableCell className="text-right">{fmtEUR(s.baseSinIva)}</TableCell>
+      <TableCell className="text-right">{fmtEUR(s.iva)}</TableCell>
+      <TableCell className="text-right">{fmtEUR(s.comisionOta)}</TableCell>
+      <TableCell className="text-right">{fmtEUR(s.comisionCobro)}</TableCell>
+      <TableCell className="text-right">{fmtEUR(s.liquidadoOta)}</TableCell>
+      <TableCell className="text-right">{fmtEUR(s.ingresoNeto)}</TableCell>
+      <TableCell className="text-right">{fmtEUR(s.extrasSinIva)}</TableCell>
+      {mostrarExtraConIva && (
+        <TableCell className="text-right bg-amber-50/60">{fmtEUR(s.extraConIvaBruto)}</TableCell>
+      )}
+      {mostrarExtraConIva && (
+        <TableCell className="text-right bg-amber-50/60">{fmtEUR(s.netConIva)}</TableCell>
+      )}
+      <TableCell className="text-right">{fmtEUR(s.ingresoNetoEstada)}</TableCell>
+      <TableCell className="text-right">{fmtEUR(s.limpiezaNeta)}</TableCell>
+      <TableCell className="text-right">{fmtEUR(s.totalIngresosNetos)}</TableCell>
+      <TableCell />
+    </TableRow>
   );
 }
 
@@ -279,6 +349,7 @@ function exportarCsv(
   grupos: { id: number | null; nombre: string }[],
   total: Subtotal,
   range: { from: string; to: string },
+  orden: "apartamento" | "fecha",
 ) {
   const headers = [
     "Check-out",
@@ -372,7 +443,14 @@ function exportarCsv(
   for (const grupo of grupos) {
     const filasGrupo = filas.filter((f) => f.idGrupo === grupo.id);
     if (filasGrupo.length === 0) continue;
-    for (const f of filasGrupo) rows.push(filaRow(f, grupo.nombre));
+    if (orden === "apartamento") {
+      for (const apt of agruparPorApartamento(filasGrupo)) {
+        for (const f of apt.filas) rows.push(filaRow(f, grupo.nombre));
+        rows.push(subtotalRow(`  ${apt.nombre}`, sumar(apt.filas)));
+      }
+    } else {
+      for (const f of filasGrupo) rows.push(filaRow(f, grupo.nombre));
+    }
     rows.push(subtotalRow(grupo.nombre, sumar(filasGrupo)));
   }
   rows.push(subtotalRow(`TOTAL (${filas.length} reservas)`, total));
@@ -392,7 +470,10 @@ function exportarCsv(
 function InformeEconomicoPage() {
   const [selected, setSelected] = useState<string | null>(null);
   const [range, setRange] = useState(currentMonthRange);
-  const filter = useGroupFilter();
+  const [orden, setOrden] = useState<"apartamento" | "fecha">("apartamento");
+  // A diferència de la resta de pàgines, aquí el grup per defecte és "Todos"
+  // (no "Por defecto") — un informe de diners no s'ha d'amagar cap grup.
+  const filter = useGroupFilter("all");
 
   // Període sempre per data de Check-out (veure esIncluible més amunt) — no
   // Check-in com a la resta de l'app.
@@ -454,7 +535,12 @@ function InformeEconomicoPage() {
           tarifasCobroQ.data,
         ),
       )
-      .sort((a, b) => (a.checkout ?? "").localeCompare(b.checkout ?? ""));
+      .sort((a, b) =>
+        orden === "apartamento"
+          ? (a.habitaciones ?? "").localeCompare(b.habitaciones ?? "") ||
+            (a.checkout ?? "").localeCompare(b.checkout ?? "")
+          : (a.checkout ?? "").localeCompare(b.checkout ?? ""),
+      );
   }, [
     q.data,
     extrasQ.data,
@@ -466,6 +552,7 @@ function InformeEconomicoPage() {
     tarifasLimpiezaQ.data,
     tarifasComisionQ.data,
     tarifasCobroQ.data,
+    orden,
   ]);
 
   // Columnes condicionals "Extra c/IVA" / "Net c/IVA": només es mostren si
@@ -492,11 +579,38 @@ function InformeEconomicoPage() {
     <AppShell title="Informe económico">
       <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-1">
         <DateRangePicker value={range} onChange={setRange} />
+        <div className="flex items-center gap-1 rounded-lg border px-1.5 py-1 text-xs">
+          <span className="pl-1 text-muted-foreground">Orden:</span>
+          <button
+            type="button"
+            onClick={() => setOrden("apartamento")}
+            className={cn(
+              "px-2.5 py-1 rounded-full border transition-colors",
+              orden === "apartamento"
+                ? "bg-primary text-primary-foreground border-primary"
+                : "bg-white hover:bg-muted",
+            )}
+          >
+            Apartamento
+          </button>
+          <button
+            type="button"
+            onClick={() => setOrden("fecha")}
+            className={cn(
+              "px-2.5 py-1 rounded-full border transition-colors",
+              orden === "fecha"
+                ? "bg-primary text-primary-foreground border-primary"
+                : "bg-white hover:bg-muted",
+            )}
+          >
+            Fecha
+          </button>
+        </div>
         <Button
           type="button"
           variant="outline"
           size="sm"
-          onClick={() => exportarCsv(filas, grupos, total, range)}
+          onClick={() => exportarCsv(filas, grupos, total, range, orden)}
           disabled={loading || filas.length === 0}
         >
           <Download className="mr-1.5 h-4 w-4" />
@@ -510,7 +624,7 @@ function InformeEconomicoPage() {
       <GroupFilterChips {...filter} />
 
       <Card className="overflow-hidden bg-white">
-        <Table>
+        <Table className="[&_td]:whitespace-nowrap [&_th]:whitespace-nowrap">
           <TableHeader>
             <TableRow className="hover:bg-transparent">
               <TableHead
@@ -623,6 +737,10 @@ function InformeEconomicoPage() {
                 const filasGrupo = filas.filter((f) => f.idGrupo === grupo.id);
                 if (filasGrupo.length === 0) return null;
                 const sub = sumar(filasGrupo);
+                const bloques =
+                  orden === "apartamento"
+                    ? agruparPorApartamento(filasGrupo)
+                    : [{ nombre: "", filas: filasGrupo }];
                 return (
                   <Fragment key={grupo.id ?? "sin-grupo"}>
                     <TableRow className="bg-[#637863]/15 hover:bg-[#637863]/15">
@@ -633,141 +751,107 @@ function InformeEconomicoPage() {
                         {grupo.nombre}
                       </TableCell>
                     </TableRow>
-                    {filasGrupo.map((f) => (
-                      <TableRow
-                        key={f.numero}
-                        className="cursor-pointer"
-                        onClick={() => setSelected(f.numero)}
-                      >
-                        <TableCell>{fmtDate(f.checkout)}</TableCell>
-                        <TableCell>{grupo.nombre}</TableCell>
-                        <TableCell>{f.habitaciones ?? "—"}</TableCell>
-                        <TableCell>{f.huespedes ?? "—"}</TableCell>
-                        <TableCell>{f.portal ?? "—"}</TableCell>
-                        <TableCell
-                          className="max-w-[130px] truncate"
-                          title={f.referencia ?? undefined}
-                        >
-                          {f.referencia ?? "—"}
-                        </TableCell>
-                        <TableCell>
-                          <EstadoBadge estado={f.estado} enLimpieza={f.enLimpieza} />
-                        </TableCell>
+                    {bloques.map((bloque, i) => (
+                      <Fragment key={`${grupo.id ?? "sin-grupo"}-${bloque.nombre}-${i}`}>
+                        {bloque.filas.map((f) => (
+                          <TableRow
+                            key={f.numero}
+                            className="cursor-pointer"
+                            onClick={() => setSelected(f.numero)}
+                          >
+                            <TableCell>{fmtDate(f.checkout)}</TableCell>
+                            <TableCell>{grupo.nombre}</TableCell>
+                            <TableCell>{f.habitaciones ?? "—"}</TableCell>
+                            <TableCell>{f.huespedes ?? "—"}</TableCell>
+                            <TableCell>{f.portal ?? "—"}</TableCell>
+                            <TableCell
+                              className="max-w-[130px] truncate"
+                              title={f.referencia ?? undefined}
+                            >
+                              {f.referencia ?? "—"}
+                            </TableCell>
+                            <TableCell>
+                              <EstadoBadge estado={f.estado} enLimpieza={f.enLimpieza} />
+                            </TableCell>
 
-                        <TableCell className="text-right">{fmtEUR(f.pagadoEstancia)}</TableCell>
-                        <TableCell className="text-right">{fmtEUR(f.pagadoLimpieza)}</TableCell>
-                        <TableCell className="text-right">{fmtEUR(f.tasaTuristica)}</TableCell>
-                        <TableCell className="text-right">{fmtEUR(f.totalPagadoCliente)}</TableCell>
-                        <TableCell className="text-center">
-                          <VerifBadge verificada={f.verificada} />
-                        </TableCell>
-                        <TableCell className="text-right">
-                          {f.pctOta != null ? `${f.pctOta}%` : "—"}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          {f.aplicaCobro && f.pctCobro != null ? `${f.pctCobro}%` : "—"}
-                        </TableCell>
+                            <TableCell className="text-right">{fmtEUR(f.pagadoEstancia)}</TableCell>
+                            <TableCell className="text-right">{fmtEUR(f.pagadoLimpieza)}</TableCell>
+                            <TableCell className="text-right">{fmtEUR(f.tasaTuristica)}</TableCell>
+                            <TableCell className="text-right">
+                              {fmtEUR(f.totalPagadoCliente)}
+                            </TableCell>
+                            <TableCell className="text-center">
+                              <VerifBadge verificada={f.verificada} />
+                            </TableCell>
+                            <TableCell className="text-right">{fmtPct(f.pctOta)}</TableCell>
+                            <TableCell className="text-right">
+                              {f.aplicaCobro ? fmtPct(f.pctCobro) : "—"}
+                            </TableCell>
 
-                        <TableCell className="text-right">{fmtEUR(f.baseSinIva)}</TableCell>
-                        <TableCell className="text-right">{fmtEUR(f.iva)}</TableCell>
-                        <TableCell className="text-right">{fmtEUR(f.comisionOta)}</TableCell>
-                        <TableCell className="text-right">
-                          {f.aplicaCobro ? fmtEUR(f.comisionCobro) : "—"}
-                        </TableCell>
+                            <TableCell className="text-right">{fmtEUR(f.baseSinIva)}</TableCell>
+                            <TableCell className="text-right">{fmtEUR(f.iva)}</TableCell>
+                            <TableCell className="text-right">{fmtEUR(f.comisionOta)}</TableCell>
+                            <TableCell className="text-right">
+                              {f.aplicaCobro ? fmtEUR(f.comisionCobro) : "—"}
+                            </TableCell>
 
-                        <TableCell className="text-right">{fmtEUR(f.liquidadoOta)}</TableCell>
+                            <TableCell className="text-right">{fmtEUR(f.liquidadoOta)}</TableCell>
 
-                        <TableCell className="text-right">{fmtEUR(f.ingresoNeto)}</TableCell>
-                        <TableCell className="text-right">{fmtEUR(f.extrasSinIva)}</TableCell>
-                        {mostrarExtraConIva && (
-                          <TableCell className="text-right bg-amber-50/60">
-                            {fmtEUR(f.extraConIvaBruto)}
-                          </TableCell>
+                            <TableCell className="text-right">{fmtEUR(f.ingresoNeto)}</TableCell>
+                            <TableCell className="text-right">{fmtEUR(f.extrasSinIva)}</TableCell>
+                            {mostrarExtraConIva && (
+                              <TableCell className="text-right bg-amber-50/60">
+                                {fmtEUR(f.extraConIvaBruto)}
+                              </TableCell>
+                            )}
+                            {mostrarExtraConIva && (
+                              <TableCell className="text-right bg-amber-50/60 font-semibold">
+                                {fmtEUR(f.netConIva)}
+                              </TableCell>
+                            )}
+                            <TableCell className="text-right">
+                              {fmtEUR(f.ingresoNetoEstada)}
+                            </TableCell>
+                            <TableCell className="text-right">{fmtEUR(f.limpiezaNeta)}</TableCell>
+
+                            <TableCell className="text-right font-medium">
+                              {fmtEUR(f.totalIngresosNetos)}
+                            </TableCell>
+
+                            <TableCell
+                              className="max-w-[170px] truncate"
+                              title={f.observaciones ?? undefined}
+                            >
+                              {f.observaciones ?? <span className="text-muted-foreground">—</span>}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                        {orden === "apartamento" && (
+                          <SubtotalRow
+                            label={`Subtotal ${bloque.nombre} (${bloque.filas.length})`}
+                            s={sumar(bloque.filas)}
+                            mostrarExtraConIva={mostrarExtraConIva}
+                            className="bg-slate-50 hover:bg-slate-50 text-[13px]"
+                          />
                         )}
-                        {mostrarExtraConIva && (
-                          <TableCell className="text-right bg-amber-50/60 font-semibold">
-                            {fmtEUR(f.netConIva)}
-                          </TableCell>
-                        )}
-                        <TableCell className="text-right">{fmtEUR(f.ingresoNetoEstada)}</TableCell>
-                        <TableCell className="text-right">{fmtEUR(f.limpiezaNeta)}</TableCell>
-
-                        <TableCell className="text-right font-medium">
-                          {fmtEUR(f.totalIngresosNetos)}
-                        </TableCell>
-
-                        <TableCell
-                          className="max-w-[170px] truncate"
-                          title={f.observaciones ?? undefined}
-                        >
-                          {f.observaciones ?? <span className="text-muted-foreground">—</span>}
-                        </TableCell>
-                      </TableRow>
+                      </Fragment>
                     ))}
-                    <TableRow className="bg-muted/30 hover:bg-muted/30 font-semibold">
-                      <TableCell colSpan={7}>
-                        Subtotal {grupo.nombre} ({filasGrupo.length})
-                      </TableCell>
-                      <TableCell className="text-right">{fmtEUR(sub.pagadoEstancia)}</TableCell>
-                      <TableCell className="text-right">{fmtEUR(sub.pagadoLimpieza)}</TableCell>
-                      <TableCell className="text-right">{fmtEUR(sub.tasaTuristica)}</TableCell>
-                      <TableCell className="text-right">{fmtEUR(sub.totalPagadoCliente)}</TableCell>
-                      <TableCell />
-                      <TableCell />
-                      <TableCell />
-                      <TableCell className="text-right">{fmtEUR(sub.baseSinIva)}</TableCell>
-                      <TableCell className="text-right">{fmtEUR(sub.iva)}</TableCell>
-                      <TableCell className="text-right">{fmtEUR(sub.comisionOta)}</TableCell>
-                      <TableCell className="text-right">{fmtEUR(sub.comisionCobro)}</TableCell>
-                      <TableCell className="text-right">{fmtEUR(sub.liquidadoOta)}</TableCell>
-                      <TableCell className="text-right">{fmtEUR(sub.ingresoNeto)}</TableCell>
-                      <TableCell className="text-right">{fmtEUR(sub.extrasSinIva)}</TableCell>
-                      {mostrarExtraConIva && (
-                        <TableCell className="text-right bg-amber-50/60">
-                          {fmtEUR(sub.extraConIvaBruto)}
-                        </TableCell>
-                      )}
-                      {mostrarExtraConIva && (
-                        <TableCell className="text-right bg-amber-50/60">
-                          {fmtEUR(sub.netConIva)}
-                        </TableCell>
-                      )}
-                      <TableCell className="text-right">{fmtEUR(sub.ingresoNetoEstada)}</TableCell>
-                      <TableCell className="text-right">{fmtEUR(sub.limpiezaNeta)}</TableCell>
-                      <TableCell className="text-right">{fmtEUR(sub.totalIngresosNetos)}</TableCell>
-                      <TableCell />
-                    </TableRow>
+                    <SubtotalRow
+                      label={`Subtotal ${grupo.nombre} (${filasGrupo.length})`}
+                      s={sub}
+                      mostrarExtraConIva={mostrarExtraConIva}
+                      className="bg-muted/30 hover:bg-muted/30 font-semibold"
+                    />
                   </Fragment>
                 );
               })}
             {!loading && filas.length > 0 && (
-              <TableRow className="bg-slate-900 text-white hover:bg-slate-900 font-semibold">
-                <TableCell colSpan={7}>Total ({filas.length} reservas)</TableCell>
-                <TableCell className="text-right">{fmtEUR(total.pagadoEstancia)}</TableCell>
-                <TableCell className="text-right">{fmtEUR(total.pagadoLimpieza)}</TableCell>
-                <TableCell className="text-right">{fmtEUR(total.tasaTuristica)}</TableCell>
-                <TableCell className="text-right">{fmtEUR(total.totalPagadoCliente)}</TableCell>
-                <TableCell />
-                <TableCell />
-                <TableCell />
-                <TableCell className="text-right">{fmtEUR(total.baseSinIva)}</TableCell>
-                <TableCell className="text-right">{fmtEUR(total.iva)}</TableCell>
-                <TableCell className="text-right">{fmtEUR(total.comisionOta)}</TableCell>
-                <TableCell className="text-right">{fmtEUR(total.comisionCobro)}</TableCell>
-                <TableCell className="text-right">{fmtEUR(total.liquidadoOta)}</TableCell>
-                <TableCell className="text-right">{fmtEUR(total.ingresoNeto)}</TableCell>
-                <TableCell className="text-right">{fmtEUR(total.extrasSinIva)}</TableCell>
-                {mostrarExtraConIva && (
-                  <TableCell className="text-right">{fmtEUR(total.extraConIvaBruto)}</TableCell>
-                )}
-                {mostrarExtraConIva && (
-                  <TableCell className="text-right">{fmtEUR(total.netConIva)}</TableCell>
-                )}
-                <TableCell className="text-right">{fmtEUR(total.ingresoNetoEstada)}</TableCell>
-                <TableCell className="text-right">{fmtEUR(total.limpiezaNeta)}</TableCell>
-                <TableCell className="text-right">{fmtEUR(total.totalIngresosNetos)}</TableCell>
-                <TableCell />
-              </TableRow>
+              <SubtotalRow
+                label={`Total (${filas.length} reservas)`}
+                s={total}
+                mostrarExtraConIva={mostrarExtraConIva}
+                className="bg-slate-900 text-white hover:bg-slate-900 font-semibold"
+              />
             )}
           </TableBody>
         </Table>

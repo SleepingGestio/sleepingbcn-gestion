@@ -36,8 +36,13 @@ async function fetchApartamentos(): Promise<Apartamento[]> {
   return (data ?? []) as Apartamento[];
 }
 
-export function useGroupFilter() {
-  const [filterMode, setFilterMode] = useState<FilterMode>("default");
+/** `initialMode` lets a page start with a different default than the usual
+ *  "Por defecto" (grupos marcats `mostrar_por_defecto`) — p. ex. l'informe
+ *  económico arrenca amb "Todos" perquè un informe de diners no s'ha
+ *  d'amagar cap grup per defecte. La resta de pàgines no passen res i
+ *  mantenen el comportament de sempre. */
+export function useGroupFilter(initialMode: FilterMode = "default") {
+  const [filterMode, setFilterMode] = useState<FilterMode>(initialMode);
   const [customGroups, setCustomGroups] = useState<Set<number>>(new Set());
 
   const gruposQ = useQuery({ queryKey: ["grupos_apartamentos"], queryFn: fetchGrupos });
