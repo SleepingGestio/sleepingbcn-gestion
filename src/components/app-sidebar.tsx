@@ -1,6 +1,6 @@
 import { Link, useRouterState } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { Calendar, LogIn, Sparkles, CalendarRange, Megaphone, Settings, LogOut, Smartphone, Clock, History, Wrench } from "lucide-react";
+import { Calendar, LogIn, Sparkles, CalendarRange, Megaphone, Settings, LogOut, Smartphone, Clock, History, Wrench, Euro } from "lucide-react";
 import { getAppEnv } from "@/lib/api/app-env.functions";
 import {
   Sidebar,
@@ -22,6 +22,7 @@ type NavItem = { title: string; url: string; icon: typeof Calendar; menu: MenuKe
 const NAV_ITEMS: NavItem[] = [
   { title: "Importaciones", url: "/importaciones", icon: History, menu: "importaciones" },
   { title: "Reservas", url: "/reservas", icon: Calendar, menu: "reservas" },
+  { title: "Informe económico", url: "/informe-economico", icon: Euro, menu: "informe_economico" },
   { title: "Check-ins de hoy", url: "/checkins", icon: LogIn, menu: "checkins" },
   { title: "Programación limpiezas", url: "/programacion-limpiezas", icon: CalendarRange, menu: "programacion_limpiezas" },
   { title: "Comunicar tareas", url: "/comunicar-tareas", icon: Megaphone, menu: "comunicar_tareas" },

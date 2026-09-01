@@ -4,6 +4,7 @@ import { useCurrentPersonal } from "@/hooks/use-current-personal";
 
 export type MenuKey =
   | "reservas"
+  | "informe_economico"
   | "checkins"
   | "limpiezas_asignadas"
   | "programacion_limpiezas"
@@ -21,6 +22,7 @@ export type MenuKey =
 
 export const ALL_MENUS: { key: MenuKey; label: string }[] = [
   { key: "reservas", label: "Reservas" },
+  { key: "informe_economico", label: "Informe económico" },
   { key: "checkins", label: "Check-ins" },
   { key: "limpiezas_asignadas", label: "Limpiezas asignadas" },
   { key: "programacion_limpiezas", label: "Programación limpiezas" },
@@ -43,6 +45,7 @@ export const ALL_MENUS: { key: MenuKey; label: string }[] = [
 // routes/index.tsx) — keep this the only place this mapping is defined.
 export const ROUTE_TO_MENU: { route: string; menu: MenuKey }[] = [
   { route: "/reservas", menu: "reservas" },
+  { route: "/informe-economico", menu: "informe_economico" },
   { route: "/checkins", menu: "checkins" },
   { route: "/limpiezas", menu: "limpiezas_asignadas" },
   { route: "/programacion-limpiezas", menu: "programacion_limpiezas" },
