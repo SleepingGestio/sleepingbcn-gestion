@@ -2410,6 +2410,12 @@ export type Database = {
         }
         Relationships: []
       }
+      v_distinct_estados_reservas: {
+        Row: {
+          Estado: string | null
+        }
+        Relationships: []
+      }
       v_reservas_por_apartamento: {
         Row: {
           "Check in": string | null

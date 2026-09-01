@@ -46,8 +46,16 @@ export async function fetchReservas(params?: {
   }
   // 500 -> 2000: ahora hay consultas sin límite de fechas (búsqueda "sin
   // tener en cuenta Fechas" en /reservas), y la tabla ya supera las 500
-  // filas — mismo límite que fetchDistinctEstados más abajo, por prudencia.
-  const { data: kb, error } = await q.limit(2000);
+  // filas.
+  // 2000 -> 10000 (provisional): tras el import histórico reservas_kb ya
+  // tiene ~4.612 filas y seguirá creciendo (más años pendientes de
+  // importar), así que un rango de fechas amplio o el modo "Alta" podía
+  // truncar la lista sin avisar al usuario. Esto NO es la solución real:
+  // la paginación de verdad es un trabajo aparte a retomar cuando se sepa
+  // el volumen total del import histórico. La query lleva `.order()` sobre
+  // el campo de fecha, así que mientras tanto se conservan las 10.000 más
+  // recientes por ese campo, no una muestra arbitraria.
+  const { data: kb, error } = await q.limit(10000);
   if (error) throw error;
   const nums = (kb ?? []).map((r) => (r as ReservaKB)["Número"]);
   if (!nums.length) return [];
@@ -67,11 +75,16 @@ export async function fetchReservas(params?: {
  *  new status Krossbooking starts sending shows up in filters without a
  *  code change. */
 export async function fetchDistinctEstados(): Promise<string[]> {
+  // Vista v_distinct_estados_reservas (migración 20260901120000): DISTINCT
+  // real sobre reservas_kb."Estado". Antes esto era
+  // `.select("Estado").limit(2000)` de-duplicado en cliente, que con la
+  // tabla ya por encima de 2000 filas devolvía un subconjunto arbitrario
+  // (y por eso el filtro "Estado" de /reservas dejó de listar todos los
+  // valores). El resultado son ~5 filas siempre, sea cual sea el tamaño de
+  // la tabla.
   const { data, error } = await supabase
-    .from("reservas_kb")
-    .select("Estado")
-    .not("Estado", "is", null)
-    .limit(2000);
+    .from("v_distinct_estados_reservas")
+    .select("Estado");
   if (error) throw error;
   const set = new Set<string>();
   for (const r of (data ?? []) as { Estado: string | null }[]) {
