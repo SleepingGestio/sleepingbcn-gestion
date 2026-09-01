@@ -288,17 +288,22 @@ function VerifBadge({ verificada }: { verificada: boolean }) {
 /** Fila de subtotal/total reutilitzada per als 3 nivells (apartament, GRUP,
  *  gran total) — evita triplicar les ~20 cel·les numèriques (i el risc de
  *  desquadrar-les entre els 3 llocs en tocar-hi res). `labelColSpan` cobreix
- *  sempre el bloc "Identificación" (7 columnes). */
+ *  sempre el bloc "Identificación" (7 columnes). `tintExtra` (per defecte
+ *  `true`) aplica el fons ambre de les 2 columnes condicionals — es passa
+ *  `false` només al gran total (fons fosc), perquè l'ambre hi quedava com
+ *  un pedaç estrany sobre el negre; a l'apartament i al GRUP es manté. */
 function SubtotalRow({
   label,
   s,
   mostrarExtraConIva,
   className,
+  tintExtra = true,
 }: {
   label: string;
   s: Subtotal;
   mostrarExtraConIva: boolean;
   className?: string;
+  tintExtra?: boolean;
 }) {
   return (
     <TableRow className={className}>
@@ -318,10 +323,14 @@ function SubtotalRow({
       <TableCell className="text-right">{fmtEUR(s.ingresoNeto)}</TableCell>
       <TableCell className="text-right">{fmtEUR(s.extrasSinIva)}</TableCell>
       {mostrarExtraConIva && (
-        <TableCell className="text-right bg-amber-50/60">{fmtEUR(s.extraConIvaBruto)}</TableCell>
+        <TableCell className={cn("text-right", tintExtra && "bg-amber-50/60")}>
+          {fmtEUR(s.extraConIvaBruto)}
+        </TableCell>
       )}
       {mostrarExtraConIva && (
-        <TableCell className="text-right bg-amber-50/60">{fmtEUR(s.netConIva)}</TableCell>
+        <TableCell className={cn("text-right", tintExtra && "bg-amber-50/60")}>
+          {fmtEUR(s.netConIva)}
+        </TableCell>
       )}
       <TableCell className="text-right">{fmtEUR(s.ingresoNetoEstada)}</TableCell>
       <TableCell className="text-right">{fmtEUR(s.limpiezaNeta)}</TableCell>
@@ -851,6 +860,7 @@ function InformeEconomicoPage() {
                 s={total}
                 mostrarExtraConIva={mostrarExtraConIva}
                 className="bg-slate-900 text-white hover:bg-slate-900 font-semibold"
+                tintExtra={false}
               />
             )}
           </TableBody>
