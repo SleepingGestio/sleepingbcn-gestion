@@ -11,6 +11,30 @@ export async function fetchReservaExtras(numero: string): Promise<ReservaExtra[]
   return (data ?? []) as ReservaExtra[];
 }
 
+/** Extras total (split sin/con IVA, same convention as reserva-detail.tsx's
+ *  `ledger`) for a batch of reservations — one query for the whole visible
+ *  list instead of per-row, same pattern as the reference tables /reservas
+ *  fetches whole for its "No cuadra" column. Only numbers with at least one
+ *  extra get an entry; callers should default to {sinIva:0, conIva:0}. */
+export async function fetchReservaExtrasTotales(
+  numeros: string[],
+): Promise<Map<string, { sinIva: number; conIva: number }>> {
+  const map = new Map<string, { sinIva: number; conIva: number }>();
+  if (!numeros.length) return map;
+  const { data, error } = await supabase
+    .from("reservas_extras")
+    .select("numero_reserva, importe, con_iva")
+    .in("numero_reserva", numeros);
+  if (error) throw error;
+  for (const r of (data ?? []) as { numero_reserva: string; importe: number; con_iva: boolean }[]) {
+    const cur = map.get(r.numero_reserva) ?? { sinIva: 0, conIva: 0 };
+    if (r.con_iva) cur.conIva += r.importe;
+    else cur.sinIva += r.importe;
+    map.set(r.numero_reserva, cur);
+  }
+  return map;
+}
+
 /**
  * Reconciles the popover's draft list against what's stored: inserts new
  * rows, updates changed ones, deletes removed ones. Drafts with a blank

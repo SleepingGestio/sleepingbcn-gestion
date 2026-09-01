@@ -15,6 +15,7 @@ import { Route as ProgramacionLimpiezasRouteImport } from './routes/programacion
 import { Route as MiDiaRouteImport } from './routes/mi-dia'
 import { Route as MantenimientoRouteImport } from './routes/mantenimiento'
 import { Route as LimpiezasRouteImport } from './routes/limpiezas'
+import { Route as InformeEconomicoRouteImport } from './routes/informe-economico'
 import { Route as ImportacionesRouteImport } from './routes/importaciones'
 import { Route as ConfiguracionRouteImport } from './routes/configuracion'
 import { Route as ComunicarTareasRouteImport } from './routes/comunicar-tareas'
@@ -51,6 +52,11 @@ const MantenimientoRoute = MantenimientoRouteImport.update({
 const LimpiezasRoute = LimpiezasRouteImport.update({
   id: '/limpiezas',
   path: '/limpiezas',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const InformeEconomicoRoute = InformeEconomicoRouteImport.update({
+  id: '/informe-economico',
+  path: '/informe-economico',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ImportacionesRoute = ImportacionesRouteImport.update({
@@ -95,6 +101,7 @@ export interface FileRoutesByFullPath {
   '/comunicar-tareas': typeof ComunicarTareasRoute
   '/configuracion': typeof ConfiguracionRoute
   '/importaciones': typeof ImportacionesRoute
+  '/informe-economico': typeof InformeEconomicoRoute
   '/limpiezas': typeof LimpiezasRoute
   '/mantenimiento': typeof MantenimientoRoute
   '/mi-dia': typeof MiDiaRoute
@@ -110,6 +117,7 @@ export interface FileRoutesByTo {
   '/comunicar-tareas': typeof ComunicarTareasRoute
   '/configuracion': typeof ConfiguracionRoute
   '/importaciones': typeof ImportacionesRoute
+  '/informe-economico': typeof InformeEconomicoRoute
   '/limpiezas': typeof LimpiezasRoute
   '/mantenimiento': typeof MantenimientoRoute
   '/mi-dia': typeof MiDiaRoute
@@ -125,6 +133,7 @@ export interface FileRoutesById {
   '/comunicar-tareas': typeof ComunicarTareasRoute
   '/configuracion': typeof ConfiguracionRoute
   '/importaciones': typeof ImportacionesRoute
+  '/informe-economico': typeof InformeEconomicoRoute
   '/limpiezas': typeof LimpiezasRoute
   '/mantenimiento': typeof MantenimientoRoute
   '/mi-dia': typeof MiDiaRoute
@@ -142,6 +151,7 @@ export interface FileRouteTypes {
     | '/comunicar-tareas'
     | '/configuracion'
     | '/importaciones'
+    | '/informe-economico'
     | '/limpiezas'
     | '/mantenimiento'
     | '/mi-dia'
@@ -157,6 +167,7 @@ export interface FileRouteTypes {
     | '/comunicar-tareas'
     | '/configuracion'
     | '/importaciones'
+    | '/informe-economico'
     | '/limpiezas'
     | '/mantenimiento'
     | '/mi-dia'
@@ -171,6 +182,7 @@ export interface FileRouteTypes {
     | '/comunicar-tareas'
     | '/configuracion'
     | '/importaciones'
+    | '/informe-economico'
     | '/limpiezas'
     | '/mantenimiento'
     | '/mi-dia'
@@ -187,6 +199,7 @@ export interface RootRouteChildren {
   ComunicarTareasRoute: typeof ComunicarTareasRoute
   ConfiguracionRoute: typeof ConfiguracionRoute
   ImportacionesRoute: typeof ImportacionesRoute
+  InformeEconomicoRoute: typeof InformeEconomicoRoute
   LimpiezasRoute: typeof LimpiezasRoute
   MantenimientoRoute: typeof MantenimientoRoute
   MiDiaRoute: typeof MiDiaRoute
@@ -237,6 +250,13 @@ declare module '@tanstack/react-router' {
       path: '/limpiezas'
       fullPath: '/limpiezas'
       preLoaderRoute: typeof LimpiezasRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/informe-economico': {
+      id: '/informe-economico'
+      path: '/informe-economico'
+      fullPath: '/informe-economico'
+      preLoaderRoute: typeof InformeEconomicoRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/importaciones': {
@@ -311,6 +331,7 @@ const rootRouteChildren: RootRouteChildren = {
   ComunicarTareasRoute: ComunicarTareasRoute,
   ConfiguracionRoute: ConfiguracionRoute,
   ImportacionesRoute: ImportacionesRoute,
+  InformeEconomicoRoute: InformeEconomicoRoute,
   LimpiezasRoute: LimpiezasRoute,
   MantenimientoRoute: MantenimientoRoute,
   MiDiaRoute: MiDiaRoute,
@@ -321,3 +342,13 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { startInstance } from './start.ts'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+  }
+}
