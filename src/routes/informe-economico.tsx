@@ -311,7 +311,7 @@ function SubtotalRow({
       <TableCell className="text-right">{fmtEUR(s.pagadoEstancia)}</TableCell>
       <TableCell className="text-right">{fmtEUR(s.pagadoLimpieza)}</TableCell>
       <TableCell className="text-right">{fmtEUR(s.tasaTuristica)}</TableCell>
-      <TableCell className="text-right">{fmtEUR(s.totalPagadoCliente)}</TableCell>
+      <TableCell className="text-right font-semibold">{fmtEUR(s.totalPagadoCliente)}</TableCell>
       <TableCell />
       <TableCell />
       <TableCell />
@@ -320,7 +320,7 @@ function SubtotalRow({
       <TableCell className="text-right">{fmtEUR(s.comisionOta)}</TableCell>
       <TableCell className="text-right">{fmtEUR(s.comisionCobro)}</TableCell>
       <TableCell className="text-right">{fmtEUR(s.liquidadoOta)}</TableCell>
-      <TableCell className="text-right">{fmtEUR(s.ingresoNeto)}</TableCell>
+      <TableCell className="text-right font-semibold">{fmtEUR(s.ingresoNeto)}</TableCell>
       <TableCell className="text-right">{fmtEUR(s.extrasSinIva)}</TableCell>
       {mostrarExtraConIva && (
         <TableCell className={cn("text-right", tintExtra && "bg-amber-50/60")}>
@@ -334,7 +334,7 @@ function SubtotalRow({
       )}
       <TableCell className="text-right">{fmtEUR(s.ingresoNetoEstada)}</TableCell>
       <TableCell className="text-right">{fmtEUR(s.limpiezaNeta)}</TableCell>
-      <TableCell className="text-right">{fmtEUR(s.totalIngresosNetos)}</TableCell>
+      <TableCell className="text-right font-semibold">{fmtEUR(s.totalIngresosNetos)}</TableCell>
       <TableCell />
     </TableRow>
   );
@@ -633,7 +633,7 @@ function InformeEconomicoPage() {
       <GroupFilterChips {...filter} />
 
       <Card className="overflow-hidden bg-white">
-        <Table className="[&_td]:whitespace-nowrap [&_th]:whitespace-nowrap">
+        <Table className="[&_td]:whitespace-nowrap">
           <TableHeader>
             <TableRow className="hover:bg-transparent">
               <TableHead
@@ -786,7 +786,7 @@ function InformeEconomicoPage() {
                             <TableCell className="text-right">{fmtEUR(f.pagadoEstancia)}</TableCell>
                             <TableCell className="text-right">{fmtEUR(f.pagadoLimpieza)}</TableCell>
                             <TableCell className="text-right">{fmtEUR(f.tasaTuristica)}</TableCell>
-                            <TableCell className="text-right">
+                            <TableCell className="text-right font-semibold">
                               {fmtEUR(f.totalPagadoCliente)}
                             </TableCell>
                             <TableCell className="text-center">
@@ -806,7 +806,9 @@ function InformeEconomicoPage() {
 
                             <TableCell className="text-right">{fmtEUR(f.liquidadoOta)}</TableCell>
 
-                            <TableCell className="text-right">{fmtEUR(f.ingresoNeto)}</TableCell>
+                            <TableCell className="text-right font-semibold">
+                              {fmtEUR(f.ingresoNeto)}
+                            </TableCell>
                             <TableCell className="text-right">{fmtEUR(f.extrasSinIva)}</TableCell>
                             {mostrarExtraConIva && (
                               <TableCell className="text-right bg-amber-50/60">
@@ -823,7 +825,7 @@ function InformeEconomicoPage() {
                             </TableCell>
                             <TableCell className="text-right">{fmtEUR(f.limpiezaNeta)}</TableCell>
 
-                            <TableCell className="text-right font-medium">
+                            <TableCell className="text-right font-semibold">
                               {fmtEUR(f.totalIngresosNetos)}
                             </TableCell>
 
