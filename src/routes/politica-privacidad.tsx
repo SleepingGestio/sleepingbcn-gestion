@@ -34,8 +34,8 @@ function PoliticaPrivacidadPage() {
               1. Responsable del tratamiento
             </h2>
             <p className="font-semibold">
-              [PENDIENTE — Ramon: nombre legal completo del titular o razón
-              social, NIF/CIF, y dirección postal]
+              GLOBAL MARKETING SYSTEM S.L., NIF B64690464, con domicilio en
+              Rambla Catalana 27, L'Hospitalet de Llobregat (Barcelona).
             </p>
             <p className="text-muted-foreground">
               Correo de contacto: sleepingbcn@gmail.com
