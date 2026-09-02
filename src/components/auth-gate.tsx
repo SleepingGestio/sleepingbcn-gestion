@@ -12,8 +12,15 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { ForcePasswordSetup } from "@/components/force-password-setup";
 
+// The one path that is served with no auth guard at all: the public Privacy
+// Policy page, required (login-free) by Google's OAuth consent screen for the
+// Google Contacts integration. Every other path stays fully protected.
+const PUBLIC_PATHS = new Set(["/politica-privacidad"]);
+
 export function AuthGate({ children }: { children: ReactNode }) {
+  const path = useRouterState({ select: (s) => s.location.pathname });
   const { user, loading, isPasswordRecovery } = useAuth();
+  if (PUBLIC_PATHS.has(path)) return <>{children}</>;
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center text-sm text-muted-foreground">

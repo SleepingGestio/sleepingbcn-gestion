@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as ReservasRouteImport } from './routes/reservas'
 import { Route as RegistreHorariRouteImport } from './routes/registre-horari'
 import { Route as ProgramacionLimpiezasRouteImport } from './routes/programacion-limpiezas'
+import { Route as PoliticaPrivacidadRouteImport } from './routes/politica-privacidad'
 import { Route as MiDiaRouteImport } from './routes/mi-dia'
 import { Route as MantenimientoRouteImport } from './routes/mantenimiento'
 import { Route as LimpiezasRouteImport } from './routes/limpiezas'
@@ -37,6 +38,11 @@ const RegistreHorariRoute = RegistreHorariRouteImport.update({
 const ProgramacionLimpiezasRoute = ProgramacionLimpiezasRouteImport.update({
   id: '/programacion-limpiezas',
   path: '/programacion-limpiezas',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PoliticaPrivacidadRoute = PoliticaPrivacidadRouteImport.update({
+  id: '/politica-privacidad',
+  path: '/politica-privacidad',
   getParentRoute: () => rootRouteImport,
 } as any)
 const MiDiaRoute = MiDiaRouteImport.update({
@@ -105,6 +111,7 @@ export interface FileRoutesByFullPath {
   '/limpiezas': typeof LimpiezasRoute
   '/mantenimiento': typeof MantenimientoRoute
   '/mi-dia': typeof MiDiaRoute
+  '/politica-privacidad': typeof PoliticaPrivacidadRoute
   '/programacion-limpiezas': typeof ProgramacionLimpiezasRoute
   '/registre-horari': typeof RegistreHorariRouteWithChildren
   '/reservas': typeof ReservasRoute
@@ -121,6 +128,7 @@ export interface FileRoutesByTo {
   '/limpiezas': typeof LimpiezasRoute
   '/mantenimiento': typeof MantenimientoRoute
   '/mi-dia': typeof MiDiaRoute
+  '/politica-privacidad': typeof PoliticaPrivacidadRoute
   '/programacion-limpiezas': typeof ProgramacionLimpiezasRoute
   '/reservas': typeof ReservasRoute
   '/registre-horari/$id': typeof RegistreHorariIdRoute
@@ -137,6 +145,7 @@ export interface FileRoutesById {
   '/limpiezas': typeof LimpiezasRoute
   '/mantenimiento': typeof MantenimientoRoute
   '/mi-dia': typeof MiDiaRoute
+  '/politica-privacidad': typeof PoliticaPrivacidadRoute
   '/programacion-limpiezas': typeof ProgramacionLimpiezasRoute
   '/registre-horari': typeof RegistreHorariRouteWithChildren
   '/reservas': typeof ReservasRoute
@@ -155,6 +164,7 @@ export interface FileRouteTypes {
     | '/limpiezas'
     | '/mantenimiento'
     | '/mi-dia'
+    | '/politica-privacidad'
     | '/programacion-limpiezas'
     | '/registre-horari'
     | '/reservas'
@@ -171,6 +181,7 @@ export interface FileRouteTypes {
     | '/limpiezas'
     | '/mantenimiento'
     | '/mi-dia'
+    | '/politica-privacidad'
     | '/programacion-limpiezas'
     | '/reservas'
     | '/registre-horari/$id'
@@ -186,6 +197,7 @@ export interface FileRouteTypes {
     | '/limpiezas'
     | '/mantenimiento'
     | '/mi-dia'
+    | '/politica-privacidad'
     | '/programacion-limpiezas'
     | '/registre-horari'
     | '/reservas'
@@ -203,6 +215,7 @@ export interface RootRouteChildren {
   LimpiezasRoute: typeof LimpiezasRoute
   MantenimientoRoute: typeof MantenimientoRoute
   MiDiaRoute: typeof MiDiaRoute
+  PoliticaPrivacidadRoute: typeof PoliticaPrivacidadRoute
   ProgramacionLimpiezasRoute: typeof ProgramacionLimpiezasRoute
   RegistreHorariRoute: typeof RegistreHorariRouteWithChildren
   ReservasRoute: typeof ReservasRoute
@@ -229,6 +242,13 @@ declare module '@tanstack/react-router' {
       path: '/programacion-limpiezas'
       fullPath: '/programacion-limpiezas'
       preLoaderRoute: typeof ProgramacionLimpiezasRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/politica-privacidad': {
+      id: '/politica-privacidad'
+      path: '/politica-privacidad'
+      fullPath: '/politica-privacidad'
+      preLoaderRoute: typeof PoliticaPrivacidadRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/mi-dia': {
@@ -335,6 +355,7 @@ const rootRouteChildren: RootRouteChildren = {
   LimpiezasRoute: LimpiezasRoute,
   MantenimientoRoute: MantenimientoRoute,
   MiDiaRoute: MiDiaRoute,
+  PoliticaPrivacidadRoute: PoliticaPrivacidadRoute,
   ProgramacionLimpiezasRoute: ProgramacionLimpiezasRoute,
   RegistreHorariRoute: RegistreHorariRouteWithChildren,
   ReservasRoute: ReservasRoute,
