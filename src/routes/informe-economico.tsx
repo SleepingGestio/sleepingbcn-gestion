@@ -778,7 +778,7 @@ function InformeEconomicoPage() {
                             <TableCell>{fmtDate(f.checkout)}</TableCell>
                             <TableCell>{grupo.nombre}</TableCell>
                             <TableCell
-                              className="max-w-[110px] truncate"
+                              className="max-w-[150px] truncate"
                               title={f.habitaciones ?? undefined}
                             >
                               {f.habitaciones ?? "—"}
