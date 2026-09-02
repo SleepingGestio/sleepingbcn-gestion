@@ -19,6 +19,8 @@ export type ReservaKB = {
   "Pendiente de pago": number | null;
   "Pagado": number | null;
   "Comisiones": number | null;
+  "Noches": number | null;
+  "N. Habitaciones": number | null;
   "Fecha de creación": string | null;
   "Fecha de cancelación": string | null;
   "Método de adquisición": string | null;

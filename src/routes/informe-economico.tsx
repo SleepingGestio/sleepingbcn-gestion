@@ -34,6 +34,7 @@ import { ReservaDetail } from "@/components/reserva-detail";
 import { EstadoBadge } from "@/components/estado-badge";
 import { DateRangePicker, currentMonthRange } from "@/components/date-range-picker";
 import { GroupFilterChips, useGroupFilter } from "@/components/group-filter";
+import { PortalFilterChips, usePortalFilter } from "@/components/portal-filter";
 import { usePermissions } from "@/hooks/use-permissions";
 import { fmtDate, fmtEUR } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -72,6 +73,8 @@ type Fila = {
   enLimpieza: boolean | null;
   checkin: string | null;
   checkout: string | null;
+  noches: number | null;
+  nHabitaciones: number | null;
   idGrupo: number | null;
   verificada: boolean;
   pagadoEstancia: number;
@@ -85,6 +88,7 @@ type Fila = {
   iva: number;
   comisionOta: number;
   comisionCobro: number;
+  totalMenosComisionOta: number;
   liquidadoOta: number;
   ingresoNeto: number;
   extrasSinIva: number;
@@ -151,6 +155,10 @@ function calcularFila(
   const comision = computeComision(modoComision, pctOta, pctCobro, totalPagadoCliente);
   const baseSinIva = totalPagadoCliente / (1 + ivaPct);
   const iva = totalPagadoCliente - baseSinIva;
+  // Resta NOMÉS la comissió OTA (no la de cobro) — diferent de liquidadoOta,
+  // que resta les dues. Coincideixen quan el canal no aplica cobro (p. ex.
+  // Airbnb, modoComision "neto"). Columna pròpia del llistat resum AirBnB.
+  const totalMenosComisionOta = totalPagadoCliente - comision.ota;
   const liquidadoOta = totalPagadoCliente - comision.total;
   const ingresoNeto = baseSinIva - comision.total;
 
@@ -180,6 +188,8 @@ function calcularFila(
     enLimpieza: r.gestio?.EnLimpieza ?? null,
     checkin: r["Check in"],
     checkout: r["Check-out"],
+    noches: r["Noches"],
+    nHabitaciones: r["N. Habitaciones"],
     idGrupo: aptoGrupo?.id_grupo ?? null,
     verificada: !!r.gestio?.CuentaVerificada,
     pagadoEstancia,
@@ -193,6 +203,7 @@ function calcularFila(
     iva,
     comisionOta: comision.ota,
     comisionCobro: comision.cobro,
+    totalMenosComisionOta,
     liquidadoOta,
     ingresoNeto,
     extrasSinIva,
@@ -218,6 +229,141 @@ function esIncluible(r: Reserva): boolean {
   return r["Estado"] === "Check-out realizado" || !!r.gestio?.CuentaVerificada;
 }
 
+/** "Disseny" = quin conjunt de columnes es mostra, independent dels filtres
+ *  de Dates/Ordre/Grup/Portal — es pot combinar amb qualsevol selecció de
+ *  dades (p. ex. aplicar "Reduït LIQ. CLIENT" a una selecció filtrada per
+ *  Portal, o "Reduït LIQ. OTA" a un Grup concret). Pensat per ampliar-se amb
+ *  més dissenys en el futur sense tocar la resta de filtres. */
+export type DisenoId = "general" | "liq_ota" | "liq_cliente";
+
+export const DISENOS: { id: DisenoId; label: string }[] = [
+  { id: "general", label: "General" },
+  { id: "liq_ota", label: "Reduït LIQ. OTA" },
+  { id: "liq_cliente", label: "Reduït LIQ. CLIENT" },
+];
+
+/** Totes les columnes de dades (a partir de GRUP en amunt totes les de
+ *  Identificación són comunes a tots els dissenys). L'ordre d'aquesta llista
+ *  és l'ordre real de renderitzat — no es reordena mai per disseny, només
+ *  s'hi treuen columnes. */
+type ColumnKey =
+  | "checkout"
+  | "noches"
+  | "nHabitaciones"
+  | "grup"
+  | "apartamento"
+  | "pax"
+  | "portal"
+  | "referencia"
+  | "estado"
+  | "pagadoEstancia"
+  | "pagadoLimpieza"
+  | "tasaTuristica"
+  | "totalPagadoCliente"
+  | "verif"
+  | "pctOta"
+  | "pctCobro"
+  | "baseSinIva"
+  | "iva"
+  | "comisionOta"
+  | "comisionCobro"
+  | "totalMenosComisionOta"
+  | "liquidadoOta"
+  | "ingresoNeto"
+  | "extrasSinIva"
+  | "extraConIva"
+  | "netConIva"
+  | "ingresoNetoEstada"
+  | "limpiezaNeta"
+  | "totalNetos"
+  | "observaciones";
+
+const ALL_COLUMN_KEYS: ColumnKey[] = [
+  "checkout",
+  "noches",
+  "nHabitaciones",
+  "grup",
+  "apartamento",
+  "pax",
+  "portal",
+  "referencia",
+  "estado",
+  "pagadoEstancia",
+  "pagadoLimpieza",
+  "tasaTuristica",
+  "totalPagadoCliente",
+  "verif",
+  "pctOta",
+  "pctCobro",
+  "baseSinIva",
+  "iva",
+  "comisionOta",
+  "comisionCobro",
+  "totalMenosComisionOta",
+  "liquidadoOta",
+  "ingresoNeto",
+  "extrasSinIva",
+  "extraConIva",
+  "netConIva",
+  "ingresoNetoEstada",
+  "limpiezaNeta",
+  "totalNetos",
+  "observaciones",
+];
+
+// A quins dissenys apareix cada columna. "general" = el llistat complet
+// d'abans (27 columnes) + Noches/N. Habitaciones (demanat per Ramon a tots
+// els llistats). "liq_ota" = resum "AirBnB" de Ramon (Identificación +
+// subconjunt de Datos validados/Cálculos + IMP. OTA menys COMISIO NETA +
+// Liquidado + Ingrés net, sense Extras/desglossament estada-neteja/Total).
+// "liq_cliente" = resum "Ariqus" (només Identificación + Datos validados
+// bàsics, sense res més).
+const COLUMN_DISENOS: Record<ColumnKey, DisenoId[]> = {
+  checkout: ["general", "liq_ota", "liq_cliente"],
+  noches: ["general", "liq_ota", "liq_cliente"],
+  nHabitaciones: ["general", "liq_ota", "liq_cliente"],
+  grup: ["general", "liq_ota", "liq_cliente"],
+  apartamento: ["general", "liq_ota", "liq_cliente"],
+  pax: ["general", "liq_ota", "liq_cliente"],
+  portal: ["general", "liq_ota", "liq_cliente"],
+  referencia: ["general", "liq_ota", "liq_cliente"],
+  estado: ["general", "liq_ota", "liq_cliente"],
+  pagadoEstancia: ["general", "liq_ota", "liq_cliente"],
+  pagadoLimpieza: ["general", "liq_ota", "liq_cliente"],
+  tasaTuristica: ["general", "liq_ota", "liq_cliente"],
+  totalPagadoCliente: ["general", "liq_ota", "liq_cliente"],
+  verif: ["general"],
+  pctOta: ["general", "liq_ota"],
+  pctCobro: ["general"],
+  baseSinIva: ["general", "liq_ota"],
+  iva: ["general"],
+  comisionOta: ["general", "liq_ota"],
+  comisionCobro: ["general"],
+  totalMenosComisionOta: ["liq_ota"],
+  liquidadoOta: ["general", "liq_ota"],
+  ingresoNeto: ["general", "liq_ota"],
+  extrasSinIva: ["general"],
+  extraConIva: ["general"],
+  netConIva: ["general"],
+  ingresoNetoEstada: ["general"],
+  limpiezaNeta: ["general"],
+  totalNetos: ["general"],
+  observaciones: ["general"],
+};
+
+/** Columnes visibles per a un disseny concret. `extraConIva`/`netConIva`
+ *  també depenen de `mostrarExtraConIva` (només hi ha casos amb Extra c/IVA
+ *  en el període seleccionat) igual que abans, ara combinat amb el disseny. */
+function columnasVisibles(diseno: DisenoId, mostrarExtraConIva: boolean): Set<ColumnKey> {
+  const set = new Set<ColumnKey>();
+  for (const k of ALL_COLUMN_KEYS) {
+    if (!COLUMN_DISENOS[k].includes(diseno)) continue;
+    if ((k === "extraConIva" || k === "netConIva") && !mostrarExtraConIva) continue;
+    set.add(k);
+  }
+  return set;
+}
+
 const SUBTOTAL_KEYS = [
   "pagadoEstancia",
   "pagadoLimpieza",
@@ -227,6 +373,7 @@ const SUBTOTAL_KEYS = [
   "iva",
   "comisionOta",
   "comisionCobro",
+  "totalMenosComisionOta",
   "liquidadoOta",
   "ingresoNeto",
   "extrasSinIva",
@@ -296,47 +443,76 @@ function VerifBadge({ verificada }: { verificada: boolean }) {
 function SubtotalRow({
   label,
   s,
-  mostrarExtraConIva,
+  cols,
   className,
   tintExtra = true,
 }: {
   label: string;
   s: Subtotal;
-  mostrarExtraConIva: boolean;
+  cols: Set<ColumnKey>;
   className?: string;
   tintExtra?: boolean;
 }) {
   return (
     <TableRow className={className}>
-      <TableCell colSpan={7}>{label}</TableCell>
-      <TableCell className="text-right">{fmtEUR(s.pagadoEstancia)}</TableCell>
-      <TableCell className="text-right">{fmtEUR(s.pagadoLimpieza)}</TableCell>
-      <TableCell className="text-right">{fmtEUR(s.tasaTuristica)}</TableCell>
-      <TableCell className="text-right font-semibold">{fmtEUR(s.totalPagadoCliente)}</TableCell>
-      <TableCell />
-      <TableCell />
-      <TableCell />
-      <TableCell className="text-right">{fmtEUR(s.baseSinIva)}</TableCell>
-      <TableCell className="text-right">{fmtEUR(s.iva)}</TableCell>
-      <TableCell className="text-right">{fmtEUR(s.comisionOta)}</TableCell>
-      <TableCell className="text-right">{fmtEUR(s.comisionCobro)}</TableCell>
-      <TableCell className="text-right">{fmtEUR(s.liquidadoOta)}</TableCell>
-      <TableCell className="text-right font-semibold">{fmtEUR(s.ingresoNeto)}</TableCell>
-      <TableCell className="text-right">{fmtEUR(s.extrasSinIva)}</TableCell>
-      {mostrarExtraConIva && (
+      <TableCell colSpan={9}>{label}</TableCell>
+      {cols.has("pagadoEstancia") && (
+        <TableCell className="text-right">{fmtEUR(s.pagadoEstancia)}</TableCell>
+      )}
+      {cols.has("pagadoLimpieza") && (
+        <TableCell className="text-right">{fmtEUR(s.pagadoLimpieza)}</TableCell>
+      )}
+      {cols.has("tasaTuristica") && (
+        <TableCell className="text-right">{fmtEUR(s.tasaTuristica)}</TableCell>
+      )}
+      {cols.has("totalPagadoCliente") && (
+        <TableCell className="text-right font-semibold">{fmtEUR(s.totalPagadoCliente)}</TableCell>
+      )}
+      {cols.has("verif") && <TableCell />}
+      {cols.has("pctOta") && <TableCell />}
+      {cols.has("pctCobro") && <TableCell />}
+      {cols.has("baseSinIva") && (
+        <TableCell className="text-right">{fmtEUR(s.baseSinIva)}</TableCell>
+      )}
+      {cols.has("iva") && <TableCell className="text-right">{fmtEUR(s.iva)}</TableCell>}
+      {cols.has("comisionOta") && (
+        <TableCell className="text-right">{fmtEUR(s.comisionOta)}</TableCell>
+      )}
+      {cols.has("comisionCobro") && (
+        <TableCell className="text-right">{fmtEUR(s.comisionCobro)}</TableCell>
+      )}
+      {cols.has("totalMenosComisionOta") && (
+        <TableCell className="text-right">{fmtEUR(s.totalMenosComisionOta)}</TableCell>
+      )}
+      {cols.has("liquidadoOta") && (
+        <TableCell className="text-right">{fmtEUR(s.liquidadoOta)}</TableCell>
+      )}
+      {cols.has("ingresoNeto") && (
+        <TableCell className="text-right font-semibold">{fmtEUR(s.ingresoNeto)}</TableCell>
+      )}
+      {cols.has("extrasSinIva") && (
+        <TableCell className="text-right">{fmtEUR(s.extrasSinIva)}</TableCell>
+      )}
+      {cols.has("extraConIva") && (
         <TableCell className={cn("text-right", tintExtra && "bg-amber-50/60")}>
           {fmtEUR(s.extraConIvaBruto)}
         </TableCell>
       )}
-      {mostrarExtraConIva && (
+      {cols.has("netConIva") && (
         <TableCell className={cn("text-right", tintExtra && "bg-amber-50/60")}>
           {fmtEUR(s.netConIva)}
         </TableCell>
       )}
-      <TableCell className="text-right">{fmtEUR(s.ingresoNetoEstada)}</TableCell>
-      <TableCell className="text-right">{fmtEUR(s.limpiezaNeta)}</TableCell>
-      <TableCell className="text-right font-semibold">{fmtEUR(s.totalIngresosNetos)}</TableCell>
-      <TableCell />
+      {cols.has("ingresoNetoEstada") && (
+        <TableCell className="text-right">{fmtEUR(s.ingresoNetoEstada)}</TableCell>
+      )}
+      {cols.has("limpiezaNeta") && (
+        <TableCell className="text-right">{fmtEUR(s.limpiezaNeta)}</TableCell>
+      )}
+      {cols.has("totalNetos") && (
+        <TableCell className="text-right font-semibold">{fmtEUR(s.totalIngresosNetos)}</TableCell>
+      )}
+      {cols.has("observaciones") && <TableCell />}
     </TableRow>
   );
 }
@@ -354,70 +530,172 @@ function csvCell(v: string | number): string {
   return s;
 }
 
+type CsvColDef = {
+  key: ColumnKey;
+  header: string;
+  value: (f: Fila) => string | number;
+  subtotal: (s: Subtotal) => string | number;
+};
+
+// Mateix ordre que ALL_COLUMN_KEYS a partir de "Estado" — la identificació
+// (Check-out..Estado, sempre les 9 mateixes) va sempre fixa abans, tant al
+// CSV com a la taula. Filtrat per `cols` (disseny actiu) igual que la taula.
+const CSV_COLUMNS: CsvColDef[] = [
+  {
+    key: "pagadoEstancia",
+    header: "Pagado estancia",
+    value: (f) => f.pagadoEstancia,
+    subtotal: (s) => s.pagadoEstancia,
+  },
+  {
+    key: "pagadoLimpieza",
+    header: "Pagado limpieza",
+    value: (f) => f.pagadoLimpieza,
+    subtotal: (s) => s.pagadoLimpieza,
+  },
+  {
+    key: "tasaTuristica",
+    header: "Tasa turística",
+    value: (f) => f.tasaTuristica,
+    subtotal: (s) => s.tasaTuristica,
+  },
+  {
+    key: "totalPagadoCliente",
+    header: "Total pagado cliente",
+    value: (f) => f.totalPagadoCliente,
+    subtotal: (s) => s.totalPagadoCliente,
+  },
+  {
+    key: "verif",
+    header: "Verificada",
+    value: (f) => (f.verificada ? "Sí" : "No"),
+    subtotal: () => "",
+  },
+  { key: "pctOta", header: "% OTA", value: (f) => f.pctOta ?? "", subtotal: () => "" },
+  { key: "pctCobro", header: "% Cobro", value: (f) => f.pctCobro ?? "", subtotal: () => "" },
+  {
+    key: "baseSinIva",
+    header: "Base sin IVA",
+    value: (f) => f.baseSinIva,
+    subtotal: (s) => s.baseSinIva,
+  },
+  { key: "iva", header: "IVA", value: (f) => f.iva, subtotal: (s) => s.iva },
+  {
+    key: "comisionOta",
+    header: "Comisión OTA",
+    value: (f) => f.comisionOta,
+    subtotal: (s) => s.comisionOta,
+  },
+  {
+    key: "comisionCobro",
+    header: "Comisión cobro",
+    value: (f) => f.comisionCobro,
+    subtotal: (s) => s.comisionCobro,
+  },
+  {
+    key: "totalMenosComisionOta",
+    header: "Total menos Com. OTA",
+    value: (f) => f.totalMenosComisionOta,
+    subtotal: (s) => s.totalMenosComisionOta,
+  },
+  {
+    key: "liquidadoOta",
+    header: "Liquidado OTA",
+    value: (f) => f.liquidadoOta,
+    subtotal: (s) => s.liquidadoOta,
+  },
+  {
+    key: "ingresoNeto",
+    header: "Ingreso neto",
+    value: (f) => f.ingresoNeto,
+    subtotal: (s) => s.ingresoNeto,
+  },
+  {
+    key: "extrasSinIva",
+    header: "Extras sin IVA",
+    value: (f) => f.extrasSinIva,
+    subtotal: (s) => s.extrasSinIva,
+  },
+  {
+    key: "extraConIva",
+    header: "Extra con IVA (bruto)",
+    value: (f) => f.extraConIvaBruto,
+    subtotal: (s) => s.extraConIvaBruto,
+  },
+  {
+    key: "netConIva",
+    header: "Net con IVA",
+    value: (f) => f.netConIva,
+    subtotal: (s) => s.netConIva,
+  },
+  {
+    key: "ingresoNetoEstada",
+    header: "Ingreso neto estancia",
+    value: (f) => f.ingresoNetoEstada,
+    subtotal: (s) => s.ingresoNetoEstada,
+  },
+  {
+    key: "limpiezaNeta",
+    header: "Limpieza neta",
+    value: (f) => f.limpiezaNeta,
+    subtotal: (s) => s.limpiezaNeta,
+  },
+  {
+    key: "totalNetos",
+    header: "TOTAL ingresos netos",
+    value: (f) => f.totalIngresosNetos,
+    subtotal: (s) => s.totalIngresosNetos,
+  },
+  {
+    key: "observaciones",
+    header: "Observaciones",
+    value: (f) => f.observaciones ?? "",
+    subtotal: () => "",
+  },
+];
+
 function exportarCsv(
   filas: Fila[],
   grupos: { id: number | null; nombre: string }[],
   total: Subtotal,
   range: { from: string; to: string },
   orden: "apartamento" | "fecha",
+  diseno: DisenoId,
 ) {
+  // El CSV del disseny "general" sempre ha inclòs "Extra con IVA"/"Net con
+  // IVA" encara que el període no tingui cap cas real (a diferència de la
+  // taula en pantalla, que sí que les amaga) — es manté aquest comportament
+  // exactament igual per no trencar cap procés/import que ja depengui d'un
+  // nombre fix de columnes al CSV general. Als dissenys nous (liq_ota/
+  // liq_cliente) és irrellevant: cap dels dos inclou aquestes columnes.
+  const mostrarExtraConIvaCsv =
+    diseno === "general" ? true : filas.some((f) => f.extraConIvaBruto > EPS);
+  const cols = columnasVisibles(diseno, mostrarExtraConIvaCsv);
+  const activeCols = CSV_COLUMNS.filter((c) => cols.has(c.key));
+
   const headers = [
     "Check-out",
+    "Noches",
+    "N. Habitaciones",
     "GRUP",
     "Apartamento",
     "PAX",
     "Portal",
     "Referencia",
     "Estado",
-    "Pagado estancia",
-    "Pagado limpieza",
-    "Tasa turística",
-    "Total pagado cliente",
-    "Verificada",
-    "% OTA",
-    "% Cobro",
-    "Base sin IVA",
-    "IVA",
-    "Comisión OTA",
-    "Comisión cobro",
-    "Liquidado OTA",
-    "Ingreso neto",
-    "Extras sin IVA",
-    "Extra con IVA (bruto)",
-    "Net con IVA",
-    "Ingreso neto estancia",
-    "Limpieza neta",
-    "TOTAL ingresos netos",
-    "Observaciones",
+    ...activeCols.map((c) => c.header),
   ];
   const filaRow = (f: Fila, grupoNombre: string): (string | number)[] => [
     fmtDate(f.checkout),
+    f.noches ?? "",
+    f.nHabitaciones ?? "",
     grupoNombre,
     f.habitaciones ?? "",
     f.huespedes ?? "",
     f.portal ?? "",
     f.referencia ?? "",
     f.estado ?? "",
-    f.pagadoEstancia,
-    f.pagadoLimpieza,
-    f.tasaTuristica,
-    f.totalPagadoCliente,
-    f.verificada ? "Sí" : "No",
-    f.pctOta ?? "",
-    f.pctCobro ?? "",
-    f.baseSinIva,
-    f.iva,
-    f.comisionOta,
-    f.comisionCobro,
-    f.liquidadoOta,
-    f.ingresoNeto,
-    f.extrasSinIva,
-    f.extraConIvaBruto,
-    f.netConIva,
-    f.ingresoNetoEstada,
-    f.limpiezaNeta,
-    f.totalIngresosNetos,
-    f.observaciones ?? "",
+    ...activeCols.map((c) => c.value(f)),
   ];
   const subtotalRow = (nombre: string, s: Subtotal): (string | number)[] => [
     "",
@@ -426,27 +704,10 @@ function exportarCsv(
     "",
     "",
     "",
+    "",
+    "",
     `Subtotal ${nombre}`,
-    s.pagadoEstancia,
-    s.pagadoLimpieza,
-    s.tasaTuristica,
-    s.totalPagadoCliente,
-    "",
-    "",
-    "",
-    s.baseSinIva,
-    s.iva,
-    s.comisionOta,
-    s.comisionCobro,
-    s.liquidadoOta,
-    s.ingresoNeto,
-    s.extrasSinIva,
-    s.extraConIvaBruto,
-    s.netConIva,
-    s.ingresoNetoEstada,
-    s.limpiezaNeta,
-    s.totalIngresosNetos,
-    "",
+    ...activeCols.map((c) => c.subtotal(s)),
   ];
 
   const rows: (string | number)[][] = [headers];
@@ -481,6 +742,7 @@ function InformeEconomicoPage() {
   const [selected, setSelected] = useState<string | null>(null);
   const [range, setRange] = useState(currentMonthRange);
   const [orden, setOrden] = useState<"apartamento" | "fecha">("apartamento");
+  const [diseno, setDiseno] = useState<DisenoId>("general");
   // A diferència de la resta de pàgines, aquí el grup per defecte és "Todos"
   // (no "Por defecto") — un informe de diners no s'ha d'amagar cap grup.
   const filter = useGroupFilter("all");
@@ -502,6 +764,10 @@ function InformeEconomicoPage() {
     queryKey: ["canales-reserva-informe"],
     queryFn: fetchCanalesReserva,
   });
+  // Filtre de Portal per a la futura "vista resum" (AirBnB) — reaprofita el
+  // catàleg de canals ja carregat a dalt, sense fetch propi. Per defecte
+  // tots seleccionats, igual que el filtre de Grup en aquesta pàgina.
+  const portalFilter = usePortalFilter(canalesQ.data);
   const apartamentosRefQ = useQuery({
     queryKey: ["apartamentos-ref-informe"],
     queryFn: fetchApartamentosRef,
@@ -535,6 +801,7 @@ function InformeEconomicoPage() {
       (r) =>
         r["Habitaciones"] != null &&
         filter.allowedAptNames.has(r["Habitaciones"]) &&
+        portalFilter.matchesPortal(r["Portal"]) &&
         esIncluible(r),
     );
     return incluibles
@@ -563,6 +830,7 @@ function InformeEconomicoPage() {
     ivaPctQ.data,
     filter.allowedAptNames,
     filter.aptsQ.data,
+    portalFilter.matchesPortal,
     canalesQ.data,
     apartamentosRefQ.data,
     tarifasLimpiezaQ.data,
@@ -574,7 +842,35 @@ function InformeEconomicoPage() {
   // Columnes condicionals "Extra c/IVA" / "Net c/IVA": només es mostren si
   // el període té algun cas real — mai una columna buida sense sentit.
   const mostrarExtraConIva = useMemo(() => filas.some((f) => f.extraConIvaBruto > EPS), [filas]);
-  const totalCols = 25 + (mostrarExtraConIva ? 2 : 0);
+  const cols = useMemo(
+    () => columnasVisibles(diseno, mostrarExtraConIva),
+    [diseno, mostrarExtraConIva],
+  );
+  const totalCols = cols.size;
+  const nDatosValidados = (
+    [
+      "pagadoEstancia",
+      "pagadoLimpieza",
+      "tasaTuristica",
+      "totalPagadoCliente",
+      "verif",
+      "pctOta",
+      "pctCobro",
+    ] as ColumnKey[]
+  ).filter((k) => cols.has(k)).length;
+  const nCalculos = (
+    ["baseSinIva", "iva", "comisionOta", "comisionCobro", "totalMenosComisionOta"] as ColumnKey[]
+  ).filter((k) => cols.has(k)).length;
+  const nDesglose = (
+    [
+      "ingresoNeto",
+      "extrasSinIva",
+      "extraConIva",
+      "netConIva",
+      "ingresoNetoEstada",
+      "limpiezaNeta",
+    ] as ColumnKey[]
+  ).filter((k) => cols.has(k)).length;
 
   // Grupos visibles (según el filtro), en su orden configurado, más un grupo
   // "Sin grupo" al final para cualquier apartamento sin id_grupo asignado.
@@ -622,11 +918,29 @@ function InformeEconomicoPage() {
             Fecha
           </button>
         </div>
+        <div className="flex items-center gap-1 rounded-lg border px-1.5 py-1 text-xs">
+          <span className="pl-1 text-muted-foreground">Diseño:</span>
+          {DISENOS.map((d) => (
+            <button
+              key={d.id}
+              type="button"
+              onClick={() => setDiseno(d.id)}
+              className={cn(
+                "px-2.5 py-1 rounded-full border transition-colors",
+                diseno === d.id
+                  ? "bg-primary text-primary-foreground border-primary"
+                  : "bg-white hover:bg-muted",
+              )}
+            >
+              {d.label}
+            </button>
+          ))}
+        </div>
         <Button
           type="button"
           variant="outline"
           size="sm"
-          onClick={() => exportarCsv(filas, grupos, total, range, orden)}
+          onClick={() => exportarCsv(filas, grupos, total, range, orden, diseno)}
           disabled={loading || filas.length === 0}
         >
           <Download className="mr-1.5 h-4 w-4" />
@@ -638,56 +952,71 @@ function InformeEconomicoPage() {
         marcada como "Cuenta verificada y cerrada" (p. ej. una cancelación con cargo retenido).
       </div>
       <GroupFilterChips {...filter} />
+      <PortalFilterChips {...portalFilter} />
 
       <Card className="overflow-hidden bg-white">
         <Table className="[&_td]:whitespace-nowrap">
           <TableHeader>
             <TableRow className="hover:bg-transparent">
               <TableHead
-                colSpan={7}
+                colSpan={9}
                 className="bg-slate-100 text-[10px] uppercase tracking-wide text-muted-foreground"
               >
                 Identificación
               </TableHead>
-              <TableHead
-                colSpan={7}
-                className="bg-blue-50 text-[10px] uppercase tracking-wide text-muted-foreground"
-              >
-                Datos validados
-              </TableHead>
-              <TableHead
-                colSpan={4}
-                className="bg-amber-50 text-[10px] uppercase tracking-wide text-muted-foreground"
-              >
-                Cálculos
-              </TableHead>
-              <TableHead
-                colSpan={1}
-                className="bg-rose-50 text-[10px] uppercase tracking-wide text-muted-foreground"
-              >
-                Liquidado
-              </TableHead>
-              <TableHead
-                colSpan={mostrarExtraConIva ? 6 : 4}
-                className="bg-purple-50 text-[10px] uppercase tracking-wide text-muted-foreground"
-              >
-                Desglose neto
-              </TableHead>
-              <TableHead
-                colSpan={1}
-                className="bg-slate-200 text-[10px] uppercase tracking-wide text-muted-foreground"
-              >
-                Total
-              </TableHead>
-              <TableHead
-                colSpan={1}
-                className="text-[10px] uppercase tracking-wide text-muted-foreground"
-              >
-                Notas
-              </TableHead>
+              {nDatosValidados > 0 && (
+                <TableHead
+                  colSpan={nDatosValidados}
+                  className="bg-blue-50 text-[10px] uppercase tracking-wide text-muted-foreground"
+                >
+                  Datos validados
+                </TableHead>
+              )}
+              {nCalculos > 0 && (
+                <TableHead
+                  colSpan={nCalculos}
+                  className="bg-amber-50 text-[10px] uppercase tracking-wide text-muted-foreground"
+                >
+                  Cálculos
+                </TableHead>
+              )}
+              {cols.has("liquidadoOta") && (
+                <TableHead
+                  colSpan={1}
+                  className="bg-rose-50 text-[10px] uppercase tracking-wide text-muted-foreground"
+                >
+                  Liquidado
+                </TableHead>
+              )}
+              {nDesglose > 0 && (
+                <TableHead
+                  colSpan={nDesglose}
+                  className="bg-purple-50 text-[10px] uppercase tracking-wide text-muted-foreground"
+                >
+                  Desglose neto
+                </TableHead>
+              )}
+              {cols.has("totalNetos") && (
+                <TableHead
+                  colSpan={1}
+                  className="bg-slate-200 text-[10px] uppercase tracking-wide text-muted-foreground"
+                >
+                  Total
+                </TableHead>
+              )}
+              {cols.has("observaciones") && (
+                <TableHead
+                  colSpan={1}
+                  className="text-[10px] uppercase tracking-wide text-muted-foreground"
+                >
+                  Notas
+                </TableHead>
+              )}
             </TableRow>
             <TableRow>
               <TableHead>Check-out</TableHead>
+              <TableHead>Noches</TableHead>
+              <TableHead>N. Hab.</TableHead>
               <TableHead>GRUP</TableHead>
               <TableHead>Apartamento</TableHead>
               <TableHead>PAX</TableHead>
@@ -695,35 +1024,54 @@ function InformeEconomicoPage() {
               <TableHead>Referencia</TableHead>
               <TableHead>Estado</TableHead>
 
-              <TableHead className="text-right">Pagado estancia</TableHead>
-              <TableHead className="text-right">Pagado limpieza</TableHead>
-              <TableHead className="text-right">Tasa turíst.</TableHead>
-              <TableHead className="text-right">Total pagado cliente</TableHead>
-              <TableHead className="text-center">Verif.</TableHead>
-              <TableHead className="text-right">% OTA</TableHead>
-              <TableHead className="text-right">% Cobro</TableHead>
+              {cols.has("pagadoEstancia") && (
+                <TableHead className="text-right">Pagado estancia</TableHead>
+              )}
+              {cols.has("pagadoLimpieza") && (
+                <TableHead className="text-right">Pagado limpieza</TableHead>
+              )}
+              {cols.has("tasaTuristica") && (
+                <TableHead className="text-right">Tasa turíst.</TableHead>
+              )}
+              {cols.has("totalPagadoCliente") && (
+                <TableHead className="text-right">Total pagado cliente</TableHead>
+              )}
+              {cols.has("verif") && <TableHead className="text-center">Verif.</TableHead>}
+              {cols.has("pctOta") && <TableHead className="text-right">% OTA</TableHead>}
+              {cols.has("pctCobro") && <TableHead className="text-right">% Cobro</TableHead>}
 
-              <TableHead className="text-right">Base sin IVA</TableHead>
-              <TableHead className="text-right">IVA</TableHead>
-              <TableHead className="text-right">Com. OTA €</TableHead>
-              <TableHead className="text-right">Com. cobro €</TableHead>
+              {cols.has("baseSinIva") && <TableHead className="text-right">Base sin IVA</TableHead>}
+              {cols.has("iva") && <TableHead className="text-right">IVA</TableHead>}
+              {cols.has("comisionOta") && <TableHead className="text-right">Com. OTA €</TableHead>}
+              {cols.has("comisionCobro") && (
+                <TableHead className="text-right">Com. cobro €</TableHead>
+              )}
+              {cols.has("totalMenosComisionOta") && (
+                <TableHead className="text-right">Total − Com. OTA</TableHead>
+              )}
 
-              <TableHead className="text-right">Liquid. OTA</TableHead>
+              {cols.has("liquidadoOta") && (
+                <TableHead className="text-right">Liquid. OTA</TableHead>
+              )}
 
-              <TableHead className="text-right">Ingrés net</TableHead>
-              <TableHead className="text-right">Extras s/IVA</TableHead>
-              {mostrarExtraConIva && (
+              {cols.has("ingresoNeto") && <TableHead className="text-right">Ingrés net</TableHead>}
+              {cols.has("extrasSinIva") && (
+                <TableHead className="text-right">Extras s/IVA</TableHead>
+              )}
+              {cols.has("extraConIva") && (
                 <TableHead className="text-right bg-amber-50/60">Extra c/IVA</TableHead>
               )}
-              {mostrarExtraConIva && (
+              {cols.has("netConIva") && (
                 <TableHead className="text-right bg-amber-50/60 font-semibold">Net c/IVA</TableHead>
               )}
-              <TableHead className="text-right">Ingrés net estada</TableHead>
-              <TableHead className="text-right">Neteja net</TableHead>
+              {cols.has("ingresoNetoEstada") && (
+                <TableHead className="text-right">Ingrés net estada</TableHead>
+              )}
+              {cols.has("limpiezaNeta") && <TableHead className="text-right">Neteja net</TableHead>}
 
-              <TableHead className="text-right">TOTAL netos</TableHead>
+              {cols.has("totalNetos") && <TableHead className="text-right">TOTAL netos</TableHead>}
 
-              <TableHead>Observaciones</TableHead>
+              {cols.has("observaciones") && <TableHead>Observaciones</TableHead>}
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -776,6 +1124,8 @@ function InformeEconomicoPage() {
                             onClick={() => setSelected(f.numero)}
                           >
                             <TableCell>{fmtDate(f.checkout)}</TableCell>
+                            <TableCell>{f.noches ?? "—"}</TableCell>
+                            <TableCell>{f.nHabitaciones ?? "—"}</TableCell>
                             <TableCell>{grupo.nombre}</TableCell>
                             <TableCell
                               className="max-w-[150px] truncate"
@@ -795,65 +1145,114 @@ function InformeEconomicoPage() {
                               <EstadoBadge estado={f.estado} enLimpieza={f.enLimpieza} />
                             </TableCell>
 
-                            <TableCell className="text-right">{fmtEUR(f.pagadoEstancia)}</TableCell>
-                            <TableCell className="text-right">{fmtEUR(f.pagadoLimpieza)}</TableCell>
-                            <TableCell className="text-right">{fmtEUR(f.tasaTuristica)}</TableCell>
-                            <TableCell className="text-right font-semibold">
-                              {fmtEUR(f.totalPagadoCliente)}
-                            </TableCell>
-                            <TableCell className="text-center">
-                              <VerifBadge verificada={f.verificada} />
-                            </TableCell>
-                            <TableCell className="text-right">{fmtPct(f.pctOta)}</TableCell>
-                            <TableCell className="text-right">
-                              {f.aplicaCobro ? fmtPct(f.pctCobro) : "—"}
-                            </TableCell>
+                            {cols.has("pagadoEstancia") && (
+                              <TableCell className="text-right">
+                                {fmtEUR(f.pagadoEstancia)}
+                              </TableCell>
+                            )}
+                            {cols.has("pagadoLimpieza") && (
+                              <TableCell className="text-right">
+                                {fmtEUR(f.pagadoLimpieza)}
+                              </TableCell>
+                            )}
+                            {cols.has("tasaTuristica") && (
+                              <TableCell className="text-right">
+                                {fmtEUR(f.tasaTuristica)}
+                              </TableCell>
+                            )}
+                            {cols.has("totalPagadoCliente") && (
+                              <TableCell className="text-right font-semibold">
+                                {fmtEUR(f.totalPagadoCliente)}
+                              </TableCell>
+                            )}
+                            {cols.has("verif") && (
+                              <TableCell className="text-center">
+                                <VerifBadge verificada={f.verificada} />
+                              </TableCell>
+                            )}
+                            {cols.has("pctOta") && (
+                              <TableCell className="text-right">{fmtPct(f.pctOta)}</TableCell>
+                            )}
+                            {cols.has("pctCobro") && (
+                              <TableCell className="text-right">
+                                {f.aplicaCobro ? fmtPct(f.pctCobro) : "—"}
+                              </TableCell>
+                            )}
 
-                            <TableCell className="text-right">{fmtEUR(f.baseSinIva)}</TableCell>
-                            <TableCell className="text-right">{fmtEUR(f.iva)}</TableCell>
-                            <TableCell className="text-right">{fmtEUR(f.comisionOta)}</TableCell>
-                            <TableCell className="text-right">
-                              {f.aplicaCobro ? fmtEUR(f.comisionCobro) : "—"}
-                            </TableCell>
+                            {cols.has("baseSinIva") && (
+                              <TableCell className="text-right">{fmtEUR(f.baseSinIva)}</TableCell>
+                            )}
+                            {cols.has("iva") && (
+                              <TableCell className="text-right">{fmtEUR(f.iva)}</TableCell>
+                            )}
+                            {cols.has("comisionOta") && (
+                              <TableCell className="text-right">{fmtEUR(f.comisionOta)}</TableCell>
+                            )}
+                            {cols.has("comisionCobro") && (
+                              <TableCell className="text-right">
+                                {f.aplicaCobro ? fmtEUR(f.comisionCobro) : "—"}
+                              </TableCell>
+                            )}
+                            {cols.has("totalMenosComisionOta") && (
+                              <TableCell className="text-right">
+                                {fmtEUR(f.totalMenosComisionOta)}
+                              </TableCell>
+                            )}
 
-                            <TableCell className="text-right">{fmtEUR(f.liquidadoOta)}</TableCell>
+                            {cols.has("liquidadoOta") && (
+                              <TableCell className="text-right">{fmtEUR(f.liquidadoOta)}</TableCell>
+                            )}
 
-                            <TableCell className="text-right font-semibold">
-                              {fmtEUR(f.ingresoNeto)}
-                            </TableCell>
-                            <TableCell className="text-right">{fmtEUR(f.extrasSinIva)}</TableCell>
-                            {mostrarExtraConIva && (
+                            {cols.has("ingresoNeto") && (
+                              <TableCell className="text-right font-semibold">
+                                {fmtEUR(f.ingresoNeto)}
+                              </TableCell>
+                            )}
+                            {cols.has("extrasSinIva") && (
+                              <TableCell className="text-right">{fmtEUR(f.extrasSinIva)}</TableCell>
+                            )}
+                            {cols.has("extraConIva") && (
                               <TableCell className="text-right bg-amber-50/60">
                                 {fmtEUR(f.extraConIvaBruto)}
                               </TableCell>
                             )}
-                            {mostrarExtraConIva && (
+                            {cols.has("netConIva") && (
                               <TableCell className="text-right bg-amber-50/60 font-semibold">
                                 {fmtEUR(f.netConIva)}
                               </TableCell>
                             )}
-                            <TableCell className="text-right">
-                              {fmtEUR(f.ingresoNetoEstada)}
-                            </TableCell>
-                            <TableCell className="text-right">{fmtEUR(f.limpiezaNeta)}</TableCell>
+                            {cols.has("ingresoNetoEstada") && (
+                              <TableCell className="text-right">
+                                {fmtEUR(f.ingresoNetoEstada)}
+                              </TableCell>
+                            )}
+                            {cols.has("limpiezaNeta") && (
+                              <TableCell className="text-right">{fmtEUR(f.limpiezaNeta)}</TableCell>
+                            )}
 
-                            <TableCell className="text-right font-semibold">
-                              {fmtEUR(f.totalIngresosNetos)}
-                            </TableCell>
+                            {cols.has("totalNetos") && (
+                              <TableCell className="text-right font-semibold">
+                                {fmtEUR(f.totalIngresosNetos)}
+                              </TableCell>
+                            )}
 
-                            <TableCell
-                              className="max-w-[170px] truncate"
-                              title={f.observaciones ?? undefined}
-                            >
-                              {f.observaciones ?? <span className="text-muted-foreground">—</span>}
-                            </TableCell>
+                            {cols.has("observaciones") && (
+                              <TableCell
+                                className="max-w-[170px] truncate"
+                                title={f.observaciones ?? undefined}
+                              >
+                                {f.observaciones ?? (
+                                  <span className="text-muted-foreground">—</span>
+                                )}
+                              </TableCell>
+                            )}
                           </TableRow>
                         ))}
                         {orden === "apartamento" && (
                           <SubtotalRow
                             label={`Subtotal ${bloque.nombre} (${bloque.filas.length})`}
                             s={sumar(bloque.filas)}
-                            mostrarExtraConIva={mostrarExtraConIva}
+                            cols={cols}
                             className="bg-slate-50 hover:bg-slate-50 text-[13px]"
                           />
                         )}
@@ -862,7 +1261,7 @@ function InformeEconomicoPage() {
                     <SubtotalRow
                       label={`Subtotal ${grupo.nombre} (${filasGrupo.length})`}
                       s={sub}
-                      mostrarExtraConIva={mostrarExtraConIva}
+                      cols={cols}
                       className="bg-muted/30 hover:bg-muted/30 font-semibold"
                     />
                   </Fragment>
@@ -872,7 +1271,7 @@ function InformeEconomicoPage() {
               <SubtotalRow
                 label={`Total (${filas.length} reservas)`}
                 s={total}
-                mostrarExtraConIva={mostrarExtraConIva}
+                cols={cols}
                 className="bg-slate-900 text-white hover:bg-slate-900 font-semibold"
                 tintExtra={false}
               />
