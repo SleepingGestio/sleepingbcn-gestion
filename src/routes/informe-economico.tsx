@@ -34,6 +34,7 @@ import { ReservaDetail } from "@/components/reserva-detail";
 import { EstadoBadge } from "@/components/estado-badge";
 import { DateRangePicker, currentMonthRange } from "@/components/date-range-picker";
 import { GroupFilterChips, useGroupFilter } from "@/components/group-filter";
+import { usePermissions } from "@/hooks/use-permissions";
 import { fmtDate, fmtEUR } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { Check, Download } from "lucide-react";
@@ -483,6 +484,12 @@ function InformeEconomicoPage() {
   // A diferència de la resta de pàgines, aquí el grup per defecte és "Todos"
   // (no "Por defecto") — un informe de diners no s'ha d'amagar cap grup.
   const filter = useGroupFilter("all");
+  // Mateix permís que /reservas (no "informe_economico"): reservas_extras
+  // està RLS-gated per can_edit_menu('reservas'), mentre que reservas_gestio
+  // no té RLS — usar un permís diferent podria deixar editar uns camps i no
+  // uns altres de forma confusa.
+  const { canEdit } = usePermissions();
+  const canEditReservas = canEdit("reservas");
 
   // Període sempre per data de Check-out (veure esIncluible més amunt) — no
   // Check-in com a la resta de l'app.
@@ -770,7 +777,12 @@ function InformeEconomicoPage() {
                           >
                             <TableCell>{fmtDate(f.checkout)}</TableCell>
                             <TableCell>{grupo.nombre}</TableCell>
-                            <TableCell>{f.habitaciones ?? "—"}</TableCell>
+                            <TableCell
+                              className="max-w-[110px] truncate"
+                              title={f.habitaciones ?? undefined}
+                            >
+                              {f.habitaciones ?? "—"}
+                            </TableCell>
                             <TableCell>{f.huespedes ?? "—"}</TableCell>
                             <TableCell>{f.portal ?? "—"}</TableCell>
                             <TableCell
@@ -873,7 +885,11 @@ function InformeEconomicoPage() {
         numero={selected}
         open={!!selected}
         onOpenChange={(o) => !o && setSelected(null)}
-        readOnly
+        onSaved={() => {
+          q.refetch();
+          extrasQ.refetch();
+        }}
+        readOnly={!canEditReservas}
       />
     </AppShell>
   );
