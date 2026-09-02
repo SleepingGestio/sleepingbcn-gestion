@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { AppShell } from "@/components/app-shell";
@@ -28,16 +28,27 @@ type Importacion = {
   estado: string | null;
 };
 
-type TipoCambio = "nuevo" | "modificado" | "eliminado_candidato";
+type CampoDiff = { antes: unknown; despues: unknown };
 
+// nuevo/modificado/eliminado_candidato rows carry a per-field {antes,despues}
+// diff map in campos_cambiados. A "contacto_creado" row (Google contact
+// auto-created for a brand-new reservation, modo diario only) instead carries
+// a flat {nombre_contacto, telefono}.
 type DetalleRow = {
   id: number;
   id_importacion: number;
   numero_reserva: string;
-  tipo_cambio: TipoCambio;
-  campos_cambiados: Record<string, { antes: unknown; despues: unknown }> | null;
   fecha: string;
-};
+} & (
+  | {
+      tipo_cambio: "nuevo" | "modificado" | "eliminado_candidato";
+      campos_cambiados: Record<string, CampoDiff> | null;
+    }
+  | {
+      tipo_cambio: "contacto_creado";
+      campos_cambiados: { nombre_contacto: string; telefono: string } | null;
+    }
+);
 
 type ResvLite = {
   "Número": string;
@@ -87,6 +98,20 @@ function ImportacionesPage() {
     },
   });
 
+  // Expand the most recent run's detail panel on first load, so the latest
+  // import's changes are visible without a click. One-shot: after this, the
+  // list rows drive selectedId exactly as before (collapsing the top row,
+  // switching runs, etc. all still work).
+  const didInitSelection = useRef(false);
+  useEffect(() => {
+    if (didInitSelection.current) return;
+    const mostRecent = importsQ.data?.[0];
+    if (mostRecent) {
+      setSelectedId(mostRecent.id);
+      didInitSelection.current = true;
+    }
+  }, [importsQ.data]);
+
   const detalleQ = useQuery({
     queryKey: ["kb-importaciones-detalle", selectedId],
     enabled: selectedId != null,
@@ -95,7 +120,7 @@ function ImportacionesPage() {
         .from("kb_importaciones_detalle")
         .select("id, id_importacion, numero_reserva, tipo_cambio, campos_cambiados, fecha")
         .eq("id_importacion", selectedId!)
-        .in("tipo_cambio", ["nuevo", "modificado", "eliminado_candidato"]);
+        .in("tipo_cambio", ["nuevo", "modificado", "eliminado_candidato", "contacto_creado"]);
       if (error) throw error;
       return (data ?? []) as DetalleRow[];
     },
@@ -131,6 +156,7 @@ function ImportacionesPage() {
   } & (
     | { kind: "nuevo" }
     | { kind: "eliminado" }
+    | { kind: "contacto"; nombre: string; telefono: string }
     | { kind: "campo"; campo: string; antes: unknown; despues: unknown }
   );
 
@@ -154,6 +180,16 @@ function ImportacionesPage() {
         out.push({ ...base, kind: "nuevo", key: `${d.id}`, first: true });
       } else if (d.tipo_cambio === "eliminado_candidato") {
         out.push({ ...base, kind: "eliminado", key: `${d.id}`, first: true });
+      } else if (d.tipo_cambio === "contacto_creado") {
+        const c = d.campos_cambiados;
+        out.push({
+          ...base,
+          kind: "contacto",
+          key: `${d.id}`,
+          first: true,
+          nombre: c?.nombre_contacto ?? "—",
+          telefono: c?.telefono ?? "—",
+        });
       } else {
         const campos = Object.entries(d.campos_cambiados ?? {}).filter(
           ([campo]) => showEstado || campo !== "Estado",
@@ -291,6 +327,7 @@ function CambioCell({
   line:
     | { kind: "nuevo" }
     | { kind: "eliminado" }
+    | { kind: "contacto"; nombre: string; telefono: string }
     | { kind: "campo"; campo: string; antes: unknown; despues: unknown };
 }) {
   if (line.kind === "nuevo") {
@@ -303,6 +340,15 @@ function CambioCell({
   if (line.kind === "eliminado") {
     return (
       <span className="text-muted-foreground italic">Ya no aparece — revisar en Krossbooking</span>
+    );
+  }
+  if (line.kind === "contacto") {
+    return (
+      <span className="inline-flex items-center gap-1.5 flex-wrap">
+        <span className="text-muted-foreground">Contacto creado:</span>
+        <span className="font-medium">{line.nombre}</span>
+        <span className="text-muted-foreground">({line.telefono})</span>
+      </span>
     );
   }
 
