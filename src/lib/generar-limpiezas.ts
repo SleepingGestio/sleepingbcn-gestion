@@ -372,7 +372,6 @@ export async function generarLimpiezas(fromISO: string, toISO: string): Promise<
   const existingIntermediaByPair = new Map<string, Set<string>>(); // key -> set of fechas
   for (const l of existing) {
     if (!l.numero_reserva) continue;
-    if (l.estado === "anulada") continue;
     if (l.tipo === "salida") existingSalida.add(salidaKey(l.numero_reserva, l.id_apt));
     else if (l.tipo === "intermedia") {
       const k = intermediaKey(l.numero_reserva, l.id_apt);

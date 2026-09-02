@@ -259,7 +259,6 @@ function ProgramacionLimpiezasPage() {
         .from("limpiezas")
         .select("numero_reserva,id_apt")
         .eq("tipo", "salida")
-        .neq("estado", "anulada")
         .gte("fecha_limpieza", todayStr)
         .lte("fecha_limpieza", maxFecha);
       if (e2) throw e2;
