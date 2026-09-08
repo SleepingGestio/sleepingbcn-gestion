@@ -304,6 +304,8 @@ function ReservasPage() {
             <TableRow>
               <TableHead><SortHeader label="Número" active={sortKey === "numero"} dir={sortDir} onClick={() => toggleSort("numero")} /></TableHead>
               <TableHead><SortHeader label="Referencia" active={sortKey === "referencia"} dir={sortDir} onClick={() => toggleSort("referencia")} /></TableHead>
+              <TableHead title="Tasa turística — importe esperado"><SortHeader label="Esp." active={sortKey === "ttesperado"} dir={sortDir} onClick={() => toggleSort("ttesperado")} /></TableHead>
+              <TableHead title="Tasa turística — importe cobrado"><SortHeader label="Cob." active={sortKey === "ttcobrado"} dir={sortDir} onClick={() => toggleSort("ttcobrado")} /></TableHead>
               <TableHead><SortHeader label="Habitación" active={sortKey === "habitaciones"} dir={sortDir} onClick={() => toggleSort("habitaciones")} /></TableHead>
               <TableHead><SortHeader label="Check-in" active={sortKey === "checkin"} dir={sortDir} onClick={() => toggleSort("checkin")} /></TableHead>
               <TableHead><SortHeader label="Check-out" active={sortKey === "checkout"} dir={sortDir} onClick={() => toggleSort("checkout")} /></TableHead>
@@ -312,8 +314,6 @@ function ReservasPage() {
               <TableHead><SortHeader label="Estado" active={sortKey === "estado"} dir={sortDir} onClick={() => toggleSort("estado")} /></TableHead>
               <TableHead title="Comisión"><SortHeader label="CUADRE" active={sortKey === "cuadre"} dir={sortDir} onClick={() => toggleSort("cuadre")} /></TableHead>
               <TableHead title="Cuenta verificada y cerrada"><SortHeader label="VERIF" active={sortKey === "verif"} dir={sortDir} onClick={() => toggleSort("verif")} /></TableHead>
-              <TableHead title="Tasa turística — importe esperado"><SortHeader label="Esperado" active={sortKey === "ttesperado"} dir={sortDir} onClick={() => toggleSort("ttesperado")} /></TableHead>
-              <TableHead title="Tasa turística — importe cobrado"><SortHeader label="Cobrado" active={sortKey === "ttcobrado"} dir={sortDir} onClick={() => toggleSort("ttcobrado")} /></TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -334,6 +334,8 @@ function ReservasPage() {
               >
                 <TableCell className="font-mono text-xs">{r["Número"]}</TableCell>
                 <TableCell className="font-medium">{r["Referencia"] ?? "—"}</TableCell>
+                <TableCell className="whitespace-nowrap">{fmtEUR(r.gestio?.TasaTuristica)}</TableCell>
+                <TableCell className="whitespace-nowrap">{fmtEUR(r.gestio?.TasaTuristicaCobrada)}</TableCell>
                 <TableCell>{r["Habitaciones"] ?? "—"}</TableCell>
                 <TableCell>{fmtDate(r["Check in"])}</TableCell>
                 <TableCell>{fmtDate(r["Check-out"])}</TableCell>
@@ -362,8 +364,6 @@ function ReservasPage() {
                     />
                   )}
                 </TableCell>
-                <TableCell className="whitespace-nowrap">{fmtEUR(r.gestio?.TasaTuristica)}</TableCell>
-                <TableCell className="whitespace-nowrap">{fmtEUR(r.gestio?.TasaTuristicaCobrada)}</TableCell>
               </TableRow>
             ))}
           </TableBody>
