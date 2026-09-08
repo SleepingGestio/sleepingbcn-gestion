@@ -145,9 +145,10 @@ function calcularFila(
       r["Cargo estancia"],
       r["Comisiones retenidas"],
     ) ?? 0;
-  const tasaTuristicaKb = Number(r["Cargo tasa turística"]);
-  const tasaTuristica =
-    r.gestio?.TasaTuristica ?? (Number.isFinite(tasaTuristicaKb) ? tasaTuristicaKb : 0);
+  // Importe realmente cobrado (no el esperado/estimado) — a petición de
+  // Ramon (08/09/2026): esta columna del informe pasa a reflejar el cobro
+  // real registrado en el popover, no la estimación de KB.
+  const tasaTuristica = r.gestio?.TasaTuristicaCobrada ?? 0;
 
   // Base de comissió/IVA: NOMÉS estada + neteja — la Tasa turística queda
   // totalment fora de qualsevol càlcul (igual que al popover de detall).
