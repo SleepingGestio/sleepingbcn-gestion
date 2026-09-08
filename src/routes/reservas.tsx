@@ -19,7 +19,7 @@ import { ReservaDetail } from "@/components/reserva-detail";
 import { EstadoBadge } from "@/components/estado-badge";
 import { Check } from "lucide-react";
 import { DateRangePicker, nextWeekRange } from "@/components/date-range-picker";
-import { fmtDate } from "@/lib/format";
+import { fmtDate, fmtEUR } from "@/lib/format";
 import { SortHeader } from "@/components/sort-header";
 import { GroupFilterChips, useGroupFilter } from "@/components/group-filter";
 import { EstadoFilterChips, useEstadoFilter } from "@/components/estado-filter";
@@ -32,7 +32,7 @@ export const Route = createFileRoute("/reservas")({
 
 type SortKey =
   | "numero" | "referencia" | "habitaciones" | "checkin" | "checkout" | "huespedes" | "portal" | "estado"
-  | "cuadre" | "verif";
+  | "cuadre" | "verif" | "ttesperado" | "ttcobrado";
 
 const DATE_MODE_OPTIONS: { value: DateMode; label: string }[] = [
   { value: "checkin", label: "Check-in" },
@@ -196,6 +196,8 @@ function ReservasPage() {
         case "estado": return r["Estado"] ?? "";
         case "cuadre": return noCuadraMap.get(r["Número"]) ? 1 : 0;
         case "verif": return r.gestio?.CuentaVerificada ? 1 : 0;
+        case "ttesperado": return r.gestio?.TasaTuristica ?? "";
+        case "ttcobrado": return r.gestio?.TasaTuristicaCobrada ?? "";
       }
     };
     arr.sort((a, b) => {
@@ -310,17 +312,19 @@ function ReservasPage() {
               <TableHead><SortHeader label="Estado" active={sortKey === "estado"} dir={sortDir} onClick={() => toggleSort("estado")} /></TableHead>
               <TableHead title="Comisión"><SortHeader label="CUADRE" active={sortKey === "cuadre"} dir={sortDir} onClick={() => toggleSort("cuadre")} /></TableHead>
               <TableHead title="Cuenta verificada y cerrada"><SortHeader label="VERIF" active={sortKey === "verif"} dir={sortDir} onClick={() => toggleSort("verif")} /></TableHead>
+              <TableHead title="Tasa turística — importe esperado"><SortHeader label="Esperado" active={sortKey === "ttesperado"} dir={sortDir} onClick={() => toggleSort("ttesperado")} /></TableHead>
+              <TableHead title="Tasa turística — importe cobrado"><SortHeader label="Cobrado" active={sortKey === "ttcobrado"} dir={sortDir} onClick={() => toggleSort("ttcobrado")} /></TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {sourceLoading && (
-              <TableRow><TableCell colSpan={10} className="text-center py-8 text-muted-foreground">Cargando…</TableCell></TableRow>
+              <TableRow><TableCell colSpan={12} className="text-center py-8 text-muted-foreground">Cargando…</TableCell></TableRow>
             )}
             {sourceError && (
-              <TableRow><TableCell colSpan={10} className="text-center py-8 text-destructive">{(sourceError as Error).message}</TableCell></TableRow>
+              <TableRow><TableCell colSpan={12} className="text-center py-8 text-destructive">{(sourceError as Error).message}</TableCell></TableRow>
             )}
             {!sourceLoading && filtered.length === 0 && (
-              <TableRow><TableCell colSpan={10} className="text-center py-8 text-muted-foreground">Sin reservas</TableCell></TableRow>
+              <TableRow><TableCell colSpan={12} className="text-center py-8 text-muted-foreground">Sin reservas</TableCell></TableRow>
             )}
             {filtered.map((r) => (
               <TableRow
@@ -358,6 +362,8 @@ function ReservasPage() {
                     />
                   )}
                 </TableCell>
+                <TableCell className="whitespace-nowrap">{fmtEUR(r.gestio?.TasaTuristica)}</TableCell>
+                <TableCell className="whitespace-nowrap">{fmtEUR(r.gestio?.TasaTuristicaCobrada)}</TableCell>
               </TableRow>
             ))}
           </TableBody>
