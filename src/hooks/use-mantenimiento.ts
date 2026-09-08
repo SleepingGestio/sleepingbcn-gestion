@@ -109,6 +109,12 @@ export function useMantenimientoActions(onMutated?: () => void) {
         validat_per: persona?.id_persona ?? null,
         validat_en: new Date().toISOString(),
         data_reprogramada_por_operario: false,
+        // Clear a stale close timestamp when (re)assigning — matters for the
+        // "Recuperar incidencia" flow, which reassigns an already-finalizada
+        // incidencia and brings it back to "validada": without this it would
+        // carry the old finalitzat_en around while active again, until the
+        // next Fin total overwrites it.
+        finalitzat_en: null,
       })
       .eq("id_incidencia", inc.id_incidencia);
     if (error) {

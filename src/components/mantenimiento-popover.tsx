@@ -984,7 +984,7 @@ export function MantenimientoPopover({
                   </Button>
                 </>
               )}
-              {(inc.estat === "validada" || inc.estat === "en_curs") && (
+              {(inc.estat === "validada" || inc.estat === "en_curs" || inc.estat === "finalitzada") && (
                 <Button variant="outline" onClick={() => setAssignOpen(true)}>
                   Reasignar
                 </Button>

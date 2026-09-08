@@ -370,38 +370,59 @@ function MantenimientoPage() {
     <AppShell title="Mantenimiento">
       <div className="space-y-6">
         {(editable || (reclamacionesAbiertasCountQ.data ?? 0) > 0) && (
-          <div className="flex justify-end items-center gap-2">
-            {(reclamacionesAbiertasCountQ.data ?? 0) > 0 && (
-              <Button
-                size="sm"
-                className={cn(
-                  "h-8 text-xs",
-                  reclamacionFilter === "abierta"
-                    ? "bg-red-900 hover:bg-red-900 text-white ring-2 ring-inset ring-red-950"
-                    : "bg-red-600 hover:bg-red-700 text-white",
+          <div className="flex justify-end">
+            <div className="flex flex-col items-end gap-2">
+              <div className="flex items-center gap-2">
+                {(reclamacionesAbiertasCountQ.data ?? 0) > 0 && (
+                  <Button
+                    size="sm"
+                    className={cn(
+                      "h-8 text-xs",
+                      reclamacionFilter === "abierta"
+                        ? "bg-red-900 hover:bg-red-900 text-white ring-2 ring-inset ring-red-950"
+                        : "bg-red-600 hover:bg-red-700 text-white",
+                    )}
+                    onClick={() => {
+                      if (reclamacionFilter === "abierta") {
+                        setFiltro("asignadas_curso");
+                        setReclamacionFilter("todas");
+                      } else {
+                        setFiltro("todas");
+                        setReclamacionFilter("abierta");
+                      }
+                    }}
+                  >
+                    <Euro className="h-3.5 w-3.5" />
+                    {reclamacionesAbiertasCountQ.data} pendientes de cobro
+                  </Button>
                 )}
-                onClick={() => {
-                  if (reclamacionFilter === "abierta") {
-                    setFiltro("asignadas_curso");
+                {editable && (
+                  <Button
+                    className="bg-[#26215C] hover:bg-[#1e1a48] text-white"
+                    onClick={() => setIncidenciaOpen(true)}
+                  >
+                    <Plus className="h-4 w-4" /> Nueva incidencia
+                  </Button>
+                )}
+              </div>
+              {editable && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-8 text-xs"
+                  onClick={() => {
+                    setFiltro("finalizadas");
+                    setSortKey("fecha_fin");
+                    setGrupoFilter("todos");
+                    setUbicacionFilter("todos");
+                    setOperarioFilter("todos");
                     setReclamacionFilter("todas");
-                  } else {
-                    setFiltro("todas");
-                    setReclamacionFilter("abierta");
-                  }
-                }}
-              >
-                <Euro className="h-3.5 w-3.5" />
-                {reclamacionesAbiertasCountQ.data} pendientes de cobro
-              </Button>
-            )}
-            {editable && (
-              <Button
-                className="bg-[#26215C] hover:bg-[#1e1a48] text-white"
-                onClick={() => setIncidenciaOpen(true)}
-              >
-                <Plus className="h-4 w-4" /> Nueva incidencia
-              </Button>
-            )}
+                  }}
+                >
+                  <RotateCcw className="h-3.5 w-3.5" /> Recuperar incidencia
+                </Button>
+              )}
+            </div>
           </div>
         )}
         <section>
@@ -762,7 +783,7 @@ function TareaRow({
                   </Button>
                 </>
               )}
-              {(inc.estat === "validada" || inc.estat === "en_curs") && (
+              {(inc.estat === "validada" || inc.estat === "en_curs" || inc.estat === "finalitzada") && (
                 <Button size="sm" variant="outline" onClick={onReasignar}>
                   Reasignar
                 </Button>
