@@ -1,6 +1,6 @@
 export type IncidenciaTipo = "averia_rotura" | "manteniment" | "material_danyat" | "altre";
 export type Prioridad = "alta" | "normal" | "baixa";
-export type Estat = "pendent_validacio" | "validada" | "en_curs" | "finalitzada" | "rebutjada";
+export type Estat = "pendent_validacio" | "validada" | "en_curs" | "finalitzada" | "rebutjada" | "eliminada";
 
 export type Incidencia = {
   id_incidencia: number;
@@ -71,11 +71,12 @@ export const PRIORIDAD_STYLE: Record<Prioridad, { bg: string; fg: string; label:
   baixa: { bg: "#9CA3AF", fg: "#FFFFFF", label: "Baja" },
 };
 
-// Used by the compact list row, which only ever shows a pill for these two
+// Used by the compact list row, which only ever shows a pill for these
 // terminal states (validada/en_curs are conveyed by the right-panel color).
 export const ESTADO_PILL_STYLE: Partial<Record<Estat, { bg: string; fg: string; label: string }>> = {
   finalitzada: { bg: "#639922", fg: "#FFFFFF", label: "Finalizada" },
   rebutjada: { bg: "#DC2626", fg: "#FFFFFF", label: "Rechazada" },
+  eliminada: { bg: "#6B7280", fg: "#FFFFFF", label: "Eliminada" },
 };
 
 // Used by the detail popover header, which always shows the current state.
@@ -85,6 +86,7 @@ export const ESTADO_FULL_STYLE: Record<Estat, { bg: string; fg: string; label: s
   en_curs: { bg: "#378ADD", fg: "#FFFFFF", label: "En curso" },
   finalitzada: { bg: "#639922", fg: "#FFFFFF", label: "Finalizada" },
   rebutjada: { bg: "#DC2626", fg: "#FFFFFF", label: "Rechazada" },
+  eliminada: { bg: "#6B7280", fg: "#FFFFFF", label: "Eliminada" },
 };
 
 export const PRIORIDAD_RANK: Record<Prioridad, number> = { alta: 0, normal: 1, baixa: 2 };

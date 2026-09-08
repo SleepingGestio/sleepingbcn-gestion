@@ -984,9 +984,21 @@ export function MantenimientoPopover({
                   </Button>
                 </>
               )}
-              {(inc.estat === "validada" || inc.estat === "en_curs" || inc.estat === "finalitzada") && (
+              {(inc.estat === "validada" ||
+                inc.estat === "en_curs" ||
+                inc.estat === "finalitzada" ||
+                inc.estat === "eliminada") && (
                 <Button variant="outline" onClick={() => setAssignOpen(true)}>
                   Reasignar
+                </Button>
+              )}
+              {inc.estat !== "eliminada" && (
+                <Button
+                  variant="outline"
+                  className="ml-auto border-red-300 text-red-700 hover:bg-red-50"
+                  onClick={() => actions.eliminar(inc)}
+                >
+                  Eliminar
                 </Button>
               )}
             </DialogFooter>

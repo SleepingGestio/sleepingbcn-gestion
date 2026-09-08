@@ -48,7 +48,7 @@ export const Route = createFileRoute("/mantenimiento")({
   component: MantenimientoPage,
 });
 
-type TareasFilter = "asignadas_curso" | "en_curso" | "finalizadas" | "rechazadas" | "todas";
+type TareasFilter = "asignadas_curso" | "en_curso" | "finalizadas" | "rechazadas" | "eliminadas" | "todas";
 type SortKey = "prioridad" | "fecha_prevista" | "fecha_inicio" | "fecha_fin" | "titulo" | "ubicacion" | "operario";
 type UbicacionFilter = "todos" | `apt-${number}` | `esp-${number}`;
 type OperarioFilter = "todos" | "sin_asignar" | number;
@@ -116,6 +116,11 @@ function MantenimientoPage() {
       else if (filtro === "en_curso") q = q.eq("estat", "en_curs");
       else if (filtro === "finalizadas") q = q.eq("estat", "finalitzada");
       else if (filtro === "rechazadas") q = q.eq("estat", "rebutjada");
+      else if (filtro === "eliminadas") q = q.eq("estat", "eliminada");
+      // "todas" — every other estado, but never "eliminada": that's the
+      // whole point of the soft delete (out of the normal circuit unless
+      // you deliberately pick the "Eliminadas" filter).
+      else if (filtro === "todas") q = q.neq("estat", "eliminada");
       const { data, error } = await q;
       if (error) throw error;
       return (data ?? []) as unknown as Incidencia[];
@@ -445,6 +450,7 @@ function MantenimientoPage() {
                 onOpenDetail={() => setDetailId(inc.id_incidencia)}
                 onRechazar={() => actions.rechazar(inc)}
                 onAsignar={() => setAssignTarget(inc)}
+                onEliminar={() => actions.eliminar(inc)}
               />
             ))}
           </div>
@@ -467,6 +473,7 @@ function MantenimientoPage() {
                     <SelectItem value="en_curso">Solo en curso</SelectItem>
                     <SelectItem value="finalizadas">Finalizadas</SelectItem>
                     <SelectItem value="rechazadas">Rechazadas</SelectItem>
+                    <SelectItem value="eliminadas">Eliminadas</SelectItem>
                     <SelectItem value="todas">Todas</SelectItem>
                   </SelectContent>
                 </Select>
@@ -589,6 +596,7 @@ function MantenimientoPage() {
                 onFinParcial={() => actions.finParcial(t, t.id_assignat, registreByIncidencia.get(t.id_incidencia) ?? [])}
                 onFinTotal={() => actions.finTotal(t)}
                 onReasignar={() => setAssignTarget(t)}
+                onEliminar={() => actions.eliminar(t)}
               />
             ))}
           </div>
@@ -638,6 +646,7 @@ function NuevaCard({
   onOpenDetail,
   onRechazar,
   onAsignar,
+  onEliminar,
 }: {
   inc: Incidencia;
   location: string;
@@ -647,6 +656,7 @@ function NuevaCard({
   onOpenDetail: () => void;
   onRechazar: () => void;
   onAsignar: () => void;
+  onEliminar: () => void;
 }) {
   return (
     <Card
@@ -684,6 +694,14 @@ function NuevaCard({
           <Button size="sm" className="flex-1 bg-[#26215C] hover:bg-[#1e1a48] text-white" onClick={onAsignar}>
             Asignar
           </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            className="border-red-300 text-red-700 hover:bg-red-50"
+            onClick={onEliminar}
+          >
+            Eliminar
+          </Button>
         </div>
       )}
     </Card>
@@ -704,6 +722,7 @@ function TareaRow({
   onFinParcial,
   onFinTotal,
   onReasignar,
+  onEliminar,
 }: {
   inc: Incidencia;
   sesiones: Registre[];
@@ -718,6 +737,7 @@ function TareaRow({
   onFinParcial: () => void;
   onFinTotal: () => void;
   onReasignar: () => void;
+  onEliminar: () => void;
 }) {
   const hasOpenSession = sesiones.some((s) => s.fi == null && s.id_persona === inc.id_assignat);
   const closedSessions = sesiones.filter((s) => s.fi != null);
@@ -783,9 +803,22 @@ function TareaRow({
                   </Button>
                 </>
               )}
-              {(inc.estat === "validada" || inc.estat === "en_curs" || inc.estat === "finalitzada") && (
+              {(inc.estat === "validada" ||
+                inc.estat === "en_curs" ||
+                inc.estat === "finalitzada" ||
+                inc.estat === "eliminada") && (
                 <Button size="sm" variant="outline" onClick={onReasignar}>
                   Reasignar
+                </Button>
+              )}
+              {inc.estat !== "eliminada" && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="border-red-300 text-red-700 hover:bg-red-50"
+                  onClick={onEliminar}
+                >
+                  Eliminar
                 </Button>
               )}
             </div>

@@ -393,6 +393,32 @@ export function useMantenimientoActions(onMutated?: () => void) {
     onMutated?.();
   }
 
+  // Soft delete: marks the incidencia "eliminada" instead of removing the
+  // row, so it drops out of the normal circuit (excluded from "Todas",
+  // no longer actionable) but stays visible/recoverable via the
+  // "Eliminadas" filter — agreed with Ramon over an actual DELETE, which
+  // would have had to cascade across manteniment_adjunts/_reclamaciones/
+  // _registre.
+  async function eliminar(inc: Pick<Incidencia, "id_incidencia" | "titol">) {
+    if (
+      !window.confirm(
+        `¿Eliminar la incidencia "${inc.titol}"? Se sacará del circuito habitual (no aparecerá en "Todas"), pero se podrá seguir viendo en el filtro "Eliminadas".`,
+      )
+    )
+      return;
+    if (!window.confirm("¿Confirmas definitivamente la eliminación?")) return;
+    const { error } = await supabase
+      .from("manteniment_incidencies")
+      .update({ estat: "eliminada" })
+      .eq("id_incidencia", inc.id_incidencia);
+    if (error) {
+      toast.error("Error: " + error.message);
+      return;
+    }
+    toast.success("Incidencia eliminada");
+    onMutated?.();
+  }
+
   async function actualizarReclamacion(
     idReclamacion: number,
     patch: TablesUpdate<"manteniment_reclamaciones">,
@@ -429,6 +455,7 @@ export function useMantenimientoActions(onMutated?: () => void) {
     iniciar,
     finParcial,
     finTotal,
+    eliminar,
     guardarNotaGestion,
     guardarNotaFinalizacion,
     subirAdjuntosIncidencia,
