@@ -33,3 +33,10 @@ supabase/.temp/
 *.njsproj
 *.sln
 *.sw?
+
+# Secrets locales (script de importacion KB)
+.env
+.env.*
+!.env.example
+scripts/google_token.json
+scripts/google_client_secret.json
