@@ -88,7 +88,18 @@ jobs:
           # --files-only + --max-depth 1: solo lo que está pendiente en la raíz
           # de la carpeta, sin entrar en procesados/ ni rechazados/ (rclone es
           # recursivo por defecto y volvería a bajarlo todo).
-          mapfile -t FICHEROS < <(rclone lsf --max-depth 1 --files-only "$REMOTE" | grep -i '\.xlsx$' || true)
+          # Listamos a un fichero temporal y comprobamos el estado de forma
+          # explícita: dentro de una sustitución de proceso, un fallo de rclone
+          # (token revocado o caducado, sin red) no llega a set -e, y el job
+          # acabaría en verde diciendo "no hay ficheros pendientes" — que es
+          # justo el error más peligroso aquí: alguien pulsa el botón, ve que
+          # todo ha ido bien, y no se ha importado nada.
+          if ! rclone lsf --max-depth 1 --files-only "$REMOTE" > /tmp/kb_listado.txt; then
+            echo "::error::No se ha podido listar la carpeta de pCloud. Revisa el secret PCLOUD_TOKEN (¿revocado o caducado?) o la conectividad."
+            exit 1
+          fi
+
+          mapfile -t FICHEROS < <(grep -i '\.xlsx$' /tmp/kb_listado.txt || true)
 
           if [ "${#FICHEROS[@]}" -eq 0 ]; then
             echo "No hay ficheros pendientes en la carpeta de pCloud."
