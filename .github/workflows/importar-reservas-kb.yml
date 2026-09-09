@@ -1,0 +1,145 @@
+name: Importar reservas KB
+
+# Se dispara solo a demanda: desde la pestaña Actions de GitHub, o desde el
+# botón "Importar reservas KB" de la app (que llama a workflow_dispatch a
+# través de un endpoint del Cloudflare Worker). Nunca por horario.
+on:
+  workflow_dispatch:
+    inputs:
+      modo:
+        description: "Modo de importación"
+        type: choice
+        options:
+          - diario
+          - historico
+        default: diario
+      google_sync:
+        description: "Alta automática en Google Contacts"
+        type: boolean
+        default: true
+
+# Dos importaciones a la vez sobre la misma carpeta se pisarían: la segunda
+# podría bajar un fichero que la primera ya está moviendo a procesados.
+concurrency:
+  group: importar-reservas-kb
+  cancel-in-progress: false
+
+env:
+  RCLONE_VERSION: "1.75.1"
+  KB_REMOTE_DIR: "SLEEPINGBCN PCloud/Compartit SLEEPING/A DESCARREGUES KB"
+
+jobs:
+  importar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Instalar dependencias de Python
+        run: |
+          pip install --disable-pip-version-check --quiet \
+            pandas openpyxl requests phonenumbers \
+            google-auth google-auth-oauthlib google-api-python-client
+
+      - name: Instalar rclone
+        run: |
+          curl -fsSL -o /tmp/rclone.zip \
+            "https://github.com/rclone/rclone/releases/download/v${RCLONE_VERSION}/rclone-v${RCLONE_VERSION}-linux-amd64.zip"
+          unzip -q /tmp/rclone.zip -d /tmp
+          sudo mv "/tmp/rclone-v${RCLONE_VERSION}-linux-amd64/rclone" /usr/local/bin/rclone
+          rclone version | head -1
+
+      # El fichero de credenciales de Google se escribe solo si el secret
+      # existe. Si no está, el script lo detecta, avisa en el log y sigue
+      # importando reservas con normalidad (la sincronización de contactos
+      # nunca interrumpe la importación).
+      - name: Preparar credenciales de Google Contacts
+        if: ${{ inputs.google_sync }}
+        env:
+          GOOGLE_TOKEN_JSON: ${{ secrets.GOOGLE_TOKEN_JSON }}
+        run: |
+          if [ -z "${GOOGLE_TOKEN_JSON:-}" ]; then
+            echo "::warning::No hay secret GOOGLE_TOKEN_JSON; se omitirá el alta en Google Contacts."
+            exit 0
+          fi
+          printf '%s' "$GOOGLE_TOKEN_JSON" > scripts/google_token.json
+          echo "Token de Google escrito."
+
+      - name: Importar ficheros pendientes
+        env:
+          # Configuración de rclone por variables de entorno: no hace falta
+          # escribir ningún rclone.conf en disco.
+          RCLONE_CONFIG_PCLOUD_TYPE: pcloud
+          RCLONE_CONFIG_PCLOUD_HOSTNAME: api.pcloud.com
+          RCLONE_CONFIG_PCLOUD_TOKEN: ${{ secrets.PCLOUD_TOKEN }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          KB_WATCH_DIR: ${{ github.workspace }}/kb_in
+          GOOGLE_TOKEN_PATH: ${{ github.workspace }}/scripts/google_token.json
+          SYNC_GOOGLE_CONTACTS: ${{ inputs.google_sync && '1' || '0' }}
+          MODO: ${{ inputs.modo }}
+        run: |
+          set -euo pipefail
+          REMOTE="pcloud:${KB_REMOTE_DIR}"
+
+          # --files-only + --max-depth 1: solo lo que está pendiente en la raíz
+          # de la carpeta, sin entrar en procesados/ ni rechazados/ (rclone es
+          # recursivo por defecto y volvería a bajarlo todo).
+          mapfile -t FICHEROS < <(rclone lsf --max-depth 1 --files-only "$REMOTE" | grep -i '\.xlsx$' || true)
+
+          if [ "${#FICHEROS[@]}" -eq 0 ]; then
+            echo "No hay ficheros pendientes en la carpeta de pCloud."
+            echo "Sin ficheros pendientes." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          echo "Ficheros pendientes: ${#FICHEROS[@]}"
+          RECHAZADOS=0
+
+          for F in "${FICHEROS[@]}"; do
+            echo "=================================================="
+            echo "Procesando: $F"
+
+            rm -rf "$KB_WATCH_DIR"
+            mkdir -p "$KB_WATCH_DIR"
+            rclone copyto "$REMOTE/$F" "$KB_WATCH_DIR/$F"
+
+            set +e
+            python scripts/importar_reservas_kb.py --modo "$MODO"
+            CODIGO=$?
+            set -e
+
+            case "$CODIGO" in
+              0) DESTINO="procesados" ;;
+              1) DESTINO="rechazados"; RECHAZADOS=$((RECHAZADOS + 1)) ;;
+              2)
+                echo "::error::Falta el secret SUPABASE_KEY. No se ha movido ningún fichero."
+                exit 2
+                ;;
+              *)
+                echo "::error::El script ha terminado con código $CODIGO. No se ha movido '$F'."
+                exit "$CODIGO"
+                ;;
+            esac
+
+            rclone moveto "$REMOTE/$F" "$REMOTE/$DESTINO/$F"
+            echo "-> movido a $DESTINO"
+            echo "- \`$F\` → $DESTINO" >> "$GITHUB_STEP_SUMMARY"
+          done
+
+          if [ "$RECHAZADOS" -gt 0 ]; then
+            echo "::error::$RECHAZADOS fichero(s) rechazado(s). Revisa el log adjunto."
+            exit 1
+          fi
+
+      - name: Guardar log de la importación
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: log-importacion
+          path: scripts/importar_reservas_kb.log
+          if-no-files-found: ignore
+          retention-days: 30
