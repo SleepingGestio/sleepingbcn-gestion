@@ -25,7 +25,10 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  RCLONE_VERSION: "1.75.1"
+  # Ojo: no llamar a esta variable RCLONE_*. rclone interpreta cualquier
+  # RCLONE_<FLAG> del entorno como una opción suya, y RCLONE_VERSION se
+  # tomaba como el flag --version (booleano), abortando cada ejecución.
+  KB_RCLONE_VERSION: "1.75.1"
   KB_REMOTE_DIR: "SLEEPINGBCN PCloud/Compartit SLEEPING/A DESCARREGUES KB"
 
 jobs:
@@ -48,9 +51,9 @@ jobs:
       - name: Instalar rclone
         run: |
           curl -fsSL -o /tmp/rclone.zip \
-            "https://github.com/rclone/rclone/releases/download/v${RCLONE_VERSION}/rclone-v${RCLONE_VERSION}-linux-amd64.zip"
+            "https://github.com/rclone/rclone/releases/download/v${KB_RCLONE_VERSION}/rclone-v${KB_RCLONE_VERSION}-linux-amd64.zip"
           unzip -q /tmp/rclone.zip -d /tmp
-          sudo mv "/tmp/rclone-v${RCLONE_VERSION}-linux-amd64/rclone" /usr/local/bin/rclone
+          sudo mv "/tmp/rclone-v${KB_RCLONE_VERSION}-linux-amd64/rclone" /usr/local/bin/rclone
           rclone version | head -1
 
       # El fichero de credenciales de Google se escribe solo si el secret
