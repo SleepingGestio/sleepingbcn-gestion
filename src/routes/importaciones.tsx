@@ -126,10 +126,27 @@ function ImportacionesPage() {
   // importar. Para que el botón signifique algo, esperamos a que aparezca una
   // fila nueva en kb_importaciones y contamos el resultado real.
   async function lanzarImportacion() {
-    const idAntes = importsQ.data?.[0]?.id ?? 0;
     setImportando(true);
     try {
+      // Punto de partida del sondeo, consultado en fresco a propósito: si se
+      // tomara de importsQ y el historial aún no hubiera cargado, el punto de
+      // partida sería 0 y el primer sondeo daría por buena la importación
+      // ANTERIOR, cantando un éxito que no ha ocurrido. Si esta consulta
+      // falla, se lanza igual pero sin fingir que sabemos cómo ha ido.
+      const { data: ultima, error: errUltima } = await supabase
+        .from("kb_importaciones")
+        .select("id")
+        .order("fecha_importacion", { ascending: false })
+        .limit(1);
+      const idAntes = errUltima ? null : (((ultima ?? []) as { id: number }[])[0]?.id ?? 0);
+
       await dispararImportacionKb({ data: { modo: "diario", googleSync: true } });
+
+      if (idAntes === null) {
+        toast.info("Importación lanzada. Consulta el historial dentro de un minuto.");
+        return;
+      }
+
       toast.info("Importación lanzada. Esperando el resultado…");
 
       const limite = Date.now() + ESPERA_MAX_MS;
