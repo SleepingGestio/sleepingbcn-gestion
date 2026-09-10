@@ -89,6 +89,9 @@ function fmtFechaHora(iso: string): string {
 // en que el runner de GitHub tarda en arrancar.
 const ESPERA_MAX_MS = 4 * 60_000;
 const SONDEO_MS = 3_000;
+// Margen para que el workflow acabe de mover el fichero en pCloud después de
+// que la importación ya haya quedado registrada en la base de datos.
+const ESPERA_MOVIMIENTO_MS = 30_000;
 
 function ImportacionesPage() {
   const [selectedId, setSelectedId] = useState<number | null>(null);
@@ -172,6 +175,18 @@ function ImportacionesPage() {
           `Importación completada: ${resultado.nuevas ?? 0} nuevas, ${resultado.modificadas ?? 0} modificadas.`,
         );
         setSelectedId(resultado.id);
+        // El script escribe la fila de kb_importaciones ANTES de que el
+        // workflow mueva el fichero en pCloud, así que en el instante en que
+        // detectamos el resultado el fichero todavía figura como pendiente.
+        // Sin esto, la tarjeta se queda diciendo que hay trabajo pendiente
+        // justo después de haberlo hecho — cada vez, no de vez en cuando.
+        const procesado = resultado.fichero;
+        const limitePendientes = Date.now() + ESPERA_MOVIMIENTO_MS;
+        while (procesado && Date.now() < limitePendientes) {
+          const r = await pendientesQ.refetch();
+          if (!(r.data?.ficheros ?? []).includes(procesado)) break;
+          await new Promise((res) => setTimeout(res, SONDEO_MS));
+        }
       } else {
         // Un fichero rechazado no deja fila en kb_importaciones, así que este
         // caso cubre tanto "aún no ha terminado" como "ha fallado".
