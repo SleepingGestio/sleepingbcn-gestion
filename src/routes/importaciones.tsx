@@ -1,15 +1,19 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { AppShell } from "@/components/app-shell";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { TimeBadge } from "@/components/time-badge";
+import { usePermissions } from "@/hooks/use-permissions";
+import { dispararImportacionKb, getKbPendientes } from "@/lib/api/kb-import.functions";
 import { fmtDate, resolveTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, FileDown, Loader2 } from "lucide-react";
 
 export const Route = createFileRoute("/importaciones")({
   component: ImportacionesPage,
@@ -80,9 +84,17 @@ function fmtFechaHora(iso: string): string {
   return `${dd}/${mm} ${hh}:${mi}`;
 }
 
+// Cuánto esperamos a que el workflow termine antes de rendirnos. Una
+// importación normal tarda unos 40 segundos; el margen amplio cubre los días
+// en que el runner de GitHub tarda en arrancar.
+const ESPERA_MAX_MS = 4 * 60_000;
+const SONDEO_MS = 3_000;
+
 function ImportacionesPage() {
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [showEstado, setShowEstado] = useState(false);
+  const [importando, setImportando] = useState(false);
+  const { canEdit } = usePermissions();
 
   const importsQ = useQuery({
     queryKey: ["kb-importaciones"],
@@ -97,6 +109,67 @@ function ImportacionesPage() {
       return (data ?? []) as Importacion[];
     },
   });
+
+  // Qué hay esperando en la carpeta de pCloud. Se refresca solo mientras la
+  // pantalla está abierta, para que alguien que acaba de dejar el fichero lo
+  // vea aparecer sin recargar. retry:false: si el token de pCloud falla, es
+  // mejor decirlo una vez que reintentar en silencio.
+  const pendientesQ = useQuery({
+    queryKey: ["kb-pendientes"],
+    queryFn: () => getKbPendientes(),
+    refetchInterval: 60_000,
+    retry: false,
+  });
+  const pendientes = pendientesQ.data?.ficheros ?? [];
+
+  // El workflow devuelve en cuanto GitHub lo acepta, no cuando termina de
+  // importar. Para que el botón signifique algo, esperamos a que aparezca una
+  // fila nueva en kb_importaciones y contamos el resultado real.
+  async function lanzarImportacion() {
+    const idAntes = importsQ.data?.[0]?.id ?? 0;
+    setImportando(true);
+    try {
+      await dispararImportacionKb({ data: { modo: "diario", googleSync: true } });
+      toast.info("Importación lanzada. Esperando el resultado…");
+
+      const limite = Date.now() + ESPERA_MAX_MS;
+      let resultado: Importacion | null = null;
+      while (Date.now() < limite) {
+        await new Promise((r) => setTimeout(r, SONDEO_MS));
+        const { data } = await supabase
+          .from("kb_importaciones")
+          .select(
+            "id, fecha_importacion, fichero, modo, total_filas, nuevas, modificadas, sin_cambios, eliminadas_candidatas, estado",
+          )
+          .order("fecha_importacion", { ascending: false })
+          .limit(1);
+        const fila = ((data ?? []) as Importacion[])[0];
+        if (fila && fila.id > idAntes) {
+          resultado = fila;
+          break;
+        }
+      }
+
+      if (resultado) {
+        toast.success(
+          `Importación completada: ${resultado.nuevas ?? 0} nuevas, ${resultado.modificadas ?? 0} modificadas.`,
+        );
+        setSelectedId(resultado.id);
+      } else {
+        // Un fichero rechazado no deja fila en kb_importaciones, así que este
+        // caso cubre tanto "aún no ha terminado" como "ha fallado".
+        toast.warning(
+          "No ha aparecido ninguna importación nueva. Comprueba el resultado en GitHub Actions.",
+        );
+      }
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "No se ha podido lanzar la importación.");
+    } finally {
+      setImportando(false);
+      void importsQ.refetch();
+      void pendientesQ.refetch();
+    }
+  }
 
   // Expand the most recent run's detail panel on first load, so the latest
   // import's changes are visible without a click. One-shot: after this, the
@@ -213,6 +286,54 @@ function ImportacionesPage() {
   return (
     <AppShell title="Importaciones">
       <div className="space-y-4">
+        <Card>
+          <CardContent className="flex flex-wrap items-center justify-between gap-3 py-4">
+            <div className="min-w-0 text-sm">
+              {pendientesQ.isLoading ? (
+                <span className="text-muted-foreground">Comprobando la carpeta de pCloud…</span>
+              ) : pendientesQ.isError ? (
+                <span className="text-amber-700">
+                  No se ha podido consultar la carpeta de pCloud
+                  {pendientesQ.error instanceof Error ? `: ${pendientesQ.error.message}` : "."}
+                </span>
+              ) : pendientes.length === 0 ? (
+                <span className="text-muted-foreground">
+                  No hay ficheros pendientes. Deja el Excel de Krossbooking en la carpeta
+                  compartida de pCloud y aparecerá aquí.
+                </span>
+              ) : (
+                <div className="space-y-1">
+                  <span className="inline-block rounded bg-amber-100 px-1.5 py-0.5 text-xs font-semibold text-amber-800">
+                    {pendientes.length}{" "}
+                    {pendientes.length === 1 ? "fichero pendiente" : "ficheros pendientes"}
+                  </span>
+                  <ul className="space-y-0.5 font-mono text-xs text-muted-foreground">
+                    {pendientes.map((f) => (
+                      <li key={f} className="truncate">
+                        {f}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+            {canEdit("importaciones") && (
+              <Button
+                onClick={lanzarImportacion}
+                disabled={importando || (!pendientesQ.isError && pendientes.length === 0)}
+                className="shrink-0 gap-2"
+              >
+                {importando ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <FileDown className="h-4 w-4" />
+                )}
+                {importando ? "Importando…" : "Importar reservas KB"}
+              </Button>
+            )}
+          </CardContent>
+        </Card>
+
         <Card>
           <CardHeader>
             <CardTitle>Historial de importaciones</CardTitle>
