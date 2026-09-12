@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { AppShell } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
@@ -351,6 +351,15 @@ function ProgramacionLimpiezasPage() {
     () => (limpiezasQ.data ?? []).filter((l) => l.affected_by_kb_change).length,
     [limpiezasQ.data],
   );
+
+  // El botón del aviso solo se dibuja si affectedCount > 0, y el filtro oculta
+  // todas las limpiezas no afectadas. Al resolver la última desde el popover, el
+  // botón desaparecía con el filtro todavía activo: la rejilla se quedaba vacía y
+  // sin ninguna forma de quitarlo salvo recargar la página. Si ya no queda nada
+  // afectado el filtro no tiene objeto, así que se quita solo.
+  useEffect(() => {
+    if (affectedCount === 0 && onlyAffected) setOnlyAffected(false);
+  }, [affectedCount, onlyAffected]);
 
   const sharedByNumero = useMemo(() => {
     const m = new Map<string, ReservaRow[]>();
