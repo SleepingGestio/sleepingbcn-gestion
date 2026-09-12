@@ -411,6 +411,14 @@ export function ReservaDetail({
                     </SelectContent>
                   </Select>
                 </div>
+                <div className="space-y-2">
+                  <Label>Box</Label>
+                  <Input
+                    value={g.BoxNumber ?? ""}
+                    onChange={(e) => setG({ ...g, BoxNumber: e.target.value || null })}
+                    disabled={readOnly}
+                  />
+                </div>
               </div>
 
               {/* Limpiezas de esta reserva — de solo lectura aquí: la fuente real es

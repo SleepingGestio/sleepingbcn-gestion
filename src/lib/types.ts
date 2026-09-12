@@ -36,6 +36,7 @@ export type ReservaGestio = {
   ParteeRecl2: string | null;
   ParteeRecl3: string | null;
   AgCheckIN: number | null;
+  BoxNumber: string | null;
   /** @deprecated Ya no se escribe desde la UI (era una segunda fuente de
    *  verdad, desconectada de la asignación real en `limpiezas.worker`) — ver
    *  ReservaDetail, sección "Limpiezas". Columna conservada en la base tal
