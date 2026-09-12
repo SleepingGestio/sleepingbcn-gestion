@@ -18,6 +18,7 @@ import { getUnavailableWorkerIds } from "@/lib/worker-availability";
 import { WorkerSelectItem, unavailabilityWarningText } from "@/components/worker-select-item";
 import { Link2, RotateCcw, Trash2, X, Zap, Wrench } from "lucide-react";
 import { MantenimientoPopover } from "@/components/mantenimiento-popover";
+import { useCurrentPersonal } from "@/hooks/use-current-personal";
 import { usePersonalLite } from "@/hooks/use-mantenimiento";
 import { bedLabel } from "@/routes/programacion-limpiezas";
 import { TimeBadge } from "@/components/time-badge";
@@ -61,6 +62,9 @@ export type Limpieza = {
   affected_reason: string | null;
   affected_resolved_en: string | null;
   affected_resolved_diff: KbChangeDiffEntry[] | null;
+  affected_resolved_accion: string | null;
+  affected_resolved_por: number | null;
+  affected_resolved_por_nombre: string | null;
   proxima_reserva_numero: string | null;
   iniciada_en: string | null;
   finalizada_en: string | null;
@@ -120,6 +124,9 @@ function emptyLimpieza(apt: AptInfo, fecha: string): Limpieza {
     affected_reason: null,
     affected_resolved_en: null,
     affected_resolved_diff: null,
+    affected_resolved_accion: null,
+    affected_resolved_por: null,
+    affected_resolved_por_nombre: null,
     proxima_reserva_numero: null,
     iniciada_en: null,
     finalizada_en: null,
@@ -181,6 +188,15 @@ export function LimpiezaPopover({ open, loadKey, onOpenChange, apt, fecha, exist
   const [anularOpen, setAnularOpen] = useState(false);
 
   const [mantDetailId, setMantDetailId] = useState<number | null>(null);
+  const { persona } = useCurrentPersonal();
+  // Foto de quien resuelve el aviso, igual que affected_resolved_diff es una
+  // foto de lo que cambió: se guarda el nombre además del id para que
+  // cualquier pantalla lo muestre sin resolver el id, y para que el registro
+  // siga siendo legible si esa persona se da de baja.
+  const resueltoPor = {
+    affected_resolved_por: persona?.id_persona ?? null,
+    affected_resolved_por_nombre: fullName(persona) || null,
+  };
   const personalQ = usePersonalLite();
   const mantForAptQ = useQuery({
     queryKey: ["limpieza-popover-mant", apt.id_apt, form.fecha_limpieza],
@@ -516,6 +532,8 @@ export function LimpiezaPopover({ open, loadKey, onOpenChange, apt, fecha, exist
         // notice even though the stale values are gone once this update lands.
         affected_resolved_en: new Date().toISOString(),
         affected_resolved_diff: kbChanges,
+        affected_resolved_accion: "aplicado",
+        ...resueltoPor,
       };
       // Only update the auto SFC base when the gestor hasn't manually
       // overridden it; manual flags are explicitly preserved.
@@ -540,12 +558,24 @@ export function LimpiezaPopover({ open, loadKey, onOpenChange, apt, fecha, exist
     if (readOnly || form.id_limpieza === 0) return;
     setSaving(true);
     try {
+      // Descartar un aviso deja el mismo rastro que aplicarlo: qué cambió,
+      // cuándo y quién. Sin esto el aviso desaparecía sin dejar constancia de
+      // que Krossbooking había cambiado algo, que es justo el caso en que
+      // conviene poder preguntar.
+      const patch = {
+        affected_by_kb_change: false,
+        affected_reason: null,
+        affected_resolved_en: new Date().toISOString(),
+        affected_resolved_diff: kbChanges,
+        affected_resolved_accion: "descartado",
+        ...resueltoPor,
+      };
       const { error } = await supabase
         .from("limpiezas")
-        .update({ affected_by_kb_change: false, affected_reason: null })
+        .update(patch)
         .eq("id_limpieza", form.id_limpieza);
       if (error) throw error;
-      setForm((f) => ({ ...f, affected_by_kb_change: false, affected_reason: null }));
+      setForm((f) => ({ ...f, ...patch }));
       toast.success("Marcada como revisada");
       onSaved();
     } catch (e) {

@@ -95,6 +95,8 @@ type Limpieza = {
   affected_by_kb_change: boolean;
   affected_resolved_en: string | null;
   affected_resolved_diff: KbChangeDiffEntry[] | null;
+  affected_resolved_accion: string | null;
+  affected_resolved_por_nombre: string | null;
 };
 
 type LimpiezaDia = Limpieza & { esPendienteAtrasada?: boolean };
@@ -2532,7 +2534,11 @@ function WorkerView({
                       {isResolvedToday && (
                         <TableRow>
                           <TableCell colSpan={6} className="py-1 px-2">
-                            <KbChangeResolvedBanner diff={t.affected_resolved_diff ?? []} />
+                            <KbChangeResolvedBanner
+                              diff={t.affected_resolved_diff ?? []}
+                              accion={t.affected_resolved_accion}
+                              por={t.affected_resolved_por_nombre}
+                            />
                           </TableCell>
                         </TableRow>
                       )}
@@ -2737,7 +2743,11 @@ function TaskCard({
         )}
         {isResolvedToday && (
           <div className="mt-2">
-            <KbChangeResolvedBanner diff={t.affected_resolved_diff ?? []} />
+            <KbChangeResolvedBanner
+              diff={t.affected_resolved_diff ?? []}
+              accion={t.affected_resolved_accion}
+              por={t.affected_resolved_por_nombre}
+            />
           </div>
         )}
 
@@ -3187,7 +3197,13 @@ function DetailView({
             loading={kbDiffsLoading && !kbDiff}
           />
         )}
-        {isResolvedToday && <KbChangeResolvedBanner diff={t.affected_resolved_diff ?? []} />}
+        {isResolvedToday && (
+          <KbChangeResolvedBanner
+            diff={t.affected_resolved_diff ?? []}
+            accion={t.affected_resolved_accion}
+            por={t.affected_resolved_por_nombre}
+          />
+        )}
 
         {/* Horarios */}
         <section>
