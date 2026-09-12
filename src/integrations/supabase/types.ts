@@ -1619,6 +1619,7 @@ export type Database = {
       reservas_gestio: {
         Row: {
           AgCheckIN: number | null
+          BoxNumber: string | null
           CuentaVerificada: boolean | null
           EnLimpieza: boolean | null
           id_historico: number
@@ -1641,6 +1642,7 @@ export type Database = {
         }
         Insert: {
           AgCheckIN?: number | null
+          BoxNumber?: string | null
           CuentaVerificada?: boolean | null
           EnLimpieza?: boolean | null
           id_historico?: number
@@ -1663,6 +1665,7 @@ export type Database = {
         }
         Update: {
           AgCheckIN?: number | null
+          BoxNumber?: string | null
           CuentaVerificada?: boolean | null
           EnLimpieza?: boolean | null
           id_historico?: number
