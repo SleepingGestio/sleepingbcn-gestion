@@ -195,7 +195,9 @@ export function LimpiezaPopover({ open, loadKey, onOpenChange, apt, fecha, exist
   // siga siendo legible si esa persona se da de baja.
   const resueltoPor = {
     affected_resolved_por: persona?.id_persona ?? null,
-    affected_resolved_por_nombre: fullName(persona) || null,
+    // fullName() devuelve "—" cuando no hay persona, no una cadena vacía: sin este
+    // guard el registro de auditoría guardaría un guión como si fuera un nombre.
+    affected_resolved_por_nombre: persona ? fullName(persona) : null,
   };
   const personalQ = usePersonalLite();
   const mantForAptQ = useQuery({
