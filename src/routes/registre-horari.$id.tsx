@@ -32,6 +32,7 @@ import { toast } from "sonner";
 import { LimpiezaPopover, type Limpieza } from "@/components/limpieza-popover";
 import { MantenimientoPopover } from "@/components/mantenimiento-popover";
 import { useCurrentPersonal } from "@/hooks/use-current-personal";
+import { usePermissions } from "@/hooks/use-permissions";
 import { HHMMInput } from "@/components/hhmm-input";
 import { useApartamentosLite, useEspaciosLite, useGruposLite, usePersonalLite } from "@/hooks/use-mantenimiento";
 import { resolveLocation, TIPO_STYLE, type IncidenciaTipo } from "@/lib/mantenimiento";
@@ -119,6 +120,12 @@ function DetallPage() {
   const idPersona = Number(id);
   const qc = useQueryClient();
   const { persona: currentPersona } = useCurrentPersonal();
+  // El permiso sigue a lo que se edita, no a la pantalla desde la que se llega:
+  // poder consultar las horas de alguien no habilita a reprogramar limpiezas.
+  // Mismo criterio (y mismo menú) que /programacion-limpiezas, que es donde
+  // este popover se abre normalmente.
+  const { canEdit } = usePermissions();
+  const canEditLimpiezas = canEdit("programacion_limpiezas");
 
   const today = new Date();
   const [year, setYear] = useState(today.getFullYear());
@@ -779,6 +786,7 @@ function DetallPage() {
             apt={limpiezaPopover.apt}
             fecha={limpiezaPopover.fecha}
             existing={limpiezaPopover.existing}
+            readOnly={!canEditLimpiezas}
             onSaved={() => {
               qc.invalidateQueries({ queryKey: ["reg-horari-det-limpiezas", idPersona] });
             }}
