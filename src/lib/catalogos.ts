@@ -18,8 +18,11 @@ async function fetchPersonalByRole(roleName: string) {
   }));
 }
 
+// Cualquier personal activo puede ser agente de check-in — no solo quien
+// tenga asignado el rol "Check-in" (así es como funciona el negocio
+// realmente). Mismo criterio y misma query que fetchActivePersonal.
 export async function fetchAgentes(): Promise<AgCheckIn[]> {
-  return fetchPersonalByRole("Check-in");
+  return fetchActivePersonal();
 }
 
 export async function fetchLimpiadores(): Promise<PersLimp[]> {

@@ -10,9 +10,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { X } from "lucide-react";
 import { EstadoBadge } from "@/components/estado-badge";
+import { EstadoLimpiezaBadge } from "@/components/estado-limpieza-badge";
+import { LimpiezaPopover, type Limpieza } from "@/components/limpieza-popover";
 import { fetchReserva, upsertGestio } from "@/lib/reservas";
 import { fetchReservaExtras, saveReservaExtras } from "@/lib/reserva-extras";
-import { fetchAgentes, fetchLimpiadores } from "@/lib/catalogos";
+import { fetchAgentes } from "@/lib/catalogos";
+import { usePersonalLite } from "@/hooks/use-mantenimiento";
+import { usePermissions } from "@/hooks/use-permissions";
 import {
   fetchCanalesReserva, fetchTarifasCobroCanal, fetchTarifasComisionOta, fetchTarifasLimpieza,
 } from "@/lib/tarifas";
@@ -24,6 +28,7 @@ import {
 } from "@/lib/comisiones";
 import { toast } from "sonner";
 import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
 import { fmtDate, fmtEUR, fmtNum2, resolveTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { TimeBadge } from "@/components/time-badge";
@@ -48,13 +53,57 @@ export function ReservaDetail({
   const [extrasOriginal, setExtrasOriginal] = useState<ReservaExtra[]>([]);
   const [saving, setSaving] = useState(false);
   const [activeTab, setActiveTab] = useState<"gestion" | "economica" | "huespedes">("gestion");
+  const [editingLimpieza, setEditingLimpieza] = useState<Limpieza | null>(null);
+  const [limpiezaLoadKey, setLimpiezaLoadKey] = useState(0);
 
   const agentesQ = useQuery({ queryKey: ["agentes"], queryFn: fetchAgentes });
-  const limpiadoresQ = useQuery({ queryKey: ["limpiadores"], queryFn: fetchLimpiadores });
   const canalesQ = useQuery({ queryKey: ["canales-reserva-detail"], queryFn: fetchCanalesReserva });
   const tarifasLimpiezaQ = useQuery({ queryKey: ["tarifas-limpieza-detail"], queryFn: fetchTarifasLimpieza });
   const tarifasComisionQ = useQuery({ queryKey: ["tarifas-comision-detail"], queryFn: fetchTarifasComisionOta });
   const tarifasCobroQ = useQuery({ queryKey: ["tarifas-cobro-detail"], queryFn: fetchTarifasCobroCanal });
+  const { canEdit } = usePermissions();
+  // Misma regla que registre-horari/programación limpiezas: el permiso sigue
+  // al objeto editado (la limpieza), no a la pantalla desde la que se abre.
+  const canEditLimpiezaAsignada = canEdit("programacion_limpiezas");
+
+  // Fuente real de la limpieza asignada — reemplaza el antiguo Select ligado a
+  // reservas_gestio.PersLImpAsig (ver nota junto a ese campo, más abajo), que
+  // podía discrepar en silencio de lo que realmente hay en /limpiezas y
+  // /programacion-limpiezas.
+  const limpiezasReservaQ = useQuery({
+    queryKey: ["reserva-detail-limpiezas", numero],
+    enabled: !!numero,
+    queryFn: async (): Promise<Limpieza[]> => {
+      const { data, error } = await supabase
+        .from("limpiezas")
+        .select("*")
+        .eq("numero_reserva", numero!)
+        .order("fecha_limpieza", { ascending: true });
+      if (error) throw error;
+      return (data ?? []) as Limpieza[];
+    },
+  });
+  const personalQ = usePersonalLite();
+  const personalById = new Map((personalQ.data ?? []).map((p) => [p.id_persona, p]));
+
+  const editingAptQ = useQuery({
+    queryKey: ["reserva-detail-limpieza-apt", editingLimpieza?.id_apt],
+    enabled: editingLimpieza != null,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("apartamentos")
+        .select("id_apt, nombre, camas_fijas, tiene_sofa_cama")
+        .eq("id_apt", editingLimpieza!.id_apt)
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  function openLimpiezaEdit(l: Limpieza) {
+    setEditingLimpieza(l);
+    setLimpiezaLoadKey((k) => k + 1);
+  }
 
   const llegada = reserva ? resolveTime(reserva["Hora estimada de llegada"], "15:00:00") : null;
   const salida = reserva ? resolveTime(reserva["Hora estimada de salida"], "11:00:00") : null;
@@ -265,6 +314,7 @@ export function ReservaDetail({
   }
 
   return (
+    <>
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
@@ -361,22 +411,41 @@ export function ReservaDetail({
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="space-y-2">
-                  <Label>Personal de limpieza</Label>
-                  <Select
-                    value={g.PersLImpAsig != null ? String(g.PersLImpAsig) : "none"}
-                    onValueChange={(v) => setG({ ...g, PersLImpAsig: v === "none" ? null : Number(v) })}
-                    disabled={readOnly}
-                  >
-                    <SelectTrigger><SelectValue placeholder="Sin asignar" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">Sin asignar</SelectItem>
-                      {limpiadoresQ.data?.map((p) => (
-                        <SelectItem key={p.id_persona} value={String(p.id_persona)}>{fullName(p)}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+              </div>
+
+              {/* Limpiezas de esta reserva — de solo lectura aquí: la fuente real es
+                  la tabla `limpiezas` (una fila por fecha/tipo), la misma que
+                  alimenta /limpiezas y /programacion-limpiezas. reservas_gestio.
+                  PersLImpAsig ya NO se escribe desde esta pantalla (queda en la
+                  base tal cual, pero está obsoleta como fuente de verdad — ver
+                  nota junto a ese campo en ReservaGestio). */}
+              <div className="space-y-2">
+                <Label>Limpiezas</Label>
+                {limpiezasReservaQ.isLoading ? (
+                  <div className="text-sm text-muted-foreground">Cargando…</div>
+                ) : (limpiezasReservaQ.data ?? []).length === 0 ? (
+                  <div className="text-sm italic text-muted-foreground">Sin limpieza generada todavía</div>
+                ) : (
+                  <div className="space-y-1.5">
+                    {(limpiezasReservaQ.data ?? []).map((l) => (
+                      <button
+                        key={l.id_limpieza}
+                        type="button"
+                        onClick={() => openLimpiezaEdit(l)}
+                        className="flex w-full items-center gap-2.5 rounded-md border px-2.5 py-1.5 text-left text-sm hover:bg-muted/60"
+                      >
+                        <span className="w-14 shrink-0 text-muted-foreground">{fmtDate(l.fecha_limpieza)}</span>
+                        <span className="w-16 shrink-0 text-[11px] uppercase tracking-wide text-muted-foreground">
+                          {l.tipo === "intermedia" ? "Intermedia" : "Checkout"}
+                        </span>
+                        <span className="flex-1 truncate">
+                          {l.worker != null ? fullName(personalById.get(l.worker)) : "Sin asignar"}
+                        </span>
+                        <EstadoLimpiezaBadge estado={l.estado} worker={l.worker} />
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
@@ -721,6 +790,30 @@ export function ReservaDetail({
         )}
       </DialogContent>
     </Dialog>
+
+    {editingLimpieza && editingAptQ.data && (
+      <LimpiezaPopover
+        open={!!editingLimpieza}
+        loadKey={limpiezaLoadKey}
+        onOpenChange={(o) => {
+          if (!o) setEditingLimpieza(null);
+        }}
+        apt={{
+          id_apt: editingAptQ.data.id_apt,
+          nombre: editingAptQ.data.nombre,
+          camas_fijas: editingAptQ.data.camas_fijas,
+          tiene_sofa_cama: editingAptQ.data.tiene_sofa_cama,
+        }}
+        fecha={editingLimpieza.fecha_limpieza}
+        existing={editingLimpieza}
+        readOnly={readOnly || !canEditLimpiezaAsignada}
+        onSaved={() => {
+          limpiezasReservaQ.refetch();
+          setEditingLimpieza(null);
+        }}
+      />
+    )}
+    </>
   );
 }
 
