@@ -772,6 +772,7 @@ export type Database = {
           id_incidencia: number
           id_limpieza: number | null
           id_reporter: number
+          id_tarea_preventiva: number | null
           id_tipo_espacio_comun: number | null
           iniciat_en: string | null
           material_reposat: boolean | null
@@ -801,6 +802,7 @@ export type Database = {
           id_incidencia?: number
           id_limpieza?: number | null
           id_reporter: number
+          id_tarea_preventiva?: number | null
           id_tipo_espacio_comun?: number | null
           iniciat_en?: string | null
           material_reposat?: boolean | null
@@ -830,6 +832,7 @@ export type Database = {
           id_incidencia?: number
           id_limpieza?: number | null
           id_reporter?: number
+          id_tarea_preventiva?: number | null
           id_tipo_espacio_comun?: number | null
           iniciat_en?: string | null
           material_reposat?: boolean | null
@@ -880,6 +883,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "personal"
             referencedColumns: ["id_persona"]
+          },
+          {
+            foreignKeyName: "manteniment_incidencies_id_tarea_preventiva_fkey"
+            columns: ["id_tarea_preventiva"]
+            isOneToOne: false
+            referencedRelation: "tareas_preventivas"
+            referencedColumns: ["id_tarea_preventiva"]
           },
           {
             foreignKeyName: "manteniment_incidencies_id_tipo_espacio_comun_fkey"
@@ -1916,6 +1926,125 @@ export type Database = {
           nombre?: string
         }
         Relationships: []
+      }
+      tareas_preventivas: {
+        Row: {
+          activo: boolean
+          creado_en: string
+          creado_por: number | null
+          descripcion: string | null
+          id_tarea_preventiva: number
+          intervalo_cantidad: number | null
+          intervalo_unidad: string | null
+          modo_periodicidad: string
+          nombre: string
+          tipo_generacion: string
+        }
+        Insert: {
+          activo?: boolean
+          creado_en?: string
+          creado_por?: number | null
+          descripcion?: string | null
+          id_tarea_preventiva?: never
+          intervalo_cantidad?: number | null
+          intervalo_unidad?: string | null
+          modo_periodicidad: string
+          nombre: string
+          tipo_generacion?: string
+        }
+        Update: {
+          activo?: boolean
+          creado_en?: string
+          creado_por?: number | null
+          descripcion?: string | null
+          id_tarea_preventiva?: never
+          intervalo_cantidad?: number | null
+          intervalo_unidad?: string | null
+          modo_periodicidad?: string
+          nombre?: string
+          tipo_generacion?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tareas_preventivas_creado_por_fkey"
+            columns: ["creado_por"]
+            isOneToOne: false
+            referencedRelation: "personal"
+            referencedColumns: ["id_persona"]
+          },
+        ]
+      }
+      tareas_preventivas_aplicaciones: {
+        Row: {
+          creado_en: string
+          id_aplicacion: number
+          id_grupo: number
+          id_tarea_preventiva: number
+          id_tipo_espacio_comun: number | null
+          modo_aplicacion: string
+        }
+        Insert: {
+          creado_en?: string
+          id_aplicacion?: never
+          id_grupo: number
+          id_tarea_preventiva: number
+          id_tipo_espacio_comun?: number | null
+          modo_aplicacion: string
+        }
+        Update: {
+          creado_en?: string
+          id_aplicacion?: never
+          id_grupo?: number
+          id_tarea_preventiva?: number
+          id_tipo_espacio_comun?: number | null
+          modo_aplicacion?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tareas_preventivas_aplicaciones_id_grupo_fkey"
+            columns: ["id_grupo"]
+            isOneToOne: false
+            referencedRelation: "grupos_apartamentos"
+            referencedColumns: ["id_grupo"]
+          },
+          {
+            foreignKeyName: "tareas_preventivas_aplicaciones_id_tarea_preventiva_fkey"
+            columns: ["id_tarea_preventiva"]
+            isOneToOne: false
+            referencedRelation: "tareas_preventivas"
+            referencedColumns: ["id_tarea_preventiva"]
+          },
+          {
+            foreignKeyName: "tareas_preventivas_aplicaciones_id_tipo_espacio_comun_fkey"
+            columns: ["id_tipo_espacio_comun"]
+            isOneToOne: false
+            referencedRelation: "tipos_espacio_comun"
+            referencedColumns: ["id_tipo"]
+          },
+        ]
+      }
+      tareas_preventivas_meses: {
+        Row: {
+          id_tarea_preventiva: number
+          mes: number
+        }
+        Insert: {
+          id_tarea_preventiva: number
+          mes: number
+        }
+        Update: {
+          id_tarea_preventiva?: number
+          mes?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tareas_preventivas_meses_id_tarea_preventiva_fkey"
+            columns: ["id_tarea_preventiva"]
+            isOneToOne: false
+            referencedRelation: "tareas_preventivas"
+            referencedColumns: ["id_tarea_preventiva"]
+          },
+        ]
       }
       tarifas_cobro_canal: {
         Row: {

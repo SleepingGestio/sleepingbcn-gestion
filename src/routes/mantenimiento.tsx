@@ -5,6 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { AppShell } from "@/components/app-shell";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Select,
   SelectContent,
@@ -32,6 +33,7 @@ import { AsignarDialog } from "@/components/mantenimiento-asignar-dialog";
 import { MantenimientoPopover } from "@/components/mantenimiento-popover";
 import { OcupacionPopoverTrigger } from "@/components/apartamento-ocupacion-calendario";
 import { ReportarIncidenciaSheet, type ReportarIncidenciaContext } from "@/components/reportar-incidencia";
+import { MantenimientoPreventivoTab } from "@/components/mantenimiento-preventivo";
 import {
   INCIDENCIA_COLUMNS,
   REGISTRE_COLUMNS,
@@ -373,6 +375,13 @@ function MantenimientoPage() {
 
   return (
     <AppShell title="Mantenimiento">
+      <Tabs defaultValue="incidencias" className="w-full">
+        <TabsList>
+          <TabsTrigger value="incidencias">Incidencias</TabsTrigger>
+          <TabsTrigger value="preventivo">Mantenimiento preventivo</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="incidencias">
       <div className="space-y-6">
         {(editable || (reclamacionesAbiertasCountQ.data ?? 0) > 0) && (
           <div className="flex justify-end">
@@ -602,6 +611,12 @@ function MantenimientoPage() {
           </div>
         </section>
       </div>
+        </TabsContent>
+
+        <TabsContent value="preventivo">
+          <MantenimientoPreventivoTab editable={editable} />
+        </TabsContent>
+      </Tabs>
 
       <AsignarDialog
         inc={assignTarget}
