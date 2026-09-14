@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -54,6 +54,17 @@ import type { AnularItem, GenerarItem } from "@/hooks/use-mantenimiento-preventi
 const DONE_COLOR = ESTADO_FULL_STYLE.finalitzada.bg;
 const GENERADO_COLOR = ESTADO_FULL_STYLE.pendent_validacio.bg;
 const ASIGNADO_COLOR = ESTADO_FULL_STYLE.validada.bg;
+
+// Planning grid's infinite horizontal scroll: initial window is 6 months
+// back (including the current month) + 6 forward. Scrolling toward either
+// edge extends the range by PLANNING_STEP_MONTHS at a time, up to the caps
+// below — past those, extension silently stops (no visible "no more
+// months" indicator; nothing was requested for that case).
+const PLANNING_INITIAL_FROM_OFFSET = -5;
+const PLANNING_INITIAL_TO_OFFSET = 6;
+const PLANNING_STEP_MONTHS = 12;
+const PLANNING_MIN_FROM_OFFSET = -60; // 5 years back
+const PLANNING_MAX_TO_OFFSET = 24; // 2 years forward
 
 function Dot({
   bg,
@@ -379,13 +390,14 @@ function PlanningRowView({
   onDesanular: (idAnulacion: number) => Promise<void>;
   onAnularDefinitiva: (idAnulacion: number) => Promise<void>;
 }) {
-  const row = buildPlanningRow(
-    tarea,
-    location.scopeSince,
-    incidenciasAtLocation,
-    columns,
-    today,
-    anulacionesAtLocation,
+  // Memoized: with infinite horizontal scroll, `columns` can grow to dozens
+  // of entries and this runs once per (tarea, location) row — previously
+  // recomputed on every render with no memoization at all, harmless at a
+  // fixed 12 columns but wasteful once the range keeps extending.
+  const row = useMemo(
+    () =>
+      buildPlanningRow(tarea, location.scopeSince, incidenciasAtLocation, columns, today, anulacionesAtLocation),
+    [tarea, location.scopeSince, incidenciasAtLocation, columns, today, anulacionesAtLocation],
   );
   const { grupo, detalle } = locationLabel(location, grupoById, espacioById);
   const locKey = locationKey(location);
@@ -485,10 +497,96 @@ function PlanningTareaContent({
   onAnularDefinitiva: (idAnulacion: number) => Promise<boolean>;
 }) {
   const today = todayISO();
-  const columns = useMemo(() => buildPlanningColumns(today), [today]);
+  const [range, setRange] = useState({
+    from: PLANNING_INITIAL_FROM_OFFSET,
+    to: PLANNING_INITIAL_TO_OFFSET,
+  });
+  const columns = useMemo(
+    () => buildPlanningColumns(today, range.from, range.to),
+    [today, range],
+  );
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [asignarWorker, setAsignarWorker] = useState<string>("");
   const [busyBulk, setBusyBulk] = useState(false);
+
+  // Infinite horizontal scroll — see PLANNING_* constants above. A single
+  // IntersectionObserver (root = the scrollable container) watches two thin
+  // sentinel elements just past either end of the table; scrolling either
+  // one into view extends `range` in that direction. `rangeRef` lets the
+  // observer's callbacks (set up once, on mount) always read the latest
+  // range for the cap check without needing to recreate the observer every
+  // time `range` changes.
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const leftSentinelRef = useRef<HTMLDivElement>(null);
+  const rightSentinelRef = useRef<HTMLDivElement>(null);
+  const rangeRef = useRef(range);
+  useEffect(() => {
+    rangeRef.current = range;
+  }, [range]);
+
+  // Extending backward (prepending columns) shifts everything already
+  // rendered further right under the user's current scroll position —
+  // without correction the view visibly jumps. These two refs carry the
+  // container's scrollWidth captured right before the prepend over to the
+  // useLayoutEffect below, which restores the equivalent scrollLeft once
+  // the new columns have actually been added to the DOM (but before the
+  // browser paints, so the correction is invisible). Extending forward
+  // (appending) needs no such fix — nothing already on screen moves.
+  const pendingPrependRef = useRef(false);
+  const prevScrollWidthRef = useRef<number | null>(null);
+
+  const extendBack = useCallback(() => {
+    if (rangeRef.current.from <= PLANNING_MIN_FROM_OFFSET) return;
+    if (scrollContainerRef.current) {
+      prevScrollWidthRef.current = scrollContainerRef.current.scrollWidth;
+      pendingPrependRef.current = true;
+    }
+    setRange((r) => ({
+      ...r,
+      from: Math.max(r.from - PLANNING_STEP_MONTHS, PLANNING_MIN_FROM_OFFSET),
+    }));
+  }, []);
+
+  const extendForward = useCallback(() => {
+    if (rangeRef.current.to >= PLANNING_MAX_TO_OFFSET) return;
+    setRange((r) => ({
+      ...r,
+      to: Math.min(r.to + PLANNING_STEP_MONTHS, PLANNING_MAX_TO_OFFSET),
+    }));
+  }, []);
+
+  useEffect(() => {
+    const root = scrollContainerRef.current;
+    if (!root) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (!entry.isIntersecting) continue;
+          if (entry.target === leftSentinelRef.current) extendBack();
+          else if (entry.target === rightSentinelRef.current) extendForward();
+        }
+      },
+      // Horizontal-only margin so a sentinel triggers a bit before it's
+      // actually scrolled fully into view, not just as it appears.
+      { root, rootMargin: "0px 200px 0px 200px" },
+    );
+    if (leftSentinelRef.current) observer.observe(leftSentinelRef.current);
+    if (rightSentinelRef.current) observer.observe(rightSentinelRef.current);
+    return () => observer.disconnect();
+  }, [extendBack, extendForward]);
+
+  useLayoutEffect(() => {
+    if (!pendingPrependRef.current) return;
+    const container = scrollContainerRef.current;
+    if (!container || prevScrollWidthRef.current == null) {
+      pendingPrependRef.current = false;
+      return;
+    }
+    const delta = container.scrollWidth - prevScrollWidthRef.current;
+    container.scrollLeft += delta;
+    pendingPrependRef.current = false;
+    prevScrollWidthRef.current = null;
+  }, [columns]);
 
   const aplicacionesTarea = useMemo(
     () => aplicaciones.filter((a) => a.id_tarea_preventiva === tarea.id_tarea_preventiva),
@@ -683,7 +781,12 @@ function PlanningTareaContent({
         </div>
       )}
 
-      <div className="rounded-lg border bg-white overflow-x-auto">
+      <div ref={scrollContainerRef} className="rounded-lg border bg-white overflow-x-auto">
+        <div className="flex items-stretch">
+        {/* 1px sentinels the IntersectionObserver above watches — not real
+            content, just markers at each horizontal edge of the scrollable
+            area so scrolling near either one extends `range`. */}
+        <div ref={leftSentinelRef} className="w-px shrink-0" aria-hidden />
         <table className="w-full min-w-[900px] border-collapse">
           <thead>
             <tr>
@@ -735,6 +838,8 @@ function PlanningTareaContent({
             ))}
           </tbody>
         </table>
+        <div ref={rightSentinelRef} className="w-px shrink-0" aria-hidden />
+        </div>
       </div>
 
       <div className="text-xs text-muted-foreground text-center">

@@ -417,11 +417,23 @@ export function computeLocationPending(
 
 export type PlanningColumn = { year: number; month: number };
 
-/** Last 10 months (current included) + next 2, recomputed from `today` every time — not a fixed calendar year. */
-export function buildPlanningColumns(today: string): PlanningColumn[] {
+/**
+ * Builds the column range [fromOffset, toOffset] (inclusive, in months
+ * relative to `today`'s month — 0 = current month). Always recomputed from
+ * `today`, never a fixed calendar year. The caller owns the actual range
+ * (initial window, and how far infinite-scroll has extended it so far) —
+ * this function only knows how to turn an offset range into calendar
+ * months, so it stays reusable for both the initial render and every
+ * subsequent extension.
+ */
+export function buildPlanningColumns(
+  today: string,
+  fromOffset: number,
+  toOffset: number,
+): PlanningColumn[] {
   const [y, m] = today.split("-").map(Number);
   const cols: PlanningColumn[] = [];
-  for (let offset = -9; offset <= 2; offset++) {
+  for (let offset = fromOffset; offset <= toOffset; offset++) {
     const d = new Date(y, m - 1 + offset, 1);
     cols.push({ year: d.getFullYear(), month: d.getMonth() + 1 });
   }
