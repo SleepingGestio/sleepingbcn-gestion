@@ -769,17 +769,19 @@ export function LimpiezaPopover({ open, loadKey, onOpenChange, apt, fecha, exist
                         }
                       : undefined
                   }
-                  trailing={
-                    showNextBox ? (
+                />
+                {(showNextGuests || showNextBox) && (
+                  <div className="flex items-center gap-2 pl-1">
+                    {showNextGuests && (
+                      <span className="text-xs font-medium text-foreground">
+                        👤 {nextGuestsCount} {nextGuestsCount === 1 ? "huésped entrante" : "huéspedes entrantes"}
+                      </span>
+                    )}
+                    {showNextBox && (
                       <span className="shrink-0 inline-flex items-center rounded px-2 py-0.5 text-sm font-bold bg-sky-50 text-sky-700 border border-sky-200">
                         Box {nextBoxQ.data}
                       </span>
-                    ) : undefined
-                  }
-                />
-                {showNextGuests && (
-                  <div className="text-xs font-medium text-foreground pl-1">
-                    👤 {nextGuestsCount} {nextGuestsCount === 1 ? "huésped entrante" : "huéspedes entrantes"}
+                    )}
                   </div>
                 )}
               </div>
