@@ -769,19 +769,17 @@ export function LimpiezaPopover({ open, loadKey, onOpenChange, apt, fecha, exist
                         }
                       : undefined
                   }
+                  trailing={
+                    showNextBox ? (
+                      <span className="shrink-0 inline-flex items-center rounded px-2 py-0.5 text-sm font-bold bg-sky-50 text-sky-700 border border-sky-200">
+                        Box {nextBoxQ.data}
+                      </span>
+                    ) : undefined
+                  }
                 />
-                {(showNextGuests || showNextBox) && (
-                  <div className="flex items-center gap-2 pl-1">
-                    {showNextGuests && (
-                      <span className="text-xs font-medium text-foreground">
-                        👤 {nextGuestsCount} {nextGuestsCount === 1 ? "huésped entrante" : "huéspedes entrantes"}
-                      </span>
-                    )}
-                    {showNextBox && (
-                      <span className="inline-flex items-center gap-0.5 rounded-full bg-sky-50 text-sky-700 border border-sky-200 px-1.5 py-0.5 text-[10px] font-semibold">
-                        📦 Box {nextBoxQ.data}
-                      </span>
-                    )}
+                {showNextGuests && (
+                  <div className="text-xs font-medium text-foreground pl-1">
+                    👤 {nextGuestsCount} {nextGuestsCount === 1 ? "huésped entrante" : "huéspedes entrantes"}
                   </div>
                 )}
               </div>
@@ -1140,6 +1138,7 @@ function HoraRow({
   informed,
   emptyText,
   badge,
+  trailing,
 }: {
   label: string;
   dateLabel: string;
@@ -1147,6 +1146,12 @@ function HoraRow({
   informed: boolean;
   emptyText?: string;
   badge?: { label: string; title?: string };
+  /** Extra element after `badge` — not folded into it since the two aren't
+   * mutually exclusive (e.g. Box on the Entra row can co-exist with the
+   * NOENTRAN badge: a próxima reserva can have a Box even when it doesn't
+   * check in on this exact cleaning date) and Box needs its own, larger
+   * visual treatment rather than the small muted `badge` styling. */
+  trailing?: React.ReactNode;
 }) {
   return (
     <div className="flex items-center gap-2 text-sm">
@@ -1165,6 +1170,7 @@ function HoraRow({
           {badge.label}
         </span>
       )}
+      {trailing}
     </div>
   );
 }

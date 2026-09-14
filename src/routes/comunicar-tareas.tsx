@@ -686,8 +686,8 @@ function TaskCard({
               </span>
             )}
             {box && (
-              <span className="inline-flex items-center gap-0.5 rounded-full bg-sky-50 text-sky-700 border border-sky-200 px-1.5 py-0.5 text-[10px] font-semibold">
-                📦 Box {box}
+              <span className="inline-flex items-center rounded-full bg-sky-50 text-sky-700 border border-sky-200 px-2 py-0.5 text-xs font-semibold">
+                Box {box}
               </span>
             )}
           </div>
