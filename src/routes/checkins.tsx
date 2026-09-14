@@ -93,6 +93,7 @@ function CheckinsPage() {
                 <SortHeader label="Hora (KB)" active={sortKey === "horaKB"} dir={sortDir} onClick={() => toggleSort("horaKB")} />
               </TableHead>
               <TableHead>Huésped</TableHead>
+              <TableHead>Box</TableHead>
               <TableHead>
                 <SortHeader label="Apartamento" active={sortKey === "habitaciones"} dir={sortDir} onClick={() => toggleSort("habitaciones")} />
               </TableHead>
@@ -103,9 +104,9 @@ function CheckinsPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {q.isLoading && <TableRow><TableCell colSpan={8} className="text-center py-8 text-muted-foreground">Cargando…</TableCell></TableRow>}
+            {q.isLoading && <TableRow><TableCell colSpan={9} className="text-center py-8 text-muted-foreground">Cargando…</TableCell></TableRow>}
             {!q.isLoading && sorted.length === 0 && (
-              <TableRow><TableCell colSpan={8} className="text-center py-8 text-muted-foreground">No hay check-ins en el rango</TableCell></TableRow>
+              <TableRow><TableCell colSpan={9} className="text-center py-8 text-muted-foreground">No hay check-ins en el rango</TableCell></TableRow>
             )}
             {sorted.map((r) => {
               const llegada = resolveTime(r["Hora estimada de llegada"], "15:00:00");
@@ -114,6 +115,7 @@ function CheckinsPage() {
                   <TableCell>{fmtDate(r["Check in"])}</TableCell>
                   <TableCell><TimeBadge value={llegada.value.slice(0, 5)} informed={llegada.informed} /></TableCell>
                   <TableCell className="font-medium">{r["Referencia"] ?? "—"}</TableCell>
+                  <TableCell>{r.gestio?.BoxNumber ?? "—"}</TableCell>
                   <TableCell>{r["Habitaciones"] ?? "—"}</TableCell>
                   <TableCell>{r["Huéspedes"] ?? "—"}</TableCell>
                   <TableCell>{r["Teléfono"] ?? "—"}</TableCell>

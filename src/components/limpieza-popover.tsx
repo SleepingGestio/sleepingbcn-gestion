@@ -369,6 +369,24 @@ export function LimpiezaPopover({ open, loadKey, onOpenChange, apt, fecha, exist
     },
   });
 
+  // Box del huésped entrante — solo aplica a limpiezas de salida (la reserva
+  // que ocupará el apartamento a continuación). v_reservas_por_apartamento no
+  // incluye BoxNumber (no hace join con reservas_gestio), así que hace falta
+  // esta consulta aparte en vez de ampliar esa vista compartida.
+  const nextBoxQ = useQuery({
+    queryKey: ["limpieza-popover-next-box", nextReservation?.["Número"] ?? null],
+    enabled: loaded && form.tipo !== "intermedia" && !!nextReservation?.["Número"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("reservas_gestio")
+        .select("BoxNumber")
+        .eq("Número", nextReservation!["Número"])
+        .maybeSingle();
+      if (error) throw error;
+      return (data as { BoxNumber: string | null } | null)?.BoxNumber ?? null;
+    },
+  });
+
   const isPriority =
     form.prioritaria_manual !== null && form.prioritaria_manual !== undefined
       ? form.prioritaria_manual
@@ -751,6 +769,11 @@ export function LimpiezaPopover({ open, loadKey, onOpenChange, apt, fecha, exist
                 {nextReservation?.["Huéspedes"] != null && nextReservation["Huéspedes"] > 0 && (
                   <div className="text-xs font-medium text-foreground pl-1">
                     👤 {nextReservation["Huéspedes"]} {nextReservation["Huéspedes"] === 1 ? "huésped entrante" : "huéspedes entrantes"}
+                  </div>
+                )}
+                {nextBoxQ.data && (
+                  <div className="text-xs font-medium text-foreground pl-1">
+                    📦 Box: {nextBoxQ.data}
                   </div>
                 )}
               </div>
