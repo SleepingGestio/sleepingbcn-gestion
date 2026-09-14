@@ -85,6 +85,25 @@ async function fetchReservasLite(numeros: string[]): Promise<Map<string, ResvLit
   return m;
 }
 
+// Box del huésped entrante para limpiezas de salida. v_reservas_por_apartamento
+// no hace join con reservas_gestio, así que hace falta esta consulta aparte
+// (mismo motivo que en LimpiezaPopover) — pero aquí, en vez de una consulta
+// por fila, se agrupan todos los números de próxima reserva visibles en una
+// sola llamada batched, igual que fetchReservasLite ya hace para huéspedes.
+async function fetchBoxNumbers(numeros: string[]): Promise<Map<string, string | null>> {
+  const m = new Map<string, string | null>();
+  if (numeros.length === 0) return m;
+  const { data, error } = await supabase
+    .from("reservas_gestio")
+    .select('"Número","BoxNumber"')
+    .in("Número", numeros);
+  if (error) throw error;
+  for (const r of (data ?? []) as { Número: string; BoxNumber: string | null }[]) {
+    m.set(r["Número"], r.BoxNumber ?? null);
+  }
+  return m;
+}
+
 function shortAptName(name: string): string {
   return name
     .replace(/^\s*(Apartamento|Apart\.?)\s+/i, "")
@@ -145,6 +164,20 @@ function LimpiezasAsignadasPage() {
     queryKey: ["limpiezas_asignadas_reservas", numeros.sort().join(",")],
     queryFn: () => fetchReservasLite(numeros),
     enabled: numeros.length > 0,
+  });
+
+  const nextNumeros = useMemo(() => {
+    const s = new Set<string>();
+    for (const l of q.data ?? []) {
+      if (l.tipo === "salida" && l.proxima_reserva_numero) s.add(l.proxima_reserva_numero);
+    }
+    return Array.from(s);
+  }, [q.data]);
+
+  const boxQ = useQuery({
+    queryKey: ["limpiezas_asignadas_box", nextNumeros.sort().join(",")],
+    queryFn: () => fetchBoxNumbers(nextNumeros),
+    enabled: nextNumeros.length > 0,
   });
 
   const aptById = useMemo(() => {
@@ -247,6 +280,7 @@ function LimpiezasAsignadasPage() {
                 <TableHead title="Sofá cama necesario">Sofá cama</TableHead>
                 <TableHead>Sale</TableHead>
                 <TableHead>Entra</TableHead>
+                <TableHead>Box</TableHead>
                 <TableHead>Horas</TableHead>
                 <TableHead>
                   <SortHeader
@@ -262,14 +296,14 @@ function LimpiezasAsignadasPage() {
             <TableBody>
               {q.isLoading && (
                 <TableRow>
-                  <TableCell colSpan={11} className="text-center py-8 text-muted-foreground">
+                  <TableCell colSpan={12} className="text-center py-8 text-muted-foreground">
                     Cargando…
                   </TableCell>
                 </TableRow>
               )}
               {!q.isLoading && rows.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={11} className="text-center py-8 text-muted-foreground">
+                  <TableCell colSpan={12} className="text-center py-8 text-muted-foreground">
                     Sin limpiezas asignadas en el rango
                   </TableCell>
                 </TableRow>
@@ -282,6 +316,7 @@ function LimpiezasAsignadasPage() {
                 const guests = l.numero_reserva ? reservasQ.data?.get(l.numero_reserva)?.guests ?? null : null;
                 const nxt = l.proxima_reserva_numero ? reservasQ.data?.get(l.proxima_reserva_numero) ?? null : null;
                 const isNentran = !nxt || nxt.checkIn !== l.fecha_limpieza;
+                const box = isSalida && l.proxima_reserva_numero ? boxQ.data?.get(l.proxima_reserva_numero) ?? null : null;
                 const needsSofa =
                   !!info?.tiene_sofa_cama &&
                   guests != null &&
@@ -345,6 +380,7 @@ function LimpiezasAsignadasPage() {
                         <TimeBadge time={l.hora_in_time} informed={l.hora_in_informed} size="md" />
                       )}
                     </TableCell>
+                    <TableCell className="text-xs">{box ? `Box: ${box}` : null}</TableCell>
                     <TableCell className="font-mono text-xs">
                       {hours != null ? formatHHMM(hours) : <span className="text-muted-foreground">—</span>}
                     </TableCell>
@@ -365,7 +401,7 @@ function LimpiezasAsignadasPage() {
                   </TableRow>
                   {isAffected && (
                     <TableRow>
-                      <TableCell colSpan={11} className="py-1 px-3">
+                      <TableCell colSpan={12} className="py-1 px-3">
                         <KbChangePendingBanner
                           changes={kbDiff?.changes ?? []}
                           reasonNote={kbDiff?.reasonNote ?? null}
@@ -376,7 +412,7 @@ function LimpiezasAsignadasPage() {
                   )}
                   {isResolvedToday && (
                     <TableRow>
-                      <TableCell colSpan={11} className="py-1 px-3">
+                      <TableCell colSpan={12} className="py-1 px-3">
                         <KbChangeResolvedBanner diff={l.affected_resolved_diff ?? []} />
                       </TableCell>
                     </TableRow>
