@@ -810,7 +810,16 @@ function PlanningTareaContent({
         </div>
       )}
 
-      <div ref={scrollContainerRef} className="rounded-lg border bg-white overflow-x-auto">
+      {/* max-w caps the container well below the table's min-w-[900px] so it
+          always overflows and shows a real scrollbar, on any viewport width —
+          the IntersectionObserver sentinels below only ever fire on an actual
+          scroll-driven intersection change, so without a guaranteed overflow
+          they'd never trigger on a wide enough screen. ~700px shows about
+          8-9 of the table's ~59px-wide month columns at once. */}
+      <div
+        ref={scrollContainerRef}
+        className="max-w-[700px] rounded-lg border bg-white overflow-x-auto"
+      >
         <div className="flex items-stretch">
         {/* 1px sentinels the IntersectionObserver above watches — not real
             content, just markers at each horizontal edge of the scrollable
