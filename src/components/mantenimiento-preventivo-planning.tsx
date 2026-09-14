@@ -66,6 +66,19 @@ const PLANNING_STEP_MONTHS = 12;
 const PLANNING_MIN_FROM_OFFSET = -60; // 5 years back
 const PLANNING_MAX_TO_OFFSET = 24; // 2 years forward
 
+// Fixed per-column pixel widths for the planning table, shared by every
+// header AND body cell (both PlanningTareaContent's <th>s and
+// PlanningRowView's <td>s reference these same two constants). Combined
+// with `table-layout: fixed`, this is what guarantees each column stays
+// exactly this wide no matter how many months are loaded (up to ~85 at
+// the caps above) — the table's total width grows linearly with column
+// count instead of a fixed total budget (e.g. a plain min-width on the
+// table) getting divided across more and more columns as the range
+// extends, which is what previously made headers compress and overlap
+// once the column count got large.
+const PLANNING_LABEL_COL_WIDTH = 190;
+const PLANNING_MONTH_COL_WIDTH = 64;
+
 function Dot({
   bg,
   border,
@@ -404,14 +417,21 @@ function PlanningRowView({
 
   return (
     <tr>
-      <td className="text-left py-2.5 pr-3.5 text-sm whitespace-nowrap border-b">
+      <td
+        style={{ width: PLANNING_LABEL_COL_WIDTH, minWidth: PLANNING_LABEL_COL_WIDTH }}
+        className="text-left py-2.5 pr-3.5 text-sm whitespace-nowrap border-b"
+      >
         <span className="font-medium">{grupo}</span>{" "}
         <span className="text-muted-foreground">· {detalle}</span>
       </td>
       {row.map((cell, i) => {
         const col = columns[i];
         return (
-          <td key={i} className="py-1.5 px-1 text-center border-b relative">
+          <td
+            key={i}
+            style={{ width: PLANNING_MONTH_COL_WIDTH, minWidth: PLANNING_MONTH_COL_WIDTH }}
+            className="py-1.5 px-1 text-center border-b relative"
+          >
             {cell.type === "done" && (
               <button
                 type="button"
@@ -810,12 +830,14 @@ function PlanningTareaContent({
         </div>
       )}
 
-      {/* max-w caps the container well below the table's min-w-[900px] so it
-          always overflows and shows a real scrollbar, on any viewport width —
-          the IntersectionObserver sentinels below only ever fire on an actual
-          scroll-driven intersection change, so without a guaranteed overflow
-          they'd never trigger on a wide enough screen. ~700px shows about
-          8-9 of the table's ~59px-wide month columns at once. */}
+      {/* max-w caps the container well below the table's minimum possible
+          width (label + 12 fixed-width month columns, see PLANNING_* width
+          constants above) so it always overflows and shows a real
+          scrollbar, on any viewport width — the IntersectionObserver
+          sentinels below only ever fire on an actual scroll-driven
+          intersection change, so without a guaranteed overflow they'd never
+          trigger on a wide enough screen. ~700px shows about 8 of the
+          table's fixed 64px-wide month columns at once. */}
       <div
         ref={scrollContainerRef}
         className="max-w-[700px] rounded-lg border bg-white overflow-x-auto"
@@ -825,14 +847,15 @@ function PlanningTareaContent({
             content, just markers at each horizontal edge of the scrollable
             area so scrolling near either one extends `range`. */}
         <div ref={leftSentinelRef} className="w-px shrink-0" aria-hidden />
-        <table className="w-full min-w-[900px] border-collapse">
+        <table className="table-fixed border-collapse">
           <thead>
             <tr>
-              <th className="w-[190px]" />
+              <th style={{ width: PLANNING_LABEL_COL_WIDTH, minWidth: PLANNING_LABEL_COL_WIDTH }} />
               {columns.map((c, i) => (
                 <th
                   key={i}
-                  className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground py-2 border-b"
+                  style={{ width: PLANNING_MONTH_COL_WIDTH, minWidth: PLANNING_MONTH_COL_WIDTH }}
+                  className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground py-2 border-b whitespace-nowrap"
                 >
                   {MES_LABELS_CORTO[c.month]} {String(c.year).slice(2)}
                 </th>
