@@ -2,7 +2,7 @@ import type { Estat } from "@/lib/mantenimiento";
 
 export type PeriodicidadModo = "intervalo" | "epoca_anyo";
 export type IntervaloUnidad = "semanas" | "meses";
-export type AplicacionModo = "apartamentos_activos" | "espacio_comun";
+export type AplicacionModo = "apartamentos_activos" | "espacio_comun" | "apartamento_especifico";
 
 export type TareaPreventiva = {
   id_tarea_preventiva: number;
@@ -25,6 +25,7 @@ export type AplicacionPreventiva = {
   id_grupo: number;
   modo_aplicacion: AplicacionModo;
   id_tipo_espacio_comun: number | null;
+  id_apt?: number | null;
   creado_en: string;
 };
 
@@ -189,6 +190,23 @@ export function resolveConcreteLocations(
           idTipoEspacio: ap.id_tipo_espacio_comun,
           scopeSince,
         });
+      }
+    } else if (ap.modo_aplicacion === "apartamento_especifico") {
+      // Resolves to nothing once the chosen apartment is deactivated —
+      // mirrors "apartamentos_activos" filtering on `activo` below, so this
+      // tarea stops generating for it the same way a grupo-wide one would
+      // stop generating for any apartment it loses.
+      if (ap.id_apt != null) {
+        const apt = apartamentos.find((a) => a.id_apt === ap.id_apt);
+        if (apt && apt.activo) {
+          out.push({
+            kind: "apt",
+            idApt: apt.id_apt,
+            idGrupo: ap.id_grupo,
+            nombre: apt.nombre,
+            scopeSince,
+          });
+        }
       }
     } else {
       for (const apt of apartamentos) {

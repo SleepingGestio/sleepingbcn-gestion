@@ -1978,6 +1978,7 @@ export type Database = {
         Row: {
           creado_en: string
           id_aplicacion: number
+          id_apt: number | null
           id_grupo: number
           id_tarea_preventiva: number
           id_tipo_espacio_comun: number | null
@@ -1986,6 +1987,7 @@ export type Database = {
         Insert: {
           creado_en?: string
           id_aplicacion?: never
+          id_apt?: number | null
           id_grupo: number
           id_tarea_preventiva: number
           id_tipo_espacio_comun?: number | null
@@ -1994,12 +1996,20 @@ export type Database = {
         Update: {
           creado_en?: string
           id_aplicacion?: never
+          id_apt?: number | null
           id_grupo?: number
           id_tarea_preventiva?: number
           id_tipo_espacio_comun?: number | null
           modo_aplicacion?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "tareas_preventivas_aplicaciones_id_apt_fkey"
+            columns: ["id_apt"]
+            isOneToOne: false
+            referencedRelation: "apartamentos"
+            referencedColumns: ["id_apt"]
+          },
           {
             foreignKeyName: "tareas_preventivas_aplicaciones_id_grupo_fkey"
             columns: ["id_grupo"]

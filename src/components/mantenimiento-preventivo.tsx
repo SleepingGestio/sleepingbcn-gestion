@@ -200,7 +200,7 @@ function TareaCard({
       </div>
 
       {aplicacionesTarea.map((ap) => {
-        if (ap.modo_aplicacion === "espacio_comun") {
+        if (ap.modo_aplicacion === "espacio_comun" || ap.modo_aplicacion === "apartamento_especifico") {
           const [loc] = resolveConcreteLocations(tarea.creado_en, [ap], apartamentos);
           if (!loc) return null;
           const pending = pendingFor(loc);
@@ -556,6 +556,7 @@ export function MantenimientoPreventivoTab({ editable }: { editable: boolean }) 
         tarea={editingTarea}
         grupos={gruposQ.data ?? []}
         espacios={espaciosQ.data ?? []}
+        apartamentos={apartamentos}
         onOpenChange={setDialogOpen}
         onSave={(input) => guardarTarea(input, persona?.id_persona ?? null)}
       />

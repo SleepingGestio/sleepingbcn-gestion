@@ -27,13 +27,14 @@ import {
   type TareaPreventivaConMeses,
 } from "@/lib/mantenimiento-preventivo";
 import type { AplicacionPreventiva } from "@/lib/mantenimiento-preventivo";
-import type { TareaFormInput } from "@/hooks/use-mantenimiento-preventivo";
+import type { TareaFormInput, AptConActivo } from "@/hooks/use-mantenimiento-preventivo";
 import type { GrupoLite, EspacioLite } from "@/lib/mantenimiento";
 
 type AplicacionDraft = {
   id_grupo: number | null;
   modo_aplicacion: AplicacionModo;
   id_tipo_espacio_comun: number | null;
+  id_apt: number | null;
 };
 
 function tareaToDraft(
@@ -69,6 +70,7 @@ function tareaToDraft(
       id_grupo: a.id_grupo,
       modo_aplicacion: a.modo_aplicacion,
       id_tipo_espacio_comun: a.id_tipo_espacio_comun,
+      id_apt: a.id_apt ?? null,
     })),
   };
 }
@@ -78,6 +80,7 @@ export function TareaPreventivaDialog({
   tarea,
   grupos,
   espacios,
+  apartamentos,
   onOpenChange,
   onSave,
 }: {
@@ -85,6 +88,7 @@ export function TareaPreventivaDialog({
   tarea: (TareaPreventivaConMeses & { aplicaciones: AplicacionPreventiva[] }) | null;
   grupos: GrupoLite[];
   espacios: EspacioLite[];
+  apartamentos: AptConActivo[];
   onOpenChange: (o: boolean) => void;
   onSave: (input: TareaFormInput) => Promise<boolean>;
 }) {
@@ -108,7 +112,12 @@ export function TareaPreventivaDialog({
       ...d,
       aplicaciones: [
         ...d.aplicaciones,
-        { id_grupo: null, modo_aplicacion: "apartamentos_activos", id_tipo_espacio_comun: null },
+        {
+          id_grupo: null,
+          modo_aplicacion: "apartamentos_activos",
+          id_tipo_espacio_comun: null,
+          id_apt: null,
+        },
       ],
     }));
   }
@@ -122,11 +131,12 @@ export function TareaPreventivaDialog({
     draft.modo === "intervalo" ? Number(draft.intervaloCantidad) > 0 : draft.meses.length > 0;
   const aplicacionesValid =
     draft.aplicaciones.length > 0 &&
-    draft.aplicaciones.every(
-      (a) =>
-        a.id_grupo != null &&
-        (a.modo_aplicacion === "apartamentos_activos" || a.id_tipo_espacio_comun != null),
-    );
+    draft.aplicaciones.every((a) => {
+      if (a.id_grupo == null) return false;
+      if (a.modo_aplicacion === "espacio_comun") return a.id_tipo_espacio_comun != null;
+      if (a.modo_aplicacion === "apartamento_especifico") return a.id_apt != null;
+      return true;
+    });
   const canSave = nombreValid && periodicidadValid && aplicacionesValid && !saving;
 
   async function handleSave() {
@@ -145,6 +155,7 @@ export function TareaPreventivaDialog({
         modo_aplicacion: a.modo_aplicacion,
         id_tipo_espacio_comun:
           a.modo_aplicacion === "espacio_comun" ? a.id_tipo_espacio_comun : null,
+        id_apt: a.modo_aplicacion === "apartamento_especifico" ? a.id_apt : null,
       })),
     };
     const ok = await onSave(input);
@@ -306,6 +317,7 @@ export function TareaPreventivaDialog({
                         updateAplicacion(idx, {
                           modo_aplicacion: v as AplicacionModo,
                           id_tipo_espacio_comun: null,
+                          id_apt: null,
                         })
                       }
                     >
@@ -315,6 +327,9 @@ export function TareaPreventivaDialog({
                       <SelectContent>
                         <SelectItem value="apartamentos_activos">Apartamentos activos</SelectItem>
                         <SelectItem value="espacio_comun">Espacio común</SelectItem>
+                        <SelectItem value="apartamento_especifico">
+                          Apartamento específico
+                        </SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -338,6 +353,28 @@ export function TareaPreventivaDialog({
                               {e.nombre}
                             </SelectItem>
                           ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  ) : a.modo_aplicacion === "apartamento_especifico" ? (
+                    <div className="flex-1 space-y-1">
+                      <Label className="text-[11px]">Apartamento</Label>
+                      <Select
+                        value={a.id_apt != null ? String(a.id_apt) : ""}
+                        onValueChange={(v) => updateAplicacion(idx, { id_apt: Number(v) })}
+                      >
+                        <SelectTrigger className="h-9 text-xs">
+                          <SelectValue placeholder="Selecciona…" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {apartamentos
+                            .filter((apt) => apt.id_grupo === a.id_grupo)
+                            .map((apt) => (
+                              <SelectItem key={apt.id_apt} value={String(apt.id_apt)}>
+                                {apt.nombre}
+                                {!apt.activo ? " (inactivo)" : ""}
+                              </SelectItem>
+                            ))}
                         </SelectContent>
                       </Select>
                     </div>

@@ -72,7 +72,7 @@ export function useTareasPreventivasAplicaciones() {
       const { data, error } = await supabase
         .from("tareas_preventivas_aplicaciones")
         .select(
-          "id_aplicacion,id_tarea_preventiva,id_grupo,modo_aplicacion,id_tipo_espacio_comun,creado_en",
+          "id_aplicacion,id_tarea_preventiva,id_grupo,modo_aplicacion,id_tipo_espacio_comun,id_apt,creado_en",
         );
       if (error) throw error;
       return (data ?? []) as unknown as AplicacionPreventiva[];
@@ -137,6 +137,7 @@ export type TareaFormInput = {
     id_grupo: number;
     modo_aplicacion: AplicacionModo;
     id_tipo_espacio_comun: number | null;
+    id_apt: number | null;
   }[];
 };
 
@@ -150,15 +151,17 @@ type AplicacionInput = {
   id_grupo: number;
   modo_aplicacion: AplicacionModo;
   id_tipo_espacio_comun: number | null;
+  id_apt: number | null;
 };
 
-// Natural key matching the two partial unique indexes on
-// tareas_preventivas_aplicaciones (apt_activos_uq / espacio_uq) — null is
-// part of the key for apartamentos_activos rows, which always have
-// id_tipo_espacio_comun = null.
+// Natural key matching the three partial unique indexes on
+// tareas_preventivas_aplicaciones (apt_activos_uq / espacio_uq /
+// apt_especifico_uq) — null is part of the key for modes that don't use a
+// given column, which always store null there.
 function aplicacionKey(a: AplicacionInput): string {
   const espacio = a.modo_aplicacion === "espacio_comun" ? a.id_tipo_espacio_comun : null;
-  return `${a.id_grupo}|${a.modo_aplicacion}|${espacio}`;
+  const apt = a.modo_aplicacion === "apartamento_especifico" ? a.id_apt : null;
+  return `${a.id_grupo}|${a.modo_aplicacion}|${espacio}|${apt}`;
 }
 
 /**
@@ -182,7 +185,7 @@ async function upsertAplicaciones(
 ): Promise<string | null> {
   const { data: existentes, error: eSel } = await supabase
     .from("tareas_preventivas_aplicaciones")
-    .select("id_aplicacion,id_grupo,modo_aplicacion,id_tipo_espacio_comun")
+    .select("id_aplicacion,id_grupo,modo_aplicacion,id_tipo_espacio_comun,id_apt")
     .eq("id_tarea_preventiva", idTarea);
   if (eSel) return eSel.message;
 
@@ -190,6 +193,7 @@ async function upsertAplicaciones(
     id_grupo: a.id_grupo,
     modo_aplicacion: a.modo_aplicacion,
     id_tipo_espacio_comun: a.modo_aplicacion === "espacio_comun" ? a.id_tipo_espacio_comun : null,
+    id_apt: a.modo_aplicacion === "apartamento_especifico" ? a.id_apt : null,
   }));
   const nuevasKeys = new Set(normalizadas.map(aplicacionKey));
   const existentesByKey = new Map(
@@ -288,6 +292,7 @@ export function useMantenimientoPreventivoActions(onMutated?: () => void) {
           modo_aplicacion: a.modo_aplicacion,
           id_tipo_espacio_comun:
             a.modo_aplicacion === "espacio_comun" ? a.id_tipo_espacio_comun : null,
+          id_apt: a.modo_aplicacion === "apartamento_especifico" ? a.id_apt : null,
         })),
       );
       if (error) {
