@@ -419,7 +419,7 @@ function PlanningRowView({
     <tr>
       <td
         style={{ width: PLANNING_LABEL_COL_WIDTH, minWidth: PLANNING_LABEL_COL_WIDTH }}
-        className="text-left py-2.5 pr-3.5 text-sm whitespace-nowrap border-b"
+        className="sticky left-0 z-10 bg-white text-left py-2.5 pr-3.5 text-sm whitespace-nowrap border-b"
       >
         <span className="font-medium">{grupo}</span>{" "}
         <span className="text-muted-foreground">· {detalle}</span>
@@ -830,17 +830,43 @@ function PlanningTareaContent({
         </div>
       )}
 
-      {/* max-w caps the container well below the table's minimum possible
-          width (label + 12 fixed-width month columns, see PLANNING_* width
-          constants above) so it always overflows and shows a real
-          scrollbar, on any viewport width — the IntersectionObserver
-          sentinels below only ever fire on an actual scroll-driven
-          intersection change, so without a guaranteed overflow they'd never
-          trigger on a wide enough screen. ~700px shows about 8 of the
-          table's fixed 64px-wide month columns at once. */}
+      {/* The container is full-width — on a wide enough screen with few
+          enough months loaded, the fixed-width table (label + N × 64px
+          columns) may not overflow it at all, so the scroll-triggered
+          IntersectionObserver sentinels below can no longer be relied on as
+          the only way to load more months (no overflow means no scrollbar
+          to scroll with, so they'd never fire). The « / » buttons call
+          extendBack/extendForward directly and always work regardless of
+          overflow state; the sentinels stay as a secondary, scroll-driven
+          path for narrower viewports/zoom levels where the table genuinely
+          does overflow. Both paths call the same functions, which are
+          already cap-aware, so they never conflict. */}
+      <div className="flex items-center justify-between">
+        <Button
+          size="sm"
+          variant="outline"
+          className="h-7 px-2.5 text-xs"
+          disabled={range.from <= PLANNING_MIN_FROM_OFFSET}
+          onClick={extendBack}
+          title="Cargar 12 meses anteriores"
+        >
+          « Meses anteriores
+        </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          className="h-7 px-2.5 text-xs"
+          disabled={range.to >= PLANNING_MAX_TO_OFFSET}
+          onClick={extendForward}
+          title="Cargar 12 meses siguientes"
+        >
+          Meses siguientes »
+        </Button>
+      </div>
+
       <div
         ref={scrollContainerRef}
-        className="max-w-[700px] rounded-lg border bg-white overflow-x-auto"
+        className="w-full rounded-lg border bg-white overflow-x-auto"
       >
         <div className="flex items-stretch">
         {/* 1px sentinels the IntersectionObserver above watches — not real
@@ -850,7 +876,10 @@ function PlanningTareaContent({
         <table className="table-fixed border-collapse">
           <thead>
             <tr>
-              <th style={{ width: PLANNING_LABEL_COL_WIDTH, minWidth: PLANNING_LABEL_COL_WIDTH }} />
+              <th
+                style={{ width: PLANNING_LABEL_COL_WIDTH, minWidth: PLANNING_LABEL_COL_WIDTH }}
+                className="sticky left-0 z-10 bg-white"
+              />
               {columns.map((c, i) => (
                 <th
                   key={i}
