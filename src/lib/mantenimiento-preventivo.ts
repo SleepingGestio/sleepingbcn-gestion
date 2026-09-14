@@ -60,6 +60,10 @@ export const PREVENTIVO_WINDOW_DAYS = 15;
 // rather than invented, so these read consistently with the rest of the app.
 export const PREVENTIVO_COLOR_VENCIDA = "#DC2626";
 export const PREVENTIVO_COLOR_PROXIMA = "#D97706";
+// Neutral/informational, deliberately not urgent-looking like vencida/próxima —
+// "programada" just means the marked month exists but its window hasn't
+// opened yet; it's a heads-up, not something needing attention.
+export const PREVENTIVO_COLOR_PROGRAMADA = "#64748B";
 
 export const MES_LABELS_CORTO = [
   "",
@@ -378,6 +382,13 @@ export type PlanningCellState =
   | { type: "done"; incidencia: IncidenciaPreventivaLite }
   | { type: "generated"; asignada: boolean; incidencia: IncidenciaPreventivaLite }
   | { type: "pending"; estado: "vencida" | "proxima"; targetDate: string; mes: number | null }
+  // época_anyo only (for now — see buildPlanningRow's época branch): a
+  // marked month outside the vencida/próxima window and not yet
+  // done/generated. Distinct from "empty" so the grid can show "this month
+  // has a plan, just not due yet" instead of looking identical to an
+  // unconfigured month — and clickable, to let someone generate ahead of
+  // schedule on purpose.
+  | { type: "programada"; targetDate: string; mes: number }
   | { type: "empty" };
 
 export function buildPlanningRow(
@@ -439,6 +450,7 @@ export function buildPlanningRow(
       if (targetDate <= addDaysISO(today, PREVENTIVO_WINDOW_DAYS)) {
         return { type: "pending", estado: "proxima", targetDate, mes: month };
       }
+      return { type: "programada", targetDate, mes: month };
     }
     return { type: "empty" };
   });

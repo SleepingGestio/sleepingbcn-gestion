@@ -28,6 +28,7 @@ import {
   todayISO,
   MES_LABELS_CORTO,
   MES_LABELS_LARGO,
+  PREVENTIVO_COLOR_PROGRAMADA,
   PREVENTIVO_COLOR_PROXIMA,
   PREVENTIVO_COLOR_VENCIDA,
   periodicidadLabel,
@@ -73,6 +74,13 @@ function Legend() {
     { bg: GENERADO_COLOR, fg: "#fff", label: "Generada · sin asignar", char: "G" },
     { bg: ASIGNADO_COLOR, fg: "#fff", label: "Generada · asignada", char: "A" },
     {
+      bg: "#E2E8F0",
+      border: PREVENTIVO_COLOR_PROGRAMADA,
+      fg: PREVENTIVO_COLOR_PROGRAMADA,
+      label: "Programada · aún no vence",
+      char: "•",
+    },
+    {
       bg: "#FEF3C7",
       border: PREVENTIVO_COLOR_PROXIMA,
       fg: PREVENTIVO_COLOR_PROXIMA,
@@ -101,7 +109,9 @@ function Legend() {
   );
 }
 
-function PendingCellPopover({
+type PendingOrProgramadaCell = Extract<PlanningCellState, { type: "pending" | "programada" }>;
+
+function GenerarCellPopover({
   location,
   cell,
   grupoById,
@@ -111,7 +121,7 @@ function PendingCellPopover({
   onGenerarUno,
 }: {
   location: ConcreteLocation;
-  cell: PlanningCellState & { type: "pending" };
+  cell: PendingOrProgramadaCell;
   grupoById: Map<number, { nombre: string }>;
   espacioById: Map<number, { nombre: string }>;
   selected: boolean;
@@ -134,7 +144,23 @@ function PendingCellPopover({
     setOpen(false);
   }
 
-  const isVencida = cell.estado === "vencida";
+  const isProgramada = cell.type === "programada";
+  const isVencida = cell.type === "pending" && cell.estado === "vencida";
+  const dotBg = isProgramada ? "#E2E8F0" : isVencida ? "#FEE2E2" : "#FEF3C7";
+  const dotBorder = isProgramada
+    ? PREVENTIVO_COLOR_PROGRAMADA
+    : isVencida
+      ? PREVENTIVO_COLOR_VENCIDA
+      : PREVENTIVO_COLOR_PROXIMA;
+  const dotFg = isProgramada
+    ? PREVENTIVO_COLOR_PROGRAMADA
+    : isVencida
+      ? "#7F1D1D"
+      : PREVENTIVO_COLOR_PROXIMA;
+  const dotChar = isProgramada ? "•" : isVencida ? "!" : "?";
+  const estadoText = isProgramada
+    ? "Programada · aún no vence — generar ahora la adelanta"
+    : `Pendiente de generar · ${isVencida ? "vencida" : "próxima ventana"}`;
   return (
     <div className="relative inline-flex">
       <Checkbox
@@ -147,20 +173,14 @@ function PendingCellPopover({
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
           <button type="button">
-            <Dot
-              bg={isVencida ? "#FEE2E2" : "#FEF3C7"}
-              border={isVencida ? PREVENTIVO_COLOR_VENCIDA : PREVENTIVO_COLOR_PROXIMA}
-              fg={isVencida ? "#7F1D1D" : PREVENTIVO_COLOR_PROXIMA}
-            >
-              {isVencida ? "!" : "?"}
+            <Dot bg={dotBg} border={dotBorder} fg={dotFg}>
+              {dotChar}
             </Dot>
           </button>
         </PopoverTrigger>
         <PopoverContent className="w-64 text-sm space-y-2.5">
           <div className="font-semibold text-xs">{label}</div>
-          <div className="text-xs text-muted-foreground">
-            Estado: Pendiente de generar · {isVencida ? "vencida" : "próxima ventana"}
-          </div>
+          <div className="text-xs text-muted-foreground">Estado: {estadoText}</div>
           <div className="space-y-1">
             <div className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold">
               Fecha prevista
@@ -247,8 +267,8 @@ function PlanningRowView({
                 </Dot>
               </button>
             )}
-            {cell.type === "pending" && (
-              <PendingCellPopover
+            {(cell.type === "pending" || cell.type === "programada") && (
+              <GenerarCellPopover
                 location={location}
                 cell={cell}
                 grupoById={grupoById}
@@ -336,7 +356,7 @@ function PlanningTareaContent({
         today,
       );
       row.forEach((cell, i) => {
-        if (cell.type === "pending") {
+        if (cell.type === "pending" || cell.type === "programada") {
           m.set(keyOf(loc, columns[i].year, columns[i].month), {
             location: loc,
             targetDate: cell.targetDate,
