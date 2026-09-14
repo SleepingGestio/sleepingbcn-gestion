@@ -377,7 +377,7 @@ function LimpiezasAsignadasPage() {
                     <TableCell>
                       {isNentran ? (
                         <span className="rounded px-1.5 py-0.5 text-[10px] font-semibold bg-gray-200 text-gray-700">
-                          NOENTRAN
+                          NOENT.
                         </span>
                       ) : (
                         <TimeBadge time={l.hora_in_time} informed={l.hora_in_informed} size="md" />

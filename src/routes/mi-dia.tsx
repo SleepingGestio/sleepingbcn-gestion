@@ -2762,7 +2762,7 @@ function TaskCard({
           <span>→</span>
           <span>Entra:</span>
           {nentran ? (
-            <span className="rounded px-1.5 py-px font-semibold bg-gray-200 text-gray-700">NOENTRAN</span>
+            <span className="rounded px-1.5 py-px font-semibold bg-gray-200 text-gray-700">NOENT.</span>
           ) : (
             <TimeChip time={t.hora_in_time} informed={t.hora_in_informed} />
           )}
@@ -3222,7 +3222,7 @@ function DetailView({
               <span className="font-medium">{next?.["Check in"] ?? "—"}</span>
               <TimeChip time={t.hora_in_time} informed={t.hora_in_informed} />
               {nentran && (
-                <span className="rounded bg-slate-200 text-slate-800 px-2 py-0.5 text-[11px] font-semibold">NOENTRAN</span>
+                <span className="rounded bg-slate-200 text-slate-800 px-2 py-0.5 text-[11px] font-semibold">NOENT.</span>
               )}
             </div>
             <div className="text-xs text-slate-600">⏱ Ventana: {win ?? (nentran ? "—" : "—")}</div>

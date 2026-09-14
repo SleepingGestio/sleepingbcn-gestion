@@ -676,7 +676,7 @@ function TaskCard({
             )}
             <span>→</span>
             {isNentran ? (
-              <span className="rounded px-1.5 py-0.5 text-[10px] font-semibold bg-gray-200 text-gray-700">NOENTRAN</span>
+              <span className="rounded px-1.5 py-0.5 text-[10px] font-semibold bg-gray-200 text-gray-700">NOENT.</span>
             ) : (
               <TimeBadge value={horaIn ?? "—"} informed={!!t.hora_in_informed} />
             )}
