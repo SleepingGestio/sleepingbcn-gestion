@@ -555,15 +555,44 @@ function PlanningTareaContent({
     }));
   }, []);
 
+  // IntersectionObserver guarantees an initial callback for each target
+  // right when observe() is called, reporting whatever its intersection
+  // state already is — it is NOT tied to any actual scroll gesture. With a
+  // freshly-mounted 12-column table that doesn't yet overflow the
+  // container, both sentinels report intersecting=true on that very first,
+  // synthetic callback, which used to fire extendBack + extendForward
+  // together on every mount (12 → 36 columns instantly, no scrolling
+  // involved). `seenInitialRef` discards each sentinel's own first report
+  // — independently, since the two targets' initial notifications aren't
+  // guaranteed to arrive in the same callback invocation — so only real,
+  // scroll-driven state changes ever reach the extend calls below.
+  const seenInitialRef = useRef({ left: false, right: false });
+
   useEffect(() => {
     const root = scrollContainerRef.current;
     if (!root) return;
     const observer = new IntersectionObserver(
       (entries) => {
         for (const entry of entries) {
+          const isLeft = entry.target === leftSentinelRef.current;
+          const isRight = entry.target === rightSentinelRef.current;
+          if (isLeft && !seenInitialRef.current.left) {
+            seenInitialRef.current.left = true;
+            continue;
+          }
+          if (isRight && !seenInitialRef.current.right) {
+            seenInitialRef.current.right = true;
+            continue;
+          }
           if (!entry.isIntersecting) continue;
-          if (entry.target === leftSentinelRef.current) extendBack();
-          else if (entry.target === rightSentinelRef.current) extendForward();
+          // A container that doesn't overflow its own viewport has no edge
+          // to scroll toward — ignore the intersection instead of
+          // extending, even if reported (e.g. after a resize that shrinks
+          // the table back under the container's width). +1px tolerance
+          // for subpixel rounding.
+          if (root.scrollWidth <= root.clientWidth + 1) continue;
+          if (isLeft) extendBack();
+          else if (isRight) extendForward();
         }
       },
       // Horizontal-only margin so a sentinel triggers a bit before it's
