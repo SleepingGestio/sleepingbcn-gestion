@@ -22,6 +22,7 @@ import { Sofa, Pencil } from "lucide-react";
 import { useKbChangeDiffs } from "@/hooks/use-kb-change-diffs";
 import { KbChangePendingBanner, KbChangeResolvedBanner } from "@/components/kb-change-banner";
 import { todayISO } from "@/lib/reservas";
+import { hasBox } from "@/lib/types";
 
 export const Route = createFileRoute("/limpiezas")({
   component: LimpiezasAsignadasPage,
@@ -316,7 +317,9 @@ function LimpiezasAsignadasPage() {
                 const guests = l.numero_reserva ? reservasQ.data?.get(l.numero_reserva)?.guests ?? null : null;
                 const nxt = l.proxima_reserva_numero ? reservasQ.data?.get(l.proxima_reserva_numero) ?? null : null;
                 const isNentran = !nxt || nxt.checkIn !== l.fecha_limpieza;
-                const box = isSalida && l.proxima_reserva_numero ? boxQ.data?.get(l.proxima_reserva_numero) ?? null : null;
+                const boxRaw =
+                  isSalida && l.proxima_reserva_numero ? boxQ.data?.get(l.proxima_reserva_numero) ?? null : null;
+                const box = hasBox(boxRaw) ? boxRaw : null;
                 const needsSofa =
                   !!info?.tiene_sofa_cama &&
                   guests != null &&

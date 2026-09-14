@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useState, useMemo } from "react";
 import { fetchReservas, upsertGestio } from "@/lib/reservas";
+import { hasBox } from "@/lib/types";
 import { AppShell } from "@/components/app-shell";
 import { Card } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -115,7 +116,7 @@ function CheckinsPage() {
                   <TableCell>{fmtDate(r["Check in"])}</TableCell>
                   <TableCell><TimeBadge value={llegada.value.slice(0, 5)} informed={llegada.informed} /></TableCell>
                   <TableCell className="font-medium">{r["Referencia"] ?? "—"}</TableCell>
-                  <TableCell>{r.gestio?.BoxNumber ?? "—"}</TableCell>
+                  <TableCell>{hasBox(r.gestio?.BoxNumber) ? r.gestio!.BoxNumber : "—"}</TableCell>
                   <TableCell>{r["Habitaciones"] ?? "—"}</TableCell>
                   <TableCell>{r["Huéspedes"] ?? "—"}</TableCell>
                   <TableCell>{r["Teléfono"] ?? "—"}</TableCell>

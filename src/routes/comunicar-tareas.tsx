@@ -11,7 +11,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, Sofa, Zap, Wrench } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { fetchLimpiadores } from "@/lib/catalogos";
-import { fullName } from "@/lib/types";
+import { fullName, hasBox } from "@/lib/types";
 import { LimpiezaPopover, type Limpieza } from "@/components/limpieza-popover";
 import { usePermissions } from "@/hooks/use-permissions";
 import { toast } from "sonner";
@@ -94,6 +94,22 @@ async function fetchReservasLite(numeros: string[]): Promise<Map<string, ResvLit
   if (error) throw error;
   const m = new Map<string, ResvLite>();
   for (const r of (data ?? []) as ResvLite[]) m.set(r["Número"], r);
+  return m;
+}
+
+// Box del huésped entrante para tareas de salida — mismo patrón batched que
+// limpiezas.tsx (una sola consulta para todo el día, no una por tarjeta).
+async function fetchBoxNumbers(numeros: string[]): Promise<Map<string, string | null>> {
+  const m = new Map<string, string | null>();
+  if (numeros.length === 0) return m;
+  const { data, error } = await supabase
+    .from("reservas_gestio")
+    .select('"Número","BoxNumber"')
+    .in("Número", numeros);
+  if (error) throw error;
+  for (const r of (data ?? []) as { Número: string; BoxNumber: string | null }[]) {
+    m.set(r["Número"], r.BoxNumber ?? null);
+  }
   return m;
 }
 
@@ -207,6 +223,19 @@ function ComunicarTareasPage() {
     queryKey: ["comunicar_reservas_lite", fecha, reservaNumeros.join(",")],
     queryFn: () => fetchReservasLite(reservaNumeros),
     enabled: reservaNumeros.length > 0,
+  });
+
+  const nextNumerosSalida = useMemo(() => {
+    const s = new Set<string>();
+    for (const t of tasksQ.data ?? []) {
+      if (t.tipo === "salida" && t.proxima_reserva_numero) s.add(t.proxima_reserva_numero);
+    }
+    return Array.from(s);
+  }, [tasksQ.data]);
+  const boxQ = useQuery({
+    queryKey: ["comunicar_box_numbers", fecha, nextNumerosSalida.join(",")],
+    queryFn: () => fetchBoxNumbers(nextNumerosSalida),
+    enabled: nextNumerosSalida.length > 0,
   });
 
   const aptById = useMemo(() => {
@@ -360,6 +389,7 @@ function ComunicarTareasPage() {
                 state={state}
                 aptById={aptById}
                 reservas={reservasQ.data ?? new Map()}
+                boxByReserva={boxQ.data ?? new Map()}
                 mantByApt={mantByAptQ.data ?? new Set()}
                 kbDiffs={kbDiffsQ.data}
                 kbDiffsLoading={kbDiffsQ.isLoading}
@@ -411,6 +441,7 @@ function WorkerColumn({
   state,
   aptById,
   reservas,
+  boxByReserva,
   mantByApt,
   kbDiffs,
   kbDiffsLoading,
@@ -425,6 +456,7 @@ function WorkerColumn({
   state: AggState;
   aptById: Map<number, Apartamento>;
   reservas: Map<string, ResvLite>;
+  boxByReserva: Map<string, string | null>;
   mantByApt: Set<number>;
   kbDiffs: Map<number, KbChangeDiffResult> | undefined;
   kbDiffsLoading: boolean;
@@ -483,6 +515,7 @@ function WorkerColumn({
             t={t}
             apt={aptById.get(t.id_apt)}
             reservas={reservas}
+            boxByReserva={boxByReserva}
             mantByApt={mantByApt}
             kbDiff={kbDiffs?.get(t.id_limpieza)}
             kbDiffsLoading={kbDiffsLoading}
@@ -521,6 +554,7 @@ function TaskCard({
   t,
   apt,
   reservas,
+  boxByReserva,
   mantByApt,
   kbDiff,
   kbDiffsLoading,
@@ -533,6 +567,7 @@ function TaskCard({
   t: Limpieza;
   apt: Apartamento | undefined;
   reservas: Map<string, ResvLite>;
+  boxByReserva: Map<string, string | null>;
   mantByApt: Set<number>;
   kbDiff: KbChangeDiffResult | undefined;
   kbDiffsLoading: boolean;
@@ -554,6 +589,11 @@ function TaskCard({
   // NENTRAN: next reservation does not check in on fecha_limpieza
   const nxt = t.proxima_reserva_numero ? reservas.get(t.proxima_reserva_numero) : null;
   const isNentran = !nxt || nxt["Check in"] !== t.fecha_limpieza;
+  const boxRaw =
+    t.tipo === "salida" && t.proxima_reserva_numero
+      ? boxByReserva.get(t.proxima_reserva_numero) ?? null
+      : null;
+  const box = hasBox(boxRaw) ? boxRaw : null;
 
   const isPriority =
     t.prioritaria_manual != null ? !!t.prioritaria_manual : !!t.prioritaria;
@@ -643,6 +683,11 @@ function TaskCard({
             {guestsToShow != null && guestsToShow > 0 && (
               <span className="ml-1 inline-flex items-center gap-0.5 text-[11px] font-medium text-foreground">
                 👤 {guestsToShow} {guestsToShow === 1 ? "huésped" : "huéspedes"}
+              </span>
+            )}
+            {box && (
+              <span className="inline-flex items-center gap-0.5 rounded-full bg-sky-50 text-sky-700 border border-sky-200 px-1.5 py-0.5 text-[10px] font-semibold">
+                📦 Box {box}
               </span>
             )}
           </div>

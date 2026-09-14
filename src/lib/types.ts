@@ -83,6 +83,17 @@ export type PersLimp = { id_persona: number; nombre: string | null; apellidos: s
 export const fullName = (p: { nombre: string | null; apellidos: string | null } | null | undefined) =>
   p ? [p.nombre, p.apellidos].filter(Boolean).join(" ").trim() || "—" : "—";
 
+/**
+ * `reservas_gestio.BoxNumber` is sometimes literally the text "NA"/"n/a"
+ * (6 of 18 non-null rows as of 2026-09) — staff-entered placeholder for
+ * "no box", not a real value. A bare truthy check renders "Box: NA"
+ * verbatim; this treats that placeholder the same as unset everywhere
+ * Box is displayed.
+ */
+export function hasBox(value: string | null | undefined): value is string {
+  return value != null && !["na", "n/a"].includes(value.trim().toLowerCase());
+}
+
 /** Apartment fields resolved for a reservation via the apartamentos.nombre <-> reservas_kb.Habitaciones exact-match convention. */
 export type ApartamentoInfo = {
   id_apt: number;

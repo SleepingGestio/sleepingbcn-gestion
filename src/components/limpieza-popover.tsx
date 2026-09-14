@@ -13,7 +13,7 @@ import { toast } from "sonner";
 import { cn, formatHHMM } from "@/lib/utils";
 import { fmtDate, fmtDateTime } from "@/lib/format";
 import { fetchLimpiadores } from "@/lib/catalogos";
-import { fullName } from "@/lib/types";
+import { fullName, hasBox } from "@/lib/types";
 import { getUnavailableWorkerIds } from "@/lib/worker-availability";
 import { WorkerSelectItem, unavailabilityWarningText } from "@/components/worker-select-item";
 import { Link2, RotateCcw, Trash2, X, Zap, Wrench } from "lucide-react";
@@ -392,6 +392,10 @@ export function LimpiezaPopover({ open, loadKey, onOpenChange, apt, fecha, exist
       ? form.prioritaria_manual
       : !!form.prioritaria;
 
+  const nextGuestsCount = nextReservation?.["Huéspedes"] ?? null;
+  const showNextGuests = nextGuestsCount != null && nextGuestsCount > 0;
+  const showNextBox = hasBox(nextBoxQ.data);
+
   // orden_trabajo siblings count
   const siblingsQ = useQuery({
     queryKey: ["limp-siblings", form.worker, form.fecha_limpieza],
@@ -766,14 +770,18 @@ export function LimpiezaPopover({ open, loadKey, onOpenChange, apt, fecha, exist
                       : undefined
                   }
                 />
-                {nextReservation?.["Huéspedes"] != null && nextReservation["Huéspedes"] > 0 && (
-                  <div className="text-xs font-medium text-foreground pl-1">
-                    👤 {nextReservation["Huéspedes"]} {nextReservation["Huéspedes"] === 1 ? "huésped entrante" : "huéspedes entrantes"}
-                  </div>
-                )}
-                {nextBoxQ.data && (
-                  <div className="text-xs font-medium text-foreground pl-1">
-                    📦 Box: {nextBoxQ.data}
+                {(showNextGuests || showNextBox) && (
+                  <div className="flex items-center gap-2 pl-1">
+                    {showNextGuests && (
+                      <span className="text-xs font-medium text-foreground">
+                        👤 {nextGuestsCount} {nextGuestsCount === 1 ? "huésped entrante" : "huéspedes entrantes"}
+                      </span>
+                    )}
+                    {showNextBox && (
+                      <span className="inline-flex items-center gap-0.5 rounded-full bg-sky-50 text-sky-700 border border-sky-200 px-1.5 py-0.5 text-[10px] font-semibold">
+                        📦 Box {nextBoxQ.data}
+                      </span>
+                    )}
                   </div>
                 )}
               </div>
