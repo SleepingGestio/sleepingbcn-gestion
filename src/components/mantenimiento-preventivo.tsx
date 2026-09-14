@@ -11,8 +11,10 @@ import {
   useApartamentosConActivoLite,
   useIncidenciasPreventivas,
   useMantenimientoPreventivoActions,
+  useTareasPreventivasAnulaciones,
   useTareasPreventivasAplicaciones,
   useTareasPreventivasConMeses,
+  type AnularItem,
   type AptConActivo,
   type GenerarItem,
 } from "@/hooks/use-mantenimiento-preventivo";
@@ -22,6 +24,7 @@ import {
   MES_LABELS_LARGO,
   PREVENTIVO_COLOR_PROXIMA,
   PREVENTIVO_COLOR_VENCIDA,
+  anulacionLocationKey,
   computeLocationPending,
   diasEntre,
   incidenciaLocationKey,
@@ -30,6 +33,7 @@ import {
   periodicidadLabel,
   resolveConcreteLocations,
   todayISO,
+  type AnulacionPreventiva,
   type AplicacionPreventiva,
   type ConcreteLocation,
   type IncidenciaPreventivaLite,
@@ -135,6 +139,7 @@ function TareaCard({
   tarea,
   aplicacionesTarea,
   incidenciasTarea,
+  anulacionesTarea,
   apartamentos,
   grupoById,
   espacioById,
@@ -147,6 +152,7 @@ function TareaCard({
   tarea: TareaPreventivaConMeses;
   aplicacionesTarea: AplicacionPreventiva[];
   incidenciasTarea: IncidenciaPreventivaLite[];
+  anulacionesTarea: AnulacionPreventiva[];
   apartamentos: AptConActivo[];
   grupoById: Map<number, GrupoLite>;
   espacioById: Map<number, EspacioLite>;
@@ -167,12 +173,24 @@ function TareaCard({
     return m;
   }, [incidenciasTarea]);
 
+  const anulacionesByLocKey = useMemo(() => {
+    const m = new Map<string, AnulacionPreventiva[]>();
+    for (const a of anulacionesTarea) {
+      const k = anulacionLocationKey(a);
+      const arr = m.get(k) ?? [];
+      arr.push(a);
+      m.set(k, arr);
+    }
+    return m;
+  }, [anulacionesTarea]);
+
   function pendingFor(loc: ConcreteLocation): PendingInfo | null {
     return computeLocationPending(
       tarea,
       loc.scopeSince,
       incidenciasByLocKey.get(locationKey(loc)) ?? [],
       today,
+      anulacionesByLocKey.get(locationKey(loc)) ?? [],
     );
   }
 
@@ -324,6 +342,7 @@ export function MantenimientoPreventivoTab({ editable }: { editable: boolean }) 
   } = useTareasPreventivasConMeses();
   const aplicacionesQ = useTareasPreventivasAplicaciones();
   const incidenciasQ = useIncidenciasPreventivas();
+  const anulacionesQ = useTareasPreventivasAnulaciones();
   const apartamentosQ = useApartamentosConActivoLite();
   const gruposQ = useGruposLite();
   const espaciosQ = useEspaciosLite();
@@ -341,14 +360,17 @@ export function MantenimientoPreventivoTab({ editable }: { editable: boolean }) 
   function refetchAll() {
     incidenciasQ.refetch();
     aplicacionesQ.refetch();
+    anulacionesQ.refetch();
     refetchTareas();
   }
 
-  const { guardarTarea, generarOcurrencias } = useMantenimientoPreventivoActions(refetchAll);
+  const { guardarTarea, generarOcurrencias, anularOcurrencias, desanularOcurrencia, marcarAnulacionDefinitiva } =
+    useMantenimientoPreventivoActions(refetchAll);
 
   const tareasActivas = useMemo(() => (tareas ?? []).filter((t) => t.activo), [tareas]);
   const aplicaciones = useMemo(() => aplicacionesQ.data ?? [], [aplicacionesQ.data]);
   const incidencias = useMemo(() => incidenciasQ.data ?? [], [incidenciasQ.data]);
+  const anulaciones = useMemo(() => anulacionesQ.data ?? [], [anulacionesQ.data]);
   const apartamentos = useMemo(() => apartamentosQ.data ?? [], [apartamentosQ.data]);
   const today = todayISO();
 
@@ -376,18 +398,29 @@ export function MantenimientoPreventivoTab({ editable }: { editable: boolean }) 
         arr.push(i);
         byLocKey.set(k, arr);
       }
+      const anulacionesTarea = anulaciones.filter(
+        (a) => a.id_tarea_preventiva === tarea.id_tarea_preventiva,
+      );
+      const anulByLocKey = new Map<string, AnulacionPreventiva[]>();
+      for (const a of anulacionesTarea) {
+        const k = anulacionLocationKey(a);
+        const arr = anulByLocKey.get(k) ?? [];
+        arr.push(a);
+        anulByLocKey.set(k, arr);
+      }
       for (const loc of locations) {
         const pending = computeLocationPending(
           tarea,
           loc.scopeSince,
           byLocKey.get(locationKey(loc)) ?? [],
           today,
+          anulByLocKey.get(locationKey(loc)) ?? [],
         );
         if (pending) out.push({ tarea, location: loc, pending });
       }
     }
     return out;
-  }, [tareasActivas, aplicaciones, apartamentos, incidencias, today]);
+  }, [tareasActivas, aplicaciones, apartamentos, incidencias, anulaciones, today]);
 
   const vencidas = allPending.filter((p) => p.pending.estado === "vencida");
   const proximas = allPending.filter((p) => p.pending.estado === "proxima");
@@ -421,6 +454,11 @@ export function MantenimientoPreventivoTab({ editable }: { editable: boolean }) 
     return generarOcurrencias(items, persona.id_persona, asignarA);
   }
 
+  async function handleAnularFromPlanning(items: AnularItem[]) {
+    if (!persona) return false;
+    return anularOcurrencias(items, persona.id_persona);
+  }
+
   function openEditDialog(id: number | null) {
     setEditingTareaId(id);
     setDialogOpen(true);
@@ -445,6 +483,7 @@ export function MantenimientoPreventivoTab({ editable }: { editable: boolean }) 
           tareas={tareasActivas}
           aplicaciones={aplicaciones}
           incidencias={incidencias}
+          anulaciones={anulaciones}
           apartamentos={apartamentos}
           grupoById={grupoById}
           espacioById={espacioById}
@@ -454,6 +493,9 @@ export function MantenimientoPreventivoTab({ editable }: { editable: boolean }) 
           onBack={() => setView("queue")}
           onOpenIncidencia={setDetailId}
           onGenerar={handleGenerarFromPlanning}
+          onAnular={handleAnularFromPlanning}
+          onDesanular={desanularOcurrencia}
+          onAnularDefinitiva={marcarAnulacionDefinitiva}
         />
         <MantenimientoPopover
           idIncidencia={detailId}
@@ -529,6 +571,9 @@ export function MantenimientoPreventivoTab({ editable }: { editable: boolean }) 
             )}
             incidenciasTarea={incidencias.filter(
               (i) => i.id_tarea_preventiva === tarea.id_tarea_preventiva,
+            )}
+            anulacionesTarea={anulaciones.filter(
+              (a) => a.id_tarea_preventiva === tarea.id_tarea_preventiva,
             )}
             apartamentos={apartamentos}
             grupoById={grupoById}

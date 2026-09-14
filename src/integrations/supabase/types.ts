@@ -1974,6 +1974,81 @@ export type Database = {
           },
         ]
       }
+      tareas_preventivas_anulaciones: {
+        Row: {
+          anyo: number
+          creado_en: string
+          creado_por: number | null
+          definitiva: boolean
+          id_anulacion: number
+          id_apt: number | null
+          id_grup: number
+          id_tarea_preventiva: number
+          id_tipo_espacio_comun: number | null
+          mes: number
+        }
+        Insert: {
+          anyo: number
+          creado_en?: string
+          creado_por?: number | null
+          definitiva?: boolean
+          id_anulacion?: never
+          id_apt?: number | null
+          id_grup: number
+          id_tarea_preventiva: number
+          id_tipo_espacio_comun?: number | null
+          mes: number
+        }
+        Update: {
+          anyo?: number
+          creado_en?: string
+          creado_por?: number | null
+          definitiva?: boolean
+          id_anulacion?: never
+          id_apt?: number | null
+          id_grup?: number
+          id_tarea_preventiva?: number
+          id_tipo_espacio_comun?: number | null
+          mes?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tareas_preventivas_anulaciones_creado_por_fkey"
+            columns: ["creado_por"]
+            isOneToOne: false
+            referencedRelation: "personal"
+            referencedColumns: ["id_persona"]
+          },
+          {
+            foreignKeyName: "tareas_preventivas_anulaciones_id_apt_fkey"
+            columns: ["id_apt"]
+            isOneToOne: false
+            referencedRelation: "apartamentos"
+            referencedColumns: ["id_apt"]
+          },
+          {
+            foreignKeyName: "tareas_preventivas_anulaciones_id_grup_fkey"
+            columns: ["id_grup"]
+            isOneToOne: false
+            referencedRelation: "grupos_apartamentos"
+            referencedColumns: ["id_grupo"]
+          },
+          {
+            foreignKeyName: "tareas_preventivas_anulaciones_id_tarea_preventiva_fkey"
+            columns: ["id_tarea_preventiva"]
+            isOneToOne: false
+            referencedRelation: "tareas_preventivas"
+            referencedColumns: ["id_tarea_preventiva"]
+          },
+          {
+            foreignKeyName: "tareas_preventivas_anulaciones_id_tipo_espacio_comun_fkey"
+            columns: ["id_tipo_espacio_comun"]
+            isOneToOne: false
+            referencedRelation: "tipos_espacio_comun"
+            referencedColumns: ["id_tipo"]
+          },
+        ]
+      }
       tareas_preventivas_aplicaciones: {
         Row: {
           creado_en: string

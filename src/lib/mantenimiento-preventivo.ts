@@ -29,6 +29,25 @@ export type AplicacionPreventiva = {
   creado_en: string;
 };
 
+// Soft/undoable (definitiva = false) or permanent (definitiva = true)
+// override for one specific tarea+location+year+month época occurrence —
+// see findAnulacion. Column names (id_apt/id_grup/id_tipo_espacio_comun)
+// deliberately match locationInsertFields()'s shape, not
+// AplicacionPreventiva's own id_grupo spelling, so that helper can build
+// this row's location columns too without a parallel mapping function.
+export type AnulacionPreventiva = {
+  id_anulacion: number;
+  id_tarea_preventiva: number;
+  id_grup: number;
+  id_apt: number | null;
+  id_tipo_espacio_comun: number | null;
+  anyo: number;
+  mes: number;
+  definitiva: boolean;
+  creado_en: string;
+  creado_por: number | null;
+};
+
 // Only the columns the preventivo screens need — not the full Incidencia shape.
 export type IncidenciaPreventivaLite = {
   id_incidencia: number;
@@ -64,6 +83,10 @@ export const PREVENTIVO_COLOR_PROXIMA = "#D97706";
 // "programada" just means the marked month exists but its window hasn't
 // opened yet; it's a heads-up, not something needing attention.
 export const PREVENTIVO_COLOR_PROGRAMADA = "#64748B";
+// Even more muted than "programada" — an annulled occurrence is inert, not
+// something to look at at all, but still visibly distinct from a genuinely
+// unconfigured month so it's clear it can be undone.
+export const PREVENTIVO_COLOR_ANULADA = "#94A3B8";
 
 export const MES_LABELS_CORTO = [
   "",
@@ -152,9 +175,28 @@ export function incidenciaLocationKey(
   return i.id_apt != null ? `apt-${i.id_apt}` : `esp-${i.id_grup}-${i.id_tipo_espacio_comun}`;
 }
 
+export function anulacionLocationKey(
+  a: Pick<AnulacionPreventiva, "id_apt" | "id_grup" | "id_tipo_espacio_comun">,
+): string {
+  return a.id_apt != null ? `apt-${a.id_apt}` : `esp-${a.id_grup}-${a.id_tipo_espacio_comun}`;
+}
+
+/**
+ * Shared by buildPlanningRow (grid) and computeEpocaPending (queue screen)
+ * so "an annulled occurrence never shows as due" holds everywhere, not just
+ * on the grid — see the investigation note on why both call sites need it.
+ */
+export function findAnulacion(
+  anulacionesAtLocation: AnulacionPreventiva[],
+  anyo: number,
+  mes: number,
+): AnulacionPreventiva | null {
+  return anulacionesAtLocation.find((a) => a.anyo === anyo && a.mes === mes) ?? null;
+}
+
 export function locationInsertFields(loc: ConcreteLocation): {
   id_apt: number | null;
-  id_grup: number | null;
+  id_grup: number;
   id_tipo_espacio_comun: number | null;
 } {
   if (loc.kind === "apt")
@@ -311,6 +353,7 @@ export function computeEpocaPending(
   scopeSince: string,
   incidenciasAtLocation: IncidenciaPreventivaLite[],
   today: string,
+  anulacionesAtLocation: AnulacionPreventiva[],
 ): PendingInfo | null {
   const relevant = incidenciasAtLocation.filter(esRelevante);
   const doneYms = new Set(
@@ -330,6 +373,10 @@ export function computeEpocaPending(
   function addCandidateIfPending(ym: string, mes: number) {
     if (ym < scopeSinceYm) return;
     if (doneYms.has(ym) || genYms.has(ym)) return;
+    // An annulled occurrence (soft or definitiva) must never surface as
+    // vencida/próxima on the queue screen — the annulment always wins,
+    // same override buildPlanningRow applies for the grid.
+    if (findAnulacion(anulacionesAtLocation, Number(ym.slice(0, 4)), mes)) return;
     const targetDate = `${ym}-01`;
     if (targetDate < today) candidates.push({ estado: "vencida", targetDate, mes });
     else if (targetDate <= addDaysISO(today, PREVENTIVO_WINDOW_DAYS)) {
@@ -358,11 +405,14 @@ export function computeLocationPending(
   scopeSince: string,
   incidenciasAtLocation: IncidenciaPreventivaLite[],
   today: string,
+  anulacionesAtLocation: AnulacionPreventiva[],
 ): PendingInfo | null {
   if (tarea.modo_periodicidad === "intervalo") {
+    // Annulments are época_anyo-only for now (see buildPlanningRow) — the
+    // intervalo path is intentionally untouched.
     return computeCadaXTiempo(tarea, scopeSince, incidenciasAtLocation, today).pending;
   }
-  return computeEpocaPending(tarea.meses, scopeSince, incidenciasAtLocation, today);
+  return computeEpocaPending(tarea.meses, scopeSince, incidenciasAtLocation, today, anulacionesAtLocation);
 }
 
 export type PlanningColumn = { year: number; month: number };
@@ -389,6 +439,13 @@ export type PlanningCellState =
   // unconfigured month — and clickable, to let someone generate ahead of
   // schedule on purpose.
   | { type: "programada"; targetDate: string; mes: number }
+  // Soft/undoable annulment of one specific occurrence (see
+  // AnulacionPreventiva) — definitiva=false. A definitiva annulment has no
+  // visible state of its own; it resolves to plain "empty" (see
+  // buildPlanningRow's época branch) since the point of "definitivamente"
+  // is that it becomes indistinguishable from an unconfigured month, while
+  // the DB row keeps it from ever recomputing as due again.
+  | { type: "anulada"; targetDate: string; mes: number; idAnulacion: number }
   | { type: "empty" };
 
 export function buildPlanningRow(
@@ -397,6 +454,7 @@ export function buildPlanningRow(
   incidenciasAtLocation: IncidenciaPreventivaLite[],
   columns: PlanningColumn[],
   today: string,
+  anulacionesAtLocation: AnulacionPreventiva[],
 ): PlanningCellState[] {
   const scopeSinceYm = scopeSince.slice(0, 7);
   const relevant = incidenciasAtLocation.filter(esRelevante);
@@ -436,6 +494,16 @@ export function buildPlanningRow(
         return { type: "pending", estado: cadaXPendingEstado, targetDate: `${ym}-01`, mes: null };
       }
     } else if (tarea.meses.includes(month)) {
+      // Annulment check comes first, ahead of the scopeSince guard, so it
+      // overrides everything else for this occurrence — including the
+      // "still becomes vencida once enough time passes" behavior the rest
+      // of this branch relies on.
+      const anulacion = findAnulacion(anulacionesAtLocation, year, month);
+      if (anulacion) {
+        return anulacion.definitiva
+          ? { type: "empty" }
+          : { type: "anulada", targetDate: `${ym}-01`, mes: month, idAnulacion: anulacion.id_anulacion };
+      }
       // Unlike computeEpocaPending, `year` here is never derived from
       // `today` — it's this specific grid column's own year, so there's no
       // analogous "hardcoded current year" bug: a missed month keeps

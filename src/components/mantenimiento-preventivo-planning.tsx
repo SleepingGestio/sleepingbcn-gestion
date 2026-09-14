@@ -4,6 +4,14 @@ import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -24,21 +32,24 @@ import {
   locationKey,
   locationLabel,
   incidenciaLocationKey,
+  anulacionLocationKey,
   resolveConcreteLocations,
   todayISO,
   MES_LABELS_CORTO,
   MES_LABELS_LARGO,
+  PREVENTIVO_COLOR_ANULADA,
   PREVENTIVO_COLOR_PROGRAMADA,
   PREVENTIVO_COLOR_PROXIMA,
   PREVENTIVO_COLOR_VENCIDA,
   periodicidadLabel,
+  type AnulacionPreventiva,
   type AplicacionPreventiva,
   type ConcreteLocation,
   type IncidenciaPreventivaLite,
   type PlanningCellState,
   type TareaPreventivaConMeses,
 } from "@/lib/mantenimiento-preventivo";
-import type { GenerarItem } from "@/hooks/use-mantenimiento-preventivo";
+import type { AnularItem, GenerarItem } from "@/hooks/use-mantenimiento-preventivo";
 
 const DONE_COLOR = ESTADO_FULL_STYLE.finalitzada.bg;
 const GENERADO_COLOR = ESTADO_FULL_STYLE.pendent_validacio.bg;
@@ -94,6 +105,13 @@ function Legend() {
       label: "Pendiente · vencida",
       char: "!",
     },
+    {
+      bg: "#F1F5F9",
+      border: PREVENTIVO_COLOR_ANULADA,
+      fg: PREVENTIVO_COLOR_ANULADA,
+      label: "Anulada (temporalmente)",
+      char: "✕",
+    },
   ];
   return (
     <div className="flex flex-wrap items-center gap-4 py-1">
@@ -119,6 +137,7 @@ function GenerarCellPopover({
   selected,
   onToggleSelect,
   onGenerarUno,
+  onAnularUno,
 }: {
   location: ConcreteLocation;
   cell: PendingOrProgramadaCell;
@@ -127,10 +146,13 @@ function GenerarCellPopover({
   selected: boolean;
   onToggleSelect: () => void;
   onGenerarUno: (fecha: string) => Promise<void>;
+  /** Only meaningful (and only rendered) for cell.type === "programada". */
+  onAnularUno?: () => Promise<void>;
 }) {
   const [open, setOpen] = useState(false);
   const [fecha, setFecha] = useState(cell.targetDate);
   const [busy, setBusy] = useState(false);
+  const [busyAnular, setBusyAnular] = useState(false);
   const { grupo, detalle } = locationLabel(location, grupoById, espacioById);
   const label =
     cell.mes != null
@@ -141,6 +163,14 @@ function GenerarCellPopover({
     setBusy(true);
     await onGenerarUno(fecha);
     setBusy(false);
+    setOpen(false);
+  }
+
+  async function handleAnular() {
+    if (!onAnularUno) return;
+    setBusyAnular(true);
+    await onAnularUno();
+    setBusyAnular(false);
     setOpen(false);
   }
 
@@ -200,9 +230,119 @@ function GenerarCellPopover({
           >
             {busy ? "Generando…" : "Generar"}
           </Button>
+          {isProgramada && onAnularUno && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="w-full border-slate-300 text-slate-600 hover:bg-slate-50"
+              disabled={busyAnular}
+              onClick={handleAnular}
+            >
+              {busyAnular ? "Anulando…" : "Anular"}
+            </Button>
+          )}
         </PopoverContent>
       </Popover>
     </div>
+  );
+}
+
+function AnuladaCellPopover({
+  location,
+  cell,
+  grupoById,
+  espacioById,
+  onDesanular,
+  onAnularDefinitiva,
+}: {
+  location: ConcreteLocation;
+  cell: Extract<PlanningCellState, { type: "anulada" }>;
+  grupoById: Map<number, { nombre: string }>;
+  espacioById: Map<number, { nombre: string }>;
+  onDesanular: () => Promise<void>;
+  onAnularDefinitiva: () => Promise<void>;
+}) {
+  const [open, setOpen] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const { grupo, detalle } = locationLabel(location, grupoById, espacioById);
+  const label = `${grupo} · ${detalle} — ${MES_LABELS_LARGO[cell.mes]}`;
+
+  async function handleDesfer() {
+    setBusy(true);
+    await onDesanular();
+    setBusy(false);
+    setOpen(false);
+  }
+
+  async function handleConfirmarDefinitiva() {
+    setBusy(true);
+    await onAnularDefinitiva();
+    setBusy(false);
+    setConfirmOpen(false);
+    setOpen(false);
+  }
+
+  return (
+    <>
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger asChild>
+          <button type="button">
+            <Dot bg="#F1F5F9" border={PREVENTIVO_COLOR_ANULADA} fg={PREVENTIVO_COLOR_ANULADA}>
+              ✕
+            </Dot>
+          </button>
+        </PopoverTrigger>
+        <PopoverContent className="w-64 text-sm space-y-2.5">
+          <div className="font-semibold text-xs">{label}</div>
+          <div className="text-xs text-muted-foreground">
+            Estado: Anulada (temporalmente) — no se generará mientras esté anulada
+          </div>
+          <Button
+            size="sm"
+            variant="outline"
+            className="w-full"
+            disabled={busy}
+            onClick={handleDesfer}
+          >
+            {busy ? "Deshaciendo…" : "Desfer"}
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            className="w-full border-red-300 text-red-700 hover:bg-red-50"
+            disabled={busy}
+            onClick={() => setConfirmOpen(true)}
+          >
+            Anular definitivamente
+          </Button>
+        </PopoverContent>
+      </Popover>
+
+      <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="text-red-700">⚠ Anular definitivamente</DialogTitle>
+            <DialogDescription>
+              {label}. Esta acción no se puede deshacer: la ocurrencia dejará de mostrarse por
+              completo (ni siquiera como anulada) y nunca volverá a generarse.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirmOpen(false)} disabled={busy}>
+              Cancelar
+            </Button>
+            <Button
+              className="bg-red-600 hover:bg-red-700"
+              disabled={busy}
+              onClick={handleConfirmarDefinitiva}
+            >
+              {busy ? "Anulando…" : "Confirmar anulación definitiva"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 
@@ -210,6 +350,7 @@ function PlanningRowView({
   tarea,
   location,
   incidenciasAtLocation,
+  anulacionesAtLocation,
   columns,
   today,
   grupoById,
@@ -218,10 +359,14 @@ function PlanningRowView({
   onToggleSelect,
   onOpenIncidencia,
   onGenerarUno,
+  onAnularUno,
+  onDesanular,
+  onAnularDefinitiva,
 }: {
   tarea: TareaPreventivaConMeses;
   location: ConcreteLocation;
   incidenciasAtLocation: IncidenciaPreventivaLite[];
+  anulacionesAtLocation: AnulacionPreventiva[];
   columns: { year: number; month: number }[];
   today: string;
   grupoById: Map<number, { nombre: string }>;
@@ -230,8 +375,18 @@ function PlanningRowView({
   onToggleSelect: (key: string) => void;
   onOpenIncidencia: (id: number) => void;
   onGenerarUno: (location: ConcreteLocation, fecha: string) => Promise<void>;
+  onAnularUno: (location: ConcreteLocation, anyo: number, mes: number) => Promise<void>;
+  onDesanular: (idAnulacion: number) => Promise<void>;
+  onAnularDefinitiva: (idAnulacion: number) => Promise<void>;
 }) {
-  const row = buildPlanningRow(tarea, location.scopeSince, incidenciasAtLocation, columns, today);
+  const row = buildPlanningRow(
+    tarea,
+    location.scopeSince,
+    incidenciasAtLocation,
+    columns,
+    today,
+    anulacionesAtLocation,
+  );
   const { grupo, detalle } = locationLabel(location, grupoById, espacioById);
   const locKey = locationKey(location);
 
@@ -276,6 +431,21 @@ function PlanningRowView({
                 selected={selected.has(`${locKey}|${col.year}-${col.month}`)}
                 onToggleSelect={() => onToggleSelect(`${locKey}|${col.year}-${col.month}`)}
                 onGenerarUno={(fecha) => onGenerarUno(location, fecha)}
+                onAnularUno={
+                  cell.type === "programada"
+                    ? () => onAnularUno(location, col.year, col.month)
+                    : undefined
+                }
+              />
+            )}
+            {cell.type === "anulada" && (
+              <AnuladaCellPopover
+                location={location}
+                cell={cell}
+                grupoById={grupoById}
+                espacioById={espacioById}
+                onDesanular={() => onDesanular(cell.idAnulacion)}
+                onAnularDefinitiva={() => onAnularDefinitiva(cell.idAnulacion)}
               />
             )}
           </td>
@@ -289,22 +459,30 @@ function PlanningTareaContent({
   tarea,
   aplicaciones,
   incidencias,
+  anulaciones,
   apartamentos,
   grupoById,
   espacioById,
   workers,
   onOpenIncidencia,
   onGenerar,
+  onAnular,
+  onDesanular,
+  onAnularDefinitiva,
 }: {
   tarea: TareaPreventivaConMeses;
   aplicaciones: AplicacionPreventiva[];
   incidencias: IncidenciaPreventivaLite[];
+  anulaciones: AnulacionPreventiva[];
   apartamentos: { id_apt: number; id_grupo: number | null; nombre: string; activo: boolean }[];
   grupoById: Map<number, { nombre: string }>;
   espacioById: Map<number, { nombre: string }>;
   workers: PersonaLite[];
   onOpenIncidencia: (id: number) => void;
   onGenerar: (items: GenerarItem[], asignarA?: number | null) => Promise<boolean>;
+  onAnular: (items: AnularItem[]) => Promise<boolean>;
+  onDesanular: (idAnulacion: number) => Promise<boolean>;
+  onAnularDefinitiva: (idAnulacion: number) => Promise<boolean>;
 }) {
   const today = todayISO();
   const columns = useMemo(() => buildPlanningColumns(today), [today]);
@@ -338,6 +516,18 @@ function PlanningTareaContent({
     return m;
   }, [incidencias, tarea.id_tarea_preventiva]);
 
+  const anulacionesByLocKey = useMemo(() => {
+    const m = new Map<string, AnulacionPreventiva[]>();
+    for (const a of anulaciones) {
+      if (a.id_tarea_preventiva !== tarea.id_tarea_preventiva) continue;
+      const k = anulacionLocationKey(a);
+      const arr = m.get(k) ?? [];
+      arr.push(a);
+      m.set(k, arr);
+    }
+    return m;
+  }, [anulaciones, tarea.id_tarea_preventiva]);
+
   // Rows/cells are keyed by `${locationKey}|${year}-${month}`; used both to
   // resolve which pending occurrence a selection refers to and to reset
   // selection whenever the visible pending set changes underneath it.
@@ -346,7 +536,10 @@ function PlanningTareaContent({
   }
 
   const pendingByKey = useMemo(() => {
-    const m = new Map<string, { location: ConcreteLocation; targetDate: string }>();
+    const m = new Map<
+      string,
+      { location: ConcreteLocation; targetDate: string; type: "pending" | "programada" }
+    >();
     for (const loc of locations) {
       const row = buildPlanningRow(
         tarea,
@@ -354,18 +547,20 @@ function PlanningTareaContent({
         incidenciasByLocKey.get(locationKey(loc)) ?? [],
         columns,
         today,
+        anulacionesByLocKey.get(locationKey(loc)) ?? [],
       );
       row.forEach((cell, i) => {
         if (cell.type === "pending" || cell.type === "programada") {
           m.set(keyOf(loc, columns[i].year, columns[i].month), {
             location: loc,
             targetDate: cell.targetDate,
+            type: cell.type,
           });
         }
       });
     }
     return m;
-  }, [locations, incidenciasByLocKey, tarea, columns, today]);
+  }, [locations, incidenciasByLocKey, anulacionesByLocKey, tarea, columns, today]);
 
   function toggleSelect(key: string) {
     setSelected((s) => {
@@ -376,11 +571,22 @@ function PlanningTareaContent({
     });
   }
 
+  const selectedCells = useMemo(
+    () =>
+      Array.from(selected)
+        .map((k) => pendingByKey.get(k))
+        .filter((v): v is NonNullable<typeof v> => v != null),
+    [selected, pendingByKey],
+  );
+  const selectionAllProgramada =
+    selectedCells.length > 0 && selectedCells.every((v) => v.type === "programada");
+
   async function handleBulkGenerar(asignarA?: number | null) {
-    const items: GenerarItem[] = Array.from(selected)
-      .map((k) => pendingByKey.get(k))
-      .filter((v): v is { location: ConcreteLocation; targetDate: string } => v != null)
-      .map((v) => ({ tarea, location: v.location, fechaPrevista: v.targetDate }));
+    const items: GenerarItem[] = selectedCells.map((v) => ({
+      tarea,
+      location: v.location,
+      fechaPrevista: v.targetDate,
+    }));
     if (items.length === 0) return;
     setBusyBulk(true);
     const ok = await onGenerar(items, asignarA ?? null);
@@ -391,8 +597,27 @@ function PlanningTareaContent({
     }
   }
 
+  async function handleBulkAnular() {
+    if (!selectionAllProgramada) return;
+    const items: AnularItem[] = selectedCells.map((v) => ({
+      tarea,
+      location: v.location,
+      anyo: Number(v.targetDate.slice(0, 4)),
+      mes: Number(v.targetDate.slice(5, 7)),
+    }));
+    if (items.length === 0) return;
+    setBusyBulk(true);
+    const ok = await onAnular(items);
+    setBusyBulk(false);
+    if (ok) setSelected(new Set());
+  }
+
   async function handleGenerarUno(location: ConcreteLocation, fecha: string) {
     await onGenerar([{ tarea, location, fechaPrevista: fecha }]);
+  }
+
+  async function handleAnularUno(location: ConcreteLocation, anyo: number, mes: number) {
+    await onAnular([{ tarea, location, anyo, mes }]);
   }
 
   return (
@@ -438,6 +663,23 @@ function PlanningTareaContent({
               Confirmar
             </Button>
           </div>
+          <span
+            title={
+              selectionAllProgramada
+                ? undefined
+                : "Anular solo aplica a celdas \"Programada\" — deselecciona las demás"
+            }
+          >
+            <Button
+              size="sm"
+              variant="outline"
+              className="border-slate-300 text-slate-600 hover:bg-slate-50"
+              disabled={busyBulk || !selectionAllProgramada}
+              onClick={handleBulkAnular}
+            >
+              Anular
+            </Button>
+          </span>
         </div>
       )}
 
@@ -473,6 +715,7 @@ function PlanningTareaContent({
                 tarea={tarea}
                 location={loc}
                 incidenciasAtLocation={incidenciasByLocKey.get(locationKey(loc)) ?? []}
+                anulacionesAtLocation={anulacionesByLocKey.get(locationKey(loc)) ?? []}
                 columns={columns}
                 today={today}
                 grupoById={grupoById}
@@ -481,6 +724,13 @@ function PlanningTareaContent({
                 onToggleSelect={toggleSelect}
                 onOpenIncidencia={onOpenIncidencia}
                 onGenerarUno={handleGenerarUno}
+                onAnularUno={handleAnularUno}
+                onDesanular={async (idAnulacion) => {
+                  await onDesanular(idAnulacion);
+                }}
+                onAnularDefinitiva={async (idAnulacion) => {
+                  await onAnularDefinitiva(idAnulacion);
+                }}
               />
             ))}
           </tbody>
@@ -500,6 +750,7 @@ export function MantenimientoPreventivoPlanning({
   tareas,
   aplicaciones,
   incidencias,
+  anulaciones,
   apartamentos,
   grupoById,
   espacioById,
@@ -509,10 +760,14 @@ export function MantenimientoPreventivoPlanning({
   onBack,
   onOpenIncidencia,
   onGenerar,
+  onAnular,
+  onDesanular,
+  onAnularDefinitiva,
 }: {
   tareas: TareaPreventivaConMeses[];
   aplicaciones: AplicacionPreventiva[];
   incidencias: IncidenciaPreventivaLite[];
+  anulaciones: AnulacionPreventiva[];
   apartamentos: { id_apt: number; id_grupo: number | null; nombre: string; activo: boolean }[];
   grupoById: Map<number, GrupoLite>;
   espacioById: Map<number, EspacioLite>;
@@ -522,6 +777,9 @@ export function MantenimientoPreventivoPlanning({
   onBack: () => void;
   onOpenIncidencia: (id: number) => void;
   onGenerar: (items: GenerarItem[], asignarA?: number | null) => Promise<boolean>;
+  onAnular: (items: AnularItem[]) => Promise<boolean>;
+  onDesanular: (idAnulacion: number) => Promise<boolean>;
+  onAnularDefinitiva: (idAnulacion: number) => Promise<boolean>;
 }) {
   const tarea = tareas.find((t) => t.id_tarea_preventiva === selectedTareaId) ?? tareas[0] ?? null;
 
@@ -554,7 +812,8 @@ export function MantenimientoPreventivoPlanning({
 
       <Legend />
       <div className="text-xs text-muted-foreground -mt-2">
-        Marca el ☐ de una o varias celdas "pendiente de generar" para generarlas juntas.
+        Marca el ☐ de una o varias celdas "pendiente de generar" para generarlas juntas — "Anular"
+        solo actúa cuando la selección es toda "Programada".
       </div>
 
       {tarea ? (
@@ -563,12 +822,16 @@ export function MantenimientoPreventivoPlanning({
           tarea={tarea}
           aplicaciones={aplicaciones}
           incidencias={incidencias}
+          anulaciones={anulaciones}
           apartamentos={apartamentos}
           grupoById={grupoById}
           espacioById={espacioById}
           workers={workers}
           onOpenIncidencia={onOpenIncidencia}
           onGenerar={onGenerar}
+          onAnular={onAnular}
+          onDesanular={onDesanular}
+          onAnularDefinitiva={onAnularDefinitiva}
         />
       ) : (
         <div className="text-sm text-muted-foreground">No hay tareas preventivas activas.</div>
