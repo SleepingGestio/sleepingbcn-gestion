@@ -1,6 +1,6 @@
 import { Link, useRouterState } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { Calendar, LogIn, Sparkles, CalendarRange, Megaphone, Settings, LogOut, Smartphone, Clock, History, Wrench, Euro } from "lucide-react";
+import { Calendar, LogIn, Sparkles, CalendarRange, Megaphone, Settings, LogOut, Smartphone, Clock, History, Wrench, Euro, Tag } from "lucide-react";
 import { getAppEnv } from "@/lib/api/app-env.functions";
 import {
   Sidebar,
@@ -33,6 +33,10 @@ const NAV_ITEMS: NavItem[] = [
   { title: "Configuración", url: "/configuracion", icon: Settings, menu: null },
 ];
 
+const PRICING_NAV_ITEMS: NavItem[] = [
+  { title: "Eventos", url: "/pricing/eventos", icon: Tag, menu: "pricing_eventos" },
+];
+
 export function AppSidebar() {
   const path = useRouterState({ select: (s) => s.location.pathname });
   const { user, signOut } = useAuth();
@@ -50,6 +54,7 @@ export function AppSidebar() {
     }
     return it.menu ? canView(it.menu) : true;
   });
+  const pricingItems = PRICING_NAV_ITEMS.filter((it) => (isAdmin ? true : it.menu ? canView(it.menu) : true));
 
   return (
     <Sidebar collapsible="icon">
@@ -78,6 +83,25 @@ export function AppSidebar() {
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
+        {pricingItems.length > 0 && (
+          <SidebarGroup>
+            <SidebarGroupLabel>Gestión de precios - tarifas</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {pricingItems.map((item) => (
+                  <SidebarMenuItem key={item.url}>
+                    <SidebarMenuButton asChild isActive={path === item.url || path.startsWith(item.url + "/")}>
+                      <Link to={item.url} className="flex items-center gap-2">
+                        <item.icon className="h-4 w-4" />
+                        <span>{item.title}</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                ))}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
       </SidebarContent>
       <SidebarFooter className="border-t">
         <div className="px-2 py-2 text-xs text-muted-foreground truncate">{user?.email}</div>
