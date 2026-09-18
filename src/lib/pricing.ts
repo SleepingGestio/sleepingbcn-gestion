@@ -24,6 +24,7 @@ export type Evento = {
   aplica_a: EventoAplicaA;
   valor: number | null;
   tipo_valor: EventoTipoValor | null;
+  estancia_minima: number | null;
   fase: EventoFase;
   evento_relacionado_id: string | null;
   estado: EventoEstado;
@@ -51,6 +52,7 @@ export type NuevoEventoInput = {
   aplica_a: EventoAplicaA;
   valor: number | null;
   tipo_valor: EventoTipoValor | null;
+  estancia_minima?: number | null;
   periodicidad?: EventoPeriodicidad;
   fase?: EventoFase;
   evento_relacionado_id?: string | null;
@@ -68,6 +70,7 @@ export async function insertEvento(input: NuevoEventoInput): Promise<void> {
     aplica_a: input.aplica_a,
     valor: input.valor,
     tipo_valor: input.valor != null ? input.tipo_valor : null,
+    estancia_minima: input.estancia_minima ?? null,
     periodicidad: input.periodicidad ?? "anual",
     fase: input.fase ?? "principal",
     evento_relacionado_id: input.evento_relacionado_id ?? null,

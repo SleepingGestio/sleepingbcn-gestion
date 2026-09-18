@@ -147,6 +147,7 @@ function EventosPage() {
               <TableHead>Fechas</TableHead>
               <TableHead>Aplica a</TableHead>
               <TableHead>Efecto</TableHead>
+              <TableHead>Mín. noches</TableHead>
               <TableHead>Estado</TableHead>
               {canEditEventos && <TableHead className="text-right">Acciones</TableHead>}
             </TableRow>
@@ -154,21 +155,21 @@ function EventosPage() {
           <TableBody>
             {q.isLoading && (
               <TableRow>
-                <TableCell colSpan={canEditEventos ? 7 : 6} className="text-center py-8 text-muted-foreground">
+                <TableCell colSpan={canEditEventos ? 8 : 7} className="text-center py-8 text-muted-foreground">
                   Cargando…
                 </TableCell>
               </TableRow>
             )}
             {q.error && (
               <TableRow>
-                <TableCell colSpan={canEditEventos ? 7 : 6} className="text-center py-8 text-destructive">
+                <TableCell colSpan={canEditEventos ? 8 : 7} className="text-center py-8 text-destructive">
                   {(q.error as Error).message}
                 </TableCell>
               </TableRow>
             )}
             {!q.isLoading && rows.length === 0 && (
               <TableRow>
-                <TableCell colSpan={canEditEventos ? 7 : 6} className="text-center py-8 text-muted-foreground">
+                <TableCell colSpan={canEditEventos ? 8 : 7} className="text-center py-8 text-muted-foreground">
                   Sin eventos
                 </TableCell>
               </TableRow>
@@ -185,6 +186,9 @@ function EventosPage() {
                   <TableCell><AplicaABadge aplicaA={e.aplica_a} /></TableCell>
                   <TableCell>
                     {efecto ? efecto : <span className="text-muted-foreground">Sin fórmula</span>}
+                  </TableCell>
+                  <TableCell>
+                    {e.estancia_minima != null ? e.estancia_minima : <span className="text-muted-foreground">—</span>}
                   </TableCell>
                   <TableCell><EventoEstadoBadge estado={e.estado} /></TableCell>
                   {canEditEventos && (

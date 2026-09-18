@@ -58,11 +58,12 @@ export function EventoFormDialog({
 }) {
   const [nombre, setNombre] = useState("");
   const [categoria, setCategoria] = useState<EventoCategoria>("feria");
-  const [fechaInicio, setFechaInicio] = useState("");
-  const [fechaFin, setFechaFin] = useState("");
+  const [fechaInicio, setFechaInicio] = useState(fase === "post" ? (parent?.fecha_fin ?? "") : "");
+  const [fechaFin, setFechaFin] = useState(fase === "previo" ? (parent?.fecha_inicio ?? "") : "");
   const [aplicaA, setAplicaA] = useState<EventoAplicaA>("ambos");
   const [valor, setValor] = useState("");
   const [tipoValor, setTipoValor] = useState<EventoTipoValor>("%");
+  const [estanciaMinima, setEstanciaMinima] = useState("");
   const [periodicidad, setPeriodicidad] = useState<EventoPeriodicidad>("anual");
   const [notas, setNotas] = useState("");
   const [saving, setSaving] = useState(false);
@@ -77,6 +78,11 @@ export function EventoFormDialog({
     if (!fechaInicio || !fechaFin) { toast.error("Las fechas son obligatorias"); return; }
     if (fechaFin < fechaInicio) { toast.error("La fecha de fin no puede ser anterior a la de inicio"); return; }
 
+    if (estanciaMinima.trim() !== "" && !(Number.isInteger(Number(estanciaMinima)) && Number(estanciaMinima) > 0)) {
+      toast.error("La estancia mínima debe ser un número entero mayor que 0");
+      return;
+    }
+
     setSaving(true);
     try {
       await insertEvento({
@@ -87,6 +93,7 @@ export function EventoFormDialog({
         aplica_a: fase === "principal" ? aplicaA : parent!.aplica_a,
         valor: valor.trim() === "" ? null : Number(valor),
         tipo_valor: valor.trim() === "" ? null : tipoValor,
+        estancia_minima: estanciaMinima.trim() === "" ? null : Number(estanciaMinima),
         periodicidad: fase === "principal" ? periodicidad : undefined,
         fase,
         evento_relacionado_id: parent?.id ?? null,
@@ -167,6 +174,16 @@ export function EventoFormDialog({
               </Field>
             )}
           </div>
+          <Field label="Estancia mínima (noches)">
+            <Input
+              type="number"
+              min={1}
+              step={1}
+              placeholder="Opcional"
+              value={estanciaMinima}
+              onChange={(e) => setEstanciaMinima(e.target.value)}
+            />
+          </Field>
           {fase === "principal" && (
             <Field label="Periodicidad">
               <Select value={periodicidad} onValueChange={(v) => setPeriodicidad(v as EventoPeriodicidad)}>
