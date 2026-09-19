@@ -84,3 +84,52 @@ export async function descartarEvento(id: string): Promise<void> {
   const { error } = await pricingDb().from("eventos").update({ estado: "descartado" }).eq("id", id);
   if (error) throw error;
 }
+
+export type PlantillaFuente = {
+  id: string;
+  plantilla_id: string;
+  url: string;
+  descripcion: string | null;
+  created_at: string;
+};
+
+export type Plantilla = {
+  id: string;
+  id_negocio: string;
+  nombre: string;
+  categoria: EventoCategoria;
+  aplica_a: EventoAplicaA;
+  periodicidad: EventoPeriodicidad;
+  activo: boolean;
+  created_at: string;
+  updated_at: string;
+  plantillas_fuentes: PlantillaFuente[];
+};
+
+export async function fetchPlantillas(): Promise<Plantilla[]> {
+  const { data, error } = await pricingDb()
+    .from("plantillas_eventos")
+    .select("*, plantillas_fuentes(*)")
+    .order("nombre", { ascending: true });
+  if (error) throw error;
+  return (data ?? []) as Plantilla[];
+}
+
+export type PlantillaEditable = Pick<Plantilla, "nombre" | "categoria" | "aplica_a" | "periodicidad" | "activo">;
+
+export async function updatePlantilla(id: string, changes: PlantillaEditable): Promise<void> {
+  const { error } = await pricingDb().from("plantillas_eventos").update(changes).eq("id", id);
+  if (error) throw error;
+}
+
+export async function addFuente(plantillaId: string, url: string, descripcion: string | null): Promise<void> {
+  const { error } = await pricingDb()
+    .from("plantillas_fuentes")
+    .insert({ plantilla_id: plantillaId, url, descripcion });
+  if (error) throw error;
+}
+
+export async function deleteFuente(id: string): Promise<void> {
+  const { error } = await pricingDb().from("plantillas_fuentes").delete().eq("id", id);
+  if (error) throw error;
+}
