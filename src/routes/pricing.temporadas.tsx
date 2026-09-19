@@ -9,13 +9,16 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
+  Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
+} from "@/components/ui/dialog";
+import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Pencil, Plus, Trash2 } from "lucide-react";
+import { CalendarCheck, Pencil, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { usePermissions } from "@/hooks/use-permissions";
-import { fetchTemporadas, copyTemporadasToYear, deleteTemporada, deleteTemporadasByYear, type Temporada, type TemporadaAplicaA } from "@/lib/pricing";
+import { fetchTemporadas, copyTemporadasToYear, deleteTemporada, deleteTemporadasByYear, findCoverageGaps, type Temporada, type TemporadaAplicaA } from "@/lib/pricing";
 import { fmtDate } from "@/lib/format";
 import { SortHeader } from "@/components/sort-header";
 import { TemporadaDialog } from "@/components/temporada-dialog";
@@ -53,6 +56,7 @@ function TemporadasTab({ anio, aplicaA, temporadas: all, loading, error, onSaved
 
   const [dialog, setDialog] = useState<{ id: string | null } | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Temporada | null>(null);
+  const [gaps, setGaps] = useState<{ desde: string; hasta: string }[] | null>(null);
   const [sortKey, setSortKey] = useState<SortKey>("fechas");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const colSpan = canEditTemporadas ? 5 : 4;
@@ -93,13 +97,16 @@ function TemporadasTab({ anio, aplicaA, temporadas: all, loading, error, onSaved
 
   return (
     <>
-      {canEditTemporadas && (
-        <div className="flex justify-end mb-4">
+      <div className="flex justify-end gap-2 mb-4">
+        <Button size="sm" variant="outline" onClick={() => setGaps(findCoverageGaps(temporadas, anio))}>
+          <CalendarCheck className="h-4 w-4 mr-1" /> Comprobar cobertura
+        </Button>
+        {canEditTemporadas && (
           <Button size="sm" onClick={() => setDialog({ id: null })}>
             <Plus className="h-4 w-4 mr-1" /> Nueva temporada
           </Button>
-        </div>
-      )}
+        )}
+      </div>
       <Card className="overflow-hidden bg-white">
         <Table>
           <TableHeader>
@@ -161,12 +168,34 @@ function TemporadasTab({ anio, aplicaA, temporadas: all, loading, error, onSaved
         <TemporadaDialog
           key={dialog.id ?? "nueva"}
           temporada={dialog.id ? all.find((t) => t.id === dialog.id) ?? null : null}
+          temporadasEnContexto={temporadas}
           defaultAnio={anio}
           aplicaA={aplicaA}
           onClose={() => setDialog(null)}
           onSaved={onSaved}
         />
       )}
+
+      <Dialog open={gaps !== null} onOpenChange={(o) => !o && setGaps(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Cobertura {anio} · {aplicaA === "city" ? "City" : "Rural"}</DialogTitle>
+            <DialogDescription className="sr-only">Resultado de la comprobación de cobertura del año</DialogDescription>
+          </DialogHeader>
+          {gaps?.length === 0 ? (
+            <p className="text-sm">Todo el año está cubierto por alguna temporada</p>
+          ) : (
+            <ul className="text-sm space-y-1">
+              {gaps?.map((g) => (
+                <li key={g.desde}>Sin temporada asignada: {fmtDate(g.desde)} – {fmtDate(g.hasta)}</li>
+              ))}
+            </ul>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setGaps(null)}>Cerrar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <AlertDialog open={!!deleteTarget} onOpenChange={(o) => !o && setDeleteTarget(null)}>
         <AlertDialogContent>

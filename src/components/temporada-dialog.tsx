@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import {
-  insertTemporadaConPrimerPeriodo, updateTemporada, insertPeriodo, deletePeriodo,
+  insertTemporadaConPrimerPeriodo, updateTemporada, insertPeriodo, deletePeriodo, findPeriodoOverlap,
   type Temporada, type TemporadaAplicaA,
 } from "@/lib/pricing";
 import { addDaysISO, fmtDate } from "@/lib/format";
@@ -66,9 +66,11 @@ function PeriodoInputs({ form }: { form: ReturnType<typeof usePeriodoForm> }) {
  * open (`temporada` comes from the parent's query data, so onSaved() refreshes it).
  */
 export function TemporadaDialog({
-  temporada, defaultAnio, aplicaA, onClose, onSaved,
+  temporada, temporadasEnContexto, defaultAnio, aplicaA, onClose, onSaved,
 }: {
   temporada?: Temporada | null;
+  /** Every temporada (with periods) of the año + aplica_a in view, for overlap checks. */
+  temporadasEnContexto: Temporada[];
   defaultAnio: number;
   aplicaA: TemporadaAplicaA;
   onClose: () => void;
@@ -87,6 +89,16 @@ export function TemporadaDialog({
   // the day after the latest existing period, or Jan 1 when there is none.
   const periodo = usePeriodoForm(latestFin ? addDaysISO(latestFin, 1) : `${defaultAnio}-01-01`);
 
+  /** Toasts and returns true when the range overlaps a period of another temporada. */
+  function hasConflict(fechaInicio: string, fechaFin: string): boolean {
+    const c = findPeriodoOverlap(temporadasEnContexto, temporada?.id ?? null, fechaInicio, fechaFin);
+    if (!c) return false;
+    toast.error(
+      `Se solapa con ${c.temporada.codigo} (${c.temporada.nombre}): ${fmtDate(c.periodo.fecha_inicio)} – ${fmtDate(c.periodo.fecha_fin)}`,
+    );
+    return true;
+  }
+
   async function handleSubmit() {
     if (!codigo.trim()) { toast.error("El código es obligatorio"); return; }
     if (!nombre.trim()) { toast.error("El nombre es obligatorio"); return; }
@@ -99,6 +111,7 @@ export function TemporadaDialog({
     if (!temporada) {
       const err = validatePeriodo(periodo.fechaInicio, periodo.fechaFin);
       if (err) { toast.error(err); return; }
+      if (hasConflict(periodo.fechaInicio, periodo.fechaFin)) return;
     }
 
     setSaving(true);
@@ -125,6 +138,7 @@ export function TemporadaDialog({
     if (!temporada) return;
     const err = validatePeriodo(periodo.fechaInicio, periodo.fechaFin);
     if (err) { toast.error(err); return; }
+    if (hasConflict(periodo.fechaInicio, periodo.fechaFin)) return;
     setAddingPeriodo(true);
     try {
       await insertPeriodo(temporada.id, periodo.fechaInicio, periodo.fechaFin);

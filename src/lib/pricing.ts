@@ -1,5 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
-import { addYearsISO } from "@/lib/format";
+import { addDaysISO, addYearsISO } from "@/lib/format";
 
 // pricing.eventos lives in the `pricing` Postgres schema, not `public` — the
 // generated Database type (src/integrations/supabase/types.ts) doesn't cover
@@ -328,4 +328,44 @@ export async function deleteTemporada(id: string): Promise<void> {
 export async function deleteTemporadasByYear(anio: number): Promise<void> {
   const { error } = await pricingDb().from("temporadas").delete().eq("anio", anio);
   if (error) throw error;
+}
+
+export type PeriodoConflict = { temporada: Temporada; periodo: TemporadaPeriodo };
+
+/**
+ * First period of any temporada other than `excludeTemporadaId` that overlaps
+ * the given range (inclusive on both ends), or null.
+ */
+export function findPeriodoOverlap(
+  temporadas: Temporada[],
+  excludeTemporadaId: string | null,
+  fechaInicio: string,
+  fechaFin: string,
+): PeriodoConflict | null {
+  for (const t of temporadas) {
+    if (t.id === excludeTemporadaId) continue;
+    for (const p of t.temporada_periodos) {
+      if (fechaInicio <= p.fecha_fin && p.fecha_inicio <= fechaFin) return { temporada: t, periodo: p };
+    }
+  }
+  return null;
+}
+
+/** Stretches of `anio` (Jan 1 – Dec 31) not covered by any period of the given temporadas. */
+export function findCoverageGaps(temporadas: Temporada[], anio: number): { desde: string; hasta: string }[] {
+  const yearStart = `${anio}-01-01`;
+  const yearEnd = `${anio}-12-31`;
+  const periodos = temporadas
+    .flatMap((t) => t.temporada_periodos)
+    .sort((a, b) => a.fecha_inicio.localeCompare(b.fecha_inicio));
+  const gaps: { desde: string; hasta: string }[] = [];
+  let cursor = yearStart; // first day not yet known to be covered
+  for (const p of periodos) {
+    if (cursor > yearEnd) break;
+    if (p.fecha_fin < cursor) continue;
+    if (p.fecha_inicio > cursor) gaps.push({ desde: cursor, hasta: addDaysISO(p.fecha_inicio, -1) });
+    cursor = addDaysISO(p.fecha_fin, 1);
+  }
+  if (cursor <= yearEnd) gaps.push({ desde: cursor, hasta: yearEnd });
+  return gaps;
 }
