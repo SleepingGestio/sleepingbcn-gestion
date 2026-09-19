@@ -1,8 +1,10 @@
 import type { ReactNode } from "react";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "./app-sidebar";
+import { useReleaseStuckPointerEvents } from "@/hooks/use-release-stuck-pointer-events";
 
 export function AppShell({ title, children }: { title: string; children: ReactNode }) {
+  useReleaseStuckPointerEvents();
   return (
     <SidebarProvider>
       <div className="min-h-screen flex w-full bg-slate-50">
