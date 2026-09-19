@@ -7,12 +7,14 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Pencil, Plus } from "lucide-react";
 import { usePermissions } from "@/hooks/use-permissions";
-import { fetchPlantillas, type EventoPeriodicidad, type Plantilla } from "@/lib/pricing";
+import { fetchPlantillas, type EventoCategoria, type EventoPeriodicidad, type Plantilla } from "@/lib/pricing";
 import { CategoriaBadge, AplicaABadge } from "@/components/pricing-badges";
-import { PlantillaEditDialog } from "@/components/plantilla-edit-dialog";
+import { PlantillaEditDialog, CATEGORIA_OPTIONS } from "@/components/plantilla-edit-dialog";
+import { FilterField } from "@/components/filter-field";
 import { PlantillaCreateDialog } from "@/components/plantilla-create-dialog";
 import { SortHeader } from "@/components/sort-header";
 
@@ -21,6 +23,11 @@ type SortKey = "nombre" | "categoria" | "aplica_a" | "periodicidad" | "activo" |
 export const Route = createFileRoute("/pricing/plantillas")({
   component: PlantillasPage,
 });
+
+const CATEGORIA_FILTER_OPTIONS: { value: "todas" | EventoCategoria; label: string }[] = [
+  { value: "todas", label: "Todas" },
+  ...CATEGORIA_OPTIONS,
+];
 
 const PERIODICIDAD_LABEL: Record<EventoPeriodicidad, string> = {
   anual: "Anual",
@@ -35,6 +42,7 @@ function PlantillasPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [incluirInactivas, setIncluirInactivas] = useState(false);
+  const [categoriaFilter, setCategoriaFilter] = useState<"todas" | EventoCategoria>("todas");
   const [sortKey, setSortKey] = useState<SortKey>("nombre");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const q = useQuery({ queryKey: ["pricing-plantillas"], queryFn: fetchPlantillas });
@@ -52,12 +60,15 @@ function PlantillasPage() {
         case "fuentes": return p.plantillas_fuentes.length;
       }
     };
-    return (q.data ?? []).filter((p) => incluirInactivas || p.activo).sort((a, b) => {
+    return (q.data ?? [])
+      .filter((p) => incluirInactivas || p.activo)
+      .filter((p) => categoriaFilter === "todas" || p.categoria === categoriaFilter)
+      .sort((a, b) => {
       const av = pick(a), bv = pick(b);
       const c = typeof av === "number" && typeof bv === "number" ? av - bv : String(av).localeCompare(String(bv));
       return sortDir === "asc" ? c : -c;
     });
-  }, [q.data, sortKey, sortDir, incluirInactivas]);
+  }, [q.data, sortKey, sortDir, incluirInactivas, categoriaFilter]);
 
   const toggleSort = (k: SortKey) => {
     if (sortKey === k) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
@@ -66,16 +77,28 @@ function PlantillasPage() {
 
   return (
     <AppShell title="Eventos-plantillas">
-      <div className="flex items-center justify-between gap-3 mb-4">
-        <div className="flex items-center gap-2">
-          <Checkbox
-            id="incluir-inactivas"
-            checked={incluirInactivas}
-            onCheckedChange={(v) => setIncluirInactivas(!!v)}
-          />
-          <Label htmlFor="incluir-inactivas" className="text-sm font-normal cursor-pointer">
-            Mostrar inactivas
-          </Label>
+      <div className="flex items-end justify-between gap-3 mb-4">
+        <div className="flex flex-wrap items-end gap-3">
+          <FilterField label="Categoría">
+            <Select value={categoriaFilter} onValueChange={(v) => setCategoriaFilter(v as typeof categoriaFilter)}>
+              <SelectTrigger className="w-auto min-w-[140px] bg-white"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {CATEGORIA_FILTER_OPTIONS.map((o) => (
+                  <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </FilterField>
+          <div className="flex items-center gap-2 h-9">
+            <Checkbox
+              id="incluir-inactivas"
+              checked={incluirInactivas}
+              onCheckedChange={(v) => setIncluirInactivas(!!v)}
+            />
+            <Label htmlFor="incluir-inactivas" className="text-sm font-normal cursor-pointer">
+              Mostrar inactivas
+            </Label>
+          </div>
         </div>
         {canEditPlantillas && (
           <Button size="sm" onClick={() => setCreating(true)}>

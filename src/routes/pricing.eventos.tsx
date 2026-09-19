@@ -23,6 +23,7 @@ import {
 import { CategoriaBadge, AplicaABadge, EventoEstadoBadge } from "@/components/pricing-badges";
 import { EventoFormDialog } from "@/components/evento-form-dialog";
 import { SortHeader } from "@/components/sort-header";
+import { FilterField } from "@/components/filter-field";
 
 type SortKey = "nombre" | "categoria" | "fechas" | "aplica_a" | "efecto" | "min_noches" | "estado";
 
@@ -65,7 +66,7 @@ const CATEGORIA_OPTIONS: { value: "todas" | EventoCategoria; label: string }[] =
 
 type RangoFilter = "todas" | "anio_actual" | "proximo_anio" | "ytd";
 
-// "YTD" here is forward-looking: from today to Dec 31 of the current year.
+// "YTD" is a rolling 12-month window: today through the same calendar date next year.
 const RANGO_OPTIONS: { value: RangoFilter; label: string }[] = [
   { value: "todas", label: "Todas" },
   { value: "anio_actual", label: "Año actual" },
@@ -93,14 +94,20 @@ function EventosPage() {
   const rows = useMemo(() => {
     const now = new Date();
     const year = now.getFullYear();
-    const today = `${year}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+    const toISO = (d: Date) =>
+      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    const today = toISO(now);
+    // Same calendar date next year; Feb 29 has no counterpart, so it clamps to Feb 28.
+    const nextYear = new Date(year + 1, now.getMonth(), now.getDate());
+    if (nextYear.getMonth() !== now.getMonth()) nextYear.setDate(0);
+    const oneYearAhead = toISO(nextYear);
     function passesRango(e: Evento): boolean {
       const f = e.fecha_inicio;
       switch (rangoFilter) {
         case "todas": return true;
         case "anio_actual": return f >= `${year}-01-01` && f <= `${year}-12-31`;
         case "proximo_anio": return f >= `${year + 1}-01-01` && f <= `${year + 1}-12-31`;
-        case "ytd": return f >= today && f <= `${year}-12-31`;
+        case "ytd": return f >= today && f <= oneYearAhead;
       }
     }
     function passesFilters(e: Evento): boolean {
@@ -170,32 +177,38 @@ function EventosPage() {
   return (
     <AppShell title="Eventos-calendario">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
-        <div className="flex flex-wrap items-center gap-3">
-          <Select value={grupoFilter} onValueChange={(v) => setGrupoFilter(v as typeof grupoFilter)}>
-            <SelectTrigger className="w-auto min-w-[140px] bg-white"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              {GRUPO_OPTIONS.map((o) => (
-                <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select value={categoriaFilter} onValueChange={(v) => setCategoriaFilter(v as typeof categoriaFilter)}>
-            <SelectTrigger className="w-auto min-w-[140px] bg-white"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              {CATEGORIA_OPTIONS.map((o) => (
-                <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select value={rangoFilter} onValueChange={(v) => setRangoFilter(v as RangoFilter)}>
-            <SelectTrigger className="w-auto min-w-[140px] bg-white"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              {RANGO_OPTIONS.map((o) => (
-                <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-end gap-3">
+          <FilterField label="Grupo">
+            <Select value={grupoFilter} onValueChange={(v) => setGrupoFilter(v as typeof grupoFilter)}>
+              <SelectTrigger className="w-auto min-w-[140px] bg-white"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {GRUPO_OPTIONS.map((o) => (
+                  <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </FilterField>
+          <FilterField label="Categoría">
+            <Select value={categoriaFilter} onValueChange={(v) => setCategoriaFilter(v as typeof categoriaFilter)}>
+              <SelectTrigger className="w-auto min-w-[140px] bg-white"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {CATEGORIA_OPTIONS.map((o) => (
+                  <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </FilterField>
+          <FilterField label="Rango">
+            <Select value={rangoFilter} onValueChange={(v) => setRangoFilter(v as RangoFilter)}>
+              <SelectTrigger className="w-auto min-w-[140px] bg-white"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {RANGO_OPTIONS.map((o) => (
+                  <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </FilterField>
+          <div className="flex items-center gap-2 h-9">
             <Checkbox
               id="incluir-descartados"
               checked={incluirDescartados}
