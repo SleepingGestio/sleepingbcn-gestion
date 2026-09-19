@@ -12,7 +12,6 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
-import { Plus } from "lucide-react";
 import { toast } from "sonner";
 import { fmtDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -23,6 +22,21 @@ import {
 } from "@/lib/pricing";
 import { CategoriaBadge, AplicaABadge, EventoEstadoBadge } from "@/components/pricing-badges";
 import { EventoFormDialog } from "@/components/evento-form-dialog";
+import { SortHeader } from "@/components/sort-header";
+
+type SortKey = "nombre" | "categoria" | "fechas" | "aplica_a" | "efecto" | "min_noches" | "estado";
+
+function sortValue(e: Evento, k: SortKey): string | number | null {
+  switch (k) {
+    case "nombre": return e.nombre;
+    case "categoria": return e.categoria;
+    case "fechas": return e.fecha_inicio;
+    case "aplica_a": return e.aplica_a;
+    case "efecto": return e.valor;
+    case "min_noches": return e.estancia_minima;
+    case "estado": return e.estado;
+  }
+}
 
 export const Route = createFileRoute("/pricing/eventos")({
   component: EventosPage,
@@ -56,6 +70,8 @@ function EventosPage() {
   const [grupoFilter, setGrupoFilter] = useState<"todos" | EventoAplicaA>("todos");
   const [categoriaFilter, setCategoriaFilter] = useState<"todas" | EventoCategoria>("todas");
   const [incluirDescartados, setIncluirDescartados] = useState(false);
+  const [sortKey, setSortKey] = useState<SortKey>("fechas");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
 
   const [formOpen, setFormOpen] = useState<{ fase: EventoFase; parent: Evento | null } | null>(null);
   const [editTarget, setEditTarget] = useState<Evento | null>(null);
@@ -71,7 +87,16 @@ function EventosPage() {
       return true;
     }
     const eventos = q.data ?? [];
-    const principales = eventos.filter((e) => e.fase === "principal");
+    // Only principal rows are sorted; each keeps its own previo/post children
+    // attached directly beneath it (children stay in fetch order).
+    const principales = eventos
+      .filter((e) => e.fase === "principal")
+      .sort((a, b) => {
+        const av = sortValue(a, sortKey), bv = sortValue(b, sortKey);
+        if (av == null || bv == null) return av == null && bv == null ? 0 : av == null ? 1 : -1;
+        const c = typeof av === "number" && typeof bv === "number" ? av - bv : String(av).localeCompare(String(bv));
+        return sortDir === "asc" ? c : -c;
+      });
     const childrenByParent = new Map<string, Evento[]>();
     for (const e of eventos) {
       if (e.fase === "principal" || !e.evento_relacionado_id) continue;
@@ -87,7 +112,12 @@ function EventosPage() {
       for (const c of children) out.push({ evento: c, isChild: true });
     }
     return out;
-  }, [q.data, grupoFilter, categoriaFilter, incluirDescartados]);
+  }, [q.data, grupoFilter, categoriaFilter, incluirDescartados, sortKey, sortDir]);
+
+  const toggleSort = (k: SortKey) => {
+    if (sortKey === k) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    else { setSortKey(k); setSortDir("asc"); }
+  };
 
   async function handleConfirmar(e: Evento) {
     try {
@@ -142,24 +172,19 @@ function EventosPage() {
             </Label>
           </div>
         </div>
-        {canEditEventos && (
-          <Button size="sm" onClick={() => setFormOpen({ fase: "principal", parent: null })}>
-            <Plus className="h-4 w-4 mr-1" /> Nuevo evento
-          </Button>
-        )}
       </div>
 
       <Card className="overflow-hidden bg-white">
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Evento</TableHead>
-              <TableHead>Categoría</TableHead>
-              <TableHead>Fechas</TableHead>
-              <TableHead>Aplica a</TableHead>
-              <TableHead>Efecto</TableHead>
-              <TableHead>Mín. noches</TableHead>
-              <TableHead>Estado</TableHead>
+              <TableHead><SortHeader label="Evento" active={sortKey === "nombre"} dir={sortDir} onClick={() => toggleSort("nombre")} /></TableHead>
+              <TableHead><SortHeader label="Categoría" active={sortKey === "categoria"} dir={sortDir} onClick={() => toggleSort("categoria")} /></TableHead>
+              <TableHead><SortHeader label="Fechas" active={sortKey === "fechas"} dir={sortDir} onClick={() => toggleSort("fechas")} /></TableHead>
+              <TableHead><SortHeader label="Aplica a" active={sortKey === "aplica_a"} dir={sortDir} onClick={() => toggleSort("aplica_a")} /></TableHead>
+              <TableHead><SortHeader label="Efecto" active={sortKey === "efecto"} dir={sortDir} onClick={() => toggleSort("efecto")} /></TableHead>
+              <TableHead><SortHeader label="Mín. noches" active={sortKey === "min_noches"} dir={sortDir} onClick={() => toggleSort("min_noches")} /></TableHead>
+              <TableHead><SortHeader label="Estado" active={sortKey === "estado"} dir={sortDir} onClick={() => toggleSort("estado")} /></TableHead>
               {canEditEventos && <TableHead className="text-right">Acciones</TableHead>}
             </TableRow>
           </TableHeader>
@@ -226,10 +251,18 @@ function EventosPage() {
                         )}
                         {e.estado === "propuesto" && (
                           <>
-                            <Button size="sm" variant="ghost" onClick={() => handleConfirmar(e)}>
+                            <Button
+                              size="sm" variant="ghost"
+                              className="bg-emerald-100 text-emerald-800 hover:bg-emerald-200 hover:text-emerald-900"
+                              onClick={() => handleConfirmar(e)}
+                            >
                               Confirmar
                             </Button>
-                            <Button size="sm" variant="ghost" onClick={() => setDescartarTarget(e)}>
+                            <Button
+                              size="sm" variant="ghost"
+                              className="bg-red-100 text-red-800 hover:bg-red-200 hover:text-red-900"
+                              onClick={() => setDescartarTarget(e)}
+                            >
                               Descartar
                             </Button>
                           </>

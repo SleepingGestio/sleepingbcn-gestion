@@ -29,6 +29,7 @@ export type Evento = {
   ubicacion: string | null;
   fase: EventoFase;
   evento_relacionado_id: string | null;
+  plantilla_id: string | null;
   estado: EventoEstado;
   periodicidad: EventoPeriodicidad;
   fuente: string;
@@ -57,6 +58,7 @@ export type NuevoEventoInput = {
   estancia_minima?: number | null;
   fase?: EventoFase;
   evento_relacionado_id?: string | null;
+  plantilla_id?: string | null;
   notas: string | null;
 };
 
@@ -74,6 +76,7 @@ export async function insertEvento(input: NuevoEventoInput): Promise<void> {
     estancia_minima: input.estancia_minima ?? null,
     fase: input.fase ?? "principal",
     evento_relacionado_id: input.evento_relacionado_id ?? null,
+    plantilla_id: input.plantilla_id ?? null,
     notas: input.notas,
   };
   const { error } = await pricingDb().from("eventos").insert(payload);
@@ -160,4 +163,36 @@ export async function addFuente(plantillaId: string, url: string, descripcion: s
 export async function deleteFuente(id: string): Promise<void> {
   const { error } = await pricingDb().from("plantillas_fuentes").delete().eq("id", id);
   if (error) throw error;
+}
+
+export type NuevaPlantillaInput = Pick<Plantilla, "nombre" | "categoria" | "aplica_a" | "periodicidad">;
+
+export type PrimeraEdicionInput = Pick<
+  NuevoEventoInput,
+  "fecha_inicio" | "fecha_fin" | "valor" | "tipo_valor" | "estancia_minima"
+>;
+
+// Two inserts, not a transaction: if the edition insert fails, the plantilla
+// just created is deleted again (best effort) so no orphan is left behind.
+export async function insertPlantillaConPrimeraEdicion(
+  plantilla: NuevaPlantillaInput,
+  edicion: PrimeraEdicionInput,
+): Promise<void> {
+  const { data, error } = await pricingDb().from("plantillas_eventos").insert(plantilla).select("id").single();
+  if (error) throw error;
+  const plantillaId = (data as { id: string }).id;
+  try {
+    await insertEvento({
+      nombre: plantilla.nombre,
+      categoria: plantilla.categoria,
+      aplica_a: plantilla.aplica_a,
+      ...edicion,
+      fase: "principal",
+      plantilla_id: plantillaId,
+      notas: null,
+    });
+  } catch (e) {
+    await pricingDb().from("plantillas_eventos").delete().eq("id", plantillaId);
+    throw e;
+  }
 }

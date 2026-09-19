@@ -14,7 +14,7 @@ import {
   type Plantilla, type EventoAplicaA, type EventoCategoria, type EventoPeriodicidad,
 } from "@/lib/pricing";
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+export function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="space-y-1">
       <Label className="text-xs">{label}</Label>
@@ -23,20 +23,20 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   );
 }
 
-const CATEGORIA_OPTIONS: { value: EventoCategoria; label: string }[] = [
+export const CATEGORIA_OPTIONS: { value: EventoCategoria; label: string }[] = [
   { value: "feria", label: "Feria" },
   { value: "deporte", label: "Deporte" },
   { value: "cultura", label: "Cultura" },
   { value: "otro", label: "Otro" },
 ];
 
-const APLICA_A_OPTIONS: { value: EventoAplicaA; label: string }[] = [
+export const APLICA_A_OPTIONS: { value: EventoAplicaA; label: string }[] = [
   { value: "city", label: "City" },
   { value: "rural", label: "Rural" },
   { value: "ambos", label: "Ambos" },
 ];
 
-const PERIODICIDAD_OPTIONS: { value: EventoPeriodicidad; label: string }[] = [
+export const PERIODICIDAD_OPTIONS: { value: EventoPeriodicidad; label: string }[] = [
   { value: "anual", label: "Anual" },
   { value: "bianual", label: "Bianual" },
   { value: "puntual", label: "Puntual" },

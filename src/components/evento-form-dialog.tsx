@@ -42,7 +42,7 @@ const ESTADO_OPTIONS: { value: EventoEstado; label: string }[] = [
   { value: "descartado", label: "Descartado" },
 ];
 
-function isPositiveIntOrEmpty(s: string): boolean {
+export function isPositiveIntOrEmpty(s: string): boolean {
   return s.trim() === "" || (Number.isInteger(Number(s)) && Number(s) > 0);
 }
 
@@ -133,6 +133,7 @@ export function EventoFormDialog({
           estancia_minima: estanciaMinima.trim() === "" ? null : Number(estanciaMinima),
           fase,
           evento_relacionado_id: parent?.id ?? null,
+          plantilla_id: fase !== "principal" ? (parent?.plantilla_id ?? null) : null,
           notas: notas.trim() || null,
         });
       }
