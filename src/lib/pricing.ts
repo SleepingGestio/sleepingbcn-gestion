@@ -25,6 +25,8 @@ export type Evento = {
   valor: number | null;
   tipo_valor: EventoTipoValor | null;
   estancia_minima: number | null;
+  afluencia_estimada: number | null;
+  ubicacion: string | null;
   fase: EventoFase;
   evento_relacionado_id: string | null;
   estado: EventoEstado;
@@ -53,7 +55,6 @@ export type NuevoEventoInput = {
   valor: number | null;
   tipo_valor: EventoTipoValor | null;
   estancia_minima?: number | null;
-  periodicidad?: EventoPeriodicidad;
   fase?: EventoFase;
   evento_relacionado_id?: string | null;
   notas: string | null;
@@ -71,7 +72,6 @@ export async function insertEvento(input: NuevoEventoInput): Promise<void> {
     valor: input.valor,
     tipo_valor: input.valor != null ? input.tipo_valor : null,
     estancia_minima: input.estancia_minima ?? null,
-    periodicidad: input.periodicidad ?? "anual",
     fase: input.fase ?? "principal",
     evento_relacionado_id: input.evento_relacionado_id ?? null,
     notas: input.notas,
@@ -80,8 +80,36 @@ export async function insertEvento(input: NuevoEventoInput): Promise<void> {
   if (error) throw error;
 }
 
+export type EventoUpdate = Partial<
+  Pick<
+    Evento,
+    | "nombre"
+    | "categoria"
+    | "aplica_a"
+    | "fecha_inicio"
+    | "fecha_fin"
+    | "valor"
+    | "tipo_valor"
+    | "estancia_minima"
+    | "afluencia_estimada"
+    | "ubicacion"
+    | "notas"
+    | "estado"
+  >
+>;
+
+export async function updateEvento(id: string, changes: EventoUpdate): Promise<void> {
+  const { error } = await pricingDb().from("eventos").update(changes).eq("id", id);
+  if (error) throw error;
+}
+
 export async function descartarEvento(id: string): Promise<void> {
   const { error } = await pricingDb().from("eventos").update({ estado: "descartado" }).eq("id", id);
+  if (error) throw error;
+}
+
+export async function confirmarEvento(id: string): Promise<void> {
+  const { error } = await pricingDb().from("eventos").update({ estado: "confirmado" }).eq("id", id);
   if (error) throw error;
 }
 

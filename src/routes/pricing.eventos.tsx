@@ -18,7 +18,7 @@ import { fmtDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { usePermissions } from "@/hooks/use-permissions";
 import {
-  fetchEventos, descartarEvento,
+  fetchEventos, descartarEvento, confirmarEvento,
   type Evento, type EventoAplicaA, type EventoCategoria, type EventoFase,
 } from "@/lib/pricing";
 import { CategoriaBadge, AplicaABadge, EventoEstadoBadge } from "@/components/pricing-badges";
@@ -58,6 +58,7 @@ function EventosPage() {
   const [incluirDescartados, setIncluirDescartados] = useState(false);
 
   const [formOpen, setFormOpen] = useState<{ fase: EventoFase; parent: Evento | null } | null>(null);
+  const [editTarget, setEditTarget] = useState<Evento | null>(null);
   const [descartarTarget, setDescartarTarget] = useState<Evento | null>(null);
 
   const q = useQuery({ queryKey: ["pricing-eventos"], queryFn: fetchEventos });
@@ -87,6 +88,16 @@ function EventosPage() {
     }
     return out;
   }, [q.data, grupoFilter, categoriaFilter, incluirDescartados]);
+
+  async function handleConfirmar(e: Evento) {
+    try {
+      await confirmarEvento(e.id);
+      toast.success("Evento confirmado");
+      q.refetch();
+    } catch (err) {
+      toast.error("Error: " + (err as Error).message);
+    }
+  }
 
   async function confirmDescartar() {
     if (!descartarTarget) return;
@@ -194,6 +205,9 @@ function EventosPage() {
                   {canEditEventos && (
                     <TableCell>
                       <div className="flex items-center justify-end gap-1 flex-wrap">
+                        <Button size="sm" variant="outline" onClick={() => setEditTarget(e)}>
+                          Editar
+                        </Button>
                         {!isChild && (
                           <>
                             <Button
@@ -211,9 +225,14 @@ function EventosPage() {
                           </>
                         )}
                         {e.estado === "propuesto" && (
-                          <Button size="sm" variant="ghost" onClick={() => setDescartarTarget(e)}>
-                            Descartar
-                          </Button>
+                          <>
+                            <Button size="sm" variant="ghost" onClick={() => handleConfirmar(e)}>
+                              Confirmar
+                            </Button>
+                            <Button size="sm" variant="ghost" onClick={() => setDescartarTarget(e)}>
+                              Descartar
+                            </Button>
+                          </>
                         )}
                       </div>
                     </TableCell>
@@ -230,6 +249,16 @@ function EventosPage() {
           fase={formOpen.fase}
           parent={formOpen.parent}
           onClose={() => setFormOpen(null)}
+          onSaved={() => q.refetch()}
+        />
+      )}
+
+      {editTarget && (
+        <EventoFormDialog
+          fase={editTarget.fase}
+          parent={null}
+          evento={editTarget}
+          onClose={() => setEditTarget(null)}
           onSaved={() => q.refetch()}
         />
       )}
