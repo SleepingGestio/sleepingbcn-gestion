@@ -203,6 +203,14 @@ export async function insertPlantillaConPrimeraEdicion(
 
 export type TemporadaAplicaA = "city" | "rural";
 
+export type TemporadaPeriodo = {
+  id: string;
+  temporada_id: string;
+  fecha_inicio: string;
+  fecha_fin: string;
+  created_at: string;
+};
+
 export type Temporada = {
   id: string;
   id_negocio: string;
@@ -211,54 +219,104 @@ export type Temporada = {
   codigo: string;
   nombre: string;
   coeficiente: number;
-  fecha_inicio: string;
-  fecha_fin: string;
   created_at: string;
   updated_at: string;
+  temporada_periodos: TemporadaPeriodo[];
 };
 
 export async function fetchTemporadas(): Promise<Temporada[]> {
   const { data, error } = await pricingDb()
     .from("temporadas")
-    .select("*")
+    .select("*, temporada_periodos(*)")
     .order("aplica_a", { ascending: true })
-    .order("fecha_inicio", { ascending: true });
+    .order("codigo", { ascending: true });
   if (error) throw error;
   return (data ?? []) as Temporada[];
 }
 
-export type NuevaTemporadaInput = Pick<
-  Temporada,
-  "aplica_a" | "anio" | "codigo" | "nombre" | "coeficiente" | "fecha_inicio" | "fecha_fin"
->;
+export type NuevaTemporadaInput = Pick<Temporada, "aplica_a" | "anio" | "codigo" | "nombre" | "coeficiente">;
 
-export async function insertTemporada(input: NuevaTemporadaInput): Promise<void> {
-  const { error } = await pricingDb().from("temporadas").insert(input);
+export type TemporadaEditable = Pick<Temporada, "codigo" | "nombre" | "coeficiente">;
+
+export type PeriodoInput = Pick<TemporadaPeriodo, "fecha_inicio" | "fecha_fin">;
+
+// Two inserts, not a transaction: if the period insert fails, the temporada
+// just created is deleted again (best effort) so no orphan is left behind.
+export async function insertTemporadaConPrimerPeriodo(
+  temporada: NuevaTemporadaInput,
+  periodo: PeriodoInput,
+): Promise<string> {
+  const { data, error } = await pricingDb().from("temporadas").insert(temporada).select("id").single();
   if (error) throw error;
+  const temporadaId = (data as { id: string }).id;
+  try {
+    await insertPeriodo(temporadaId, periodo.fecha_inicio, periodo.fecha_fin);
+  } catch (e) {
+    await pricingDb().from("temporadas").delete().eq("id", temporadaId);
+    throw e;
+  }
+  return temporadaId;
 }
 
-export async function updateTemporada(id: string, changes: Partial<NuevaTemporadaInput>): Promise<void> {
+export async function updateTemporada(id: string, changes: Partial<TemporadaEditable>): Promise<void> {
   const { error } = await pricingDb().from("temporadas").update(changes).eq("id", id);
   if (error) throw error;
 }
 
-/** Copies every temporada of `fromYear` (both groups) into `toYear`, dates shifted by the year gap, in one insert. Returns rows copied. */
-export async function copyTemporadasToYear(fromYear: number, toYear: number): Promise<number> {
-  const { data, error } = await pricingDb().from("temporadas").select("*").eq("anio", fromYear);
+export async function insertPeriodo(temporadaId: string, fechaInicio: string, fechaFin: string): Promise<void> {
+  const { error } = await pricingDb()
+    .from("temporada_periodos")
+    .insert({ temporada_id: temporadaId, fecha_inicio: fechaInicio, fecha_fin: fechaFin });
   if (error) throw error;
-  const rows = ((data ?? []) as Temporada[]).map((t) => ({
-    aplica_a: t.aplica_a,
-    anio: toYear,
-    codigo: t.codigo,
-    nombre: t.nombre,
-    coeficiente: t.coeficiente,
-    fecha_inicio: addYearsISO(t.fecha_inicio, toYear - fromYear),
-    fecha_fin: addYearsISO(t.fecha_fin, toYear - fromYear),
-  }));
-  if (rows.length === 0) return 0;
-  const { error: insErr } = await pricingDb().from("temporadas").insert(rows);
-  if (insErr) throw insErr;
-  return rows.length;
+}
+
+export async function deletePeriodo(id: string): Promise<void> {
+  const { error } = await pricingDb().from("temporada_periodos").delete().eq("id", id);
+  if (error) throw error;
+}
+
+/**
+ * Copies every temporada of `fromYear` (both groups) into `toYear`, with all
+ * its periods shifted by the year gap. One identity insert per temporada plus
+ * one periods batch each; if anything fails, the copies made so far are
+ * deleted again (best effort). Returns the number of temporadas copied.
+ */
+export async function copyTemporadasToYear(fromYear: number, toYear: number): Promise<number> {
+  const { data, error } = await pricingDb()
+    .from("temporadas")
+    .select("*, temporada_periodos(*)")
+    .eq("anio", fromYear);
+  if (error) throw error;
+  const source = (data ?? []) as Temporada[];
+  const gap = toYear - fromYear;
+  const createdIds: string[] = [];
+  try {
+    for (const t of source) {
+      const { data: created, error: insErr } = await pricingDb()
+        .from("temporadas")
+        .insert({ aplica_a: t.aplica_a, anio: toYear, codigo: t.codigo, nombre: t.nombre, coeficiente: t.coeficiente })
+        .select("id")
+        .single();
+      if (insErr) throw insErr;
+      const newId = (created as { id: string }).id;
+      createdIds.push(newId);
+      if (t.temporada_periodos.length === 0) continue;
+      const { error: perErr } = await pricingDb()
+        .from("temporada_periodos")
+        .insert(
+          t.temporada_periodos.map((p) => ({
+            temporada_id: newId,
+            fecha_inicio: addYearsISO(p.fecha_inicio, gap),
+            fecha_fin: addYearsISO(p.fecha_fin, gap),
+          })),
+        );
+      if (perErr) throw perErr;
+    }
+  } catch (e) {
+    if (createdIds.length > 0) await pricingDb().from("temporadas").delete().in("id", createdIds);
+    throw e;
+  }
+  return source.length;
 }
 
 export async function deleteTemporada(id: string): Promise<void> {

@@ -1,17 +1,70 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import {
-  insertTemporada, updateTemporada,
+  insertTemporadaConPrimerPeriodo, updateTemporada, insertPeriodo, deletePeriodo,
   type Temporada, type TemporadaAplicaA,
 } from "@/lib/pricing";
+import { addDaysISO, fmtDate } from "@/lib/format";
 import { Field } from "@/components/plantilla-edit-dialog";
 
-/** Create (no `temporada`) / edit (`temporada` given) dialog for pricing.temporadas. */
+/**
+ * Fecha inicio / Fecha fin state. While Fecha fin hasn't been touched by the
+ * person, it follows Fecha inicio + 1 day; once they set it, it's left alone.
+ */
+function usePeriodoForm(initialInicio: string) {
+  const [fechaInicio, setFechaInicioRaw] = useState(initialInicio);
+  const [fechaFin, setFechaFinRaw] = useState(initialInicio ? addDaysISO(initialInicio, 1) : "");
+  const finTouched = useRef(false);
+
+  function setFechaInicio(v: string) {
+    setFechaInicioRaw(v);
+    if (!finTouched.current) setFechaFinRaw(v ? addDaysISO(v, 1) : "");
+  }
+  function setFechaFin(v: string) {
+    finTouched.current = true;
+    setFechaFinRaw(v);
+  }
+  function reset() {
+    finTouched.current = false;
+    setFechaInicioRaw("");
+    setFechaFinRaw("");
+  }
+  return { fechaInicio, fechaFin, setFechaInicio, setFechaFin, reset };
+}
+
+/** Returns an error message, or null when the range is valid. */
+function validatePeriodo(fechaInicio: string, fechaFin: string): string | null {
+  if (!fechaInicio || !fechaFin) return "Las fechas son obligatorias";
+  if (fechaFin < fechaInicio) return "La fecha de fin no puede ser anterior a la de inicio";
+  return null;
+}
+
+function PeriodoInputs({ form }: { form: ReturnType<typeof usePeriodoForm> }) {
+  return (
+    <div className="grid grid-cols-2 gap-3">
+      <Field label="Fecha inicio *">
+        <Input type="date" value={form.fechaInicio} onChange={(e) => form.setFechaInicio(e.target.value)} />
+      </Field>
+      <Field label="Fecha fin *">
+        <Input type="date" value={form.fechaFin} onChange={(e) => form.setFechaFin(e.target.value)} />
+      </Field>
+    </div>
+  );
+}
+
+/**
+ * Create (no `temporada`) / edit (`temporada` given) dialog for pricing.temporadas.
+ * aplica_a and anio come from the page context and are fixed once created.
+ * Create requires a first period. In edit mode identity fields save with the
+ * footer button; periods are added/removed immediately and the dialog stays
+ * open (`temporada` comes from the parent's query data, so onSaved() refreshes it).
+ */
 export function TemporadaDialog({
   temporada, defaultAnio, aplicaA, onClose, onSaved,
 }: {
@@ -24,9 +77,14 @@ export function TemporadaDialog({
   const [codigo, setCodigo] = useState(temporada?.codigo ?? "");
   const [nombre, setNombre] = useState(temporada?.nombre ?? "");
   const [coeficiente, setCoeficiente] = useState(temporada ? String(temporada.coeficiente) : "");
-  const [fechaInicio, setFechaInicio] = useState(temporada?.fecha_inicio ?? `${defaultAnio}-01-01`);
-  const [fechaFin, setFechaFin] = useState(temporada?.fecha_fin ?? "");
   const [saving, setSaving] = useState(false);
+  const [addingPeriodo, setAddingPeriodo] = useState(false);
+  // First period in create mode; the add-period mini-form in edit mode.
+  const periodo = usePeriodoForm(temporada ? "" : `${defaultAnio}-01-01`);
+
+  const periodos = [...(temporada?.temporada_periodos ?? [])].sort((a, b) =>
+    a.fecha_inicio.localeCompare(b.fecha_inicio),
+  );
 
   async function handleSubmit() {
     if (!codigo.trim()) { toast.error("El código es obligatorio"); return; }
@@ -36,26 +94,22 @@ export function TemporadaDialog({
       toast.error("El coeficiente debe ser un número mayor que 0");
       return;
     }
-    if (!fechaInicio || !fechaFin) { toast.error("Las fechas son obligatorias"); return; }
-    if (fechaFin < fechaInicio) { toast.error("La fecha de fin no puede ser anterior a la de inicio"); return; }
+    const identity = { codigo: codigo.trim(), nombre: nombre.trim(), coeficiente: coef };
+    if (!temporada) {
+      const err = validatePeriodo(periodo.fechaInicio, periodo.fechaFin);
+      if (err) { toast.error(err); return; }
+    }
 
-    // anio always follows fecha_inicio, so editing dates moves the row to the right year.
-    const anio = Number(fechaInicio.slice(0, 4));
-    if (!Number.isInteger(anio)) { toast.error("Fecha de inicio no válida"); return; }
-
-    const values = {
-      aplica_a: aplicaA,
-      anio,
-      codigo: codigo.trim(),
-      nombre: nombre.trim(),
-      coeficiente: coef,
-      fecha_inicio: fechaInicio,
-      fecha_fin: fechaFin,
-    };
     setSaving(true);
     try {
-      if (temporada) await updateTemporada(temporada.id, values);
-      else await insertTemporada(values);
+      if (temporada) {
+        await updateTemporada(temporada.id, identity);
+      } else {
+        await insertTemporadaConPrimerPeriodo(
+          { ...identity, aplica_a: aplicaA, anio: defaultAnio },
+          { fecha_inicio: periodo.fechaInicio, fecha_fin: periodo.fechaFin },
+        );
+      }
       toast.success("Temporada guardada");
       onSaved();
       onClose();
@@ -66,11 +120,38 @@ export function TemporadaDialog({
     }
   }
 
+  async function handleAddPeriodo() {
+    if (!temporada) return;
+    const err = validatePeriodo(periodo.fechaInicio, periodo.fechaFin);
+    if (err) { toast.error(err); return; }
+    setAddingPeriodo(true);
+    try {
+      await insertPeriodo(temporada.id, periodo.fechaInicio, periodo.fechaFin);
+      periodo.reset();
+      onSaved();
+    } catch (e) {
+      toast.error("Error: " + (e as Error).message);
+    } finally {
+      setAddingPeriodo(false);
+    }
+  }
+
+  async function handleDeletePeriodo(id: string) {
+    try {
+      await deletePeriodo(id);
+      onSaved();
+    } catch (e) {
+      toast.error("Error: " + (e as Error).message);
+    }
+  }
+
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>{temporada ? "Editar temporada" : "Nueva temporada"} · {aplicaA === "city" ? "City" : "Rural"}</DialogTitle>
+          <DialogTitle>
+            {temporada ? "Editar temporada" : "Nueva temporada"} · {defaultAnio} · {aplicaA === "city" ? "City" : "Rural"}
+          </DialogTitle>
           <DialogDescription className="sr-only">Formulario de temporada</DialogDescription>
         </DialogHeader>
         <div className="grid gap-3 text-sm">
@@ -91,15 +172,31 @@ export function TemporadaDialog({
               onChange={(e) => setCoeficiente(e.target.value)}
             />
           </Field>
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Fecha inicio *">
-              <Input type="date" value={fechaInicio} onChange={(e) => setFechaInicio(e.target.value)} />
-            </Field>
-            <Field label="Fecha fin *">
-              <Input type="date" value={fechaFin} onChange={(e) => setFechaFin(e.target.value)} />
-            </Field>
-          </div>
         </div>
+
+        <div className="border-t pt-3 space-y-2 text-sm">
+          <div className="font-medium">{temporada ? "Períodos" : "Primer período"}</div>
+          {temporada && periodos.length === 0 && (
+            <p className="text-xs text-muted-foreground">Sin períodos</p>
+          )}
+          {periodos.map((p) => (
+            <div key={p.id} className="flex items-center justify-between gap-2">
+              <span className="whitespace-nowrap">{fmtDate(p.fecha_inicio)} – {fmtDate(p.fecha_fin)}</span>
+              <Button size="icon" variant="ghost" title="Eliminar período" onClick={() => handleDeletePeriodo(p.id)}>
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            </div>
+          ))}
+          {temporada ? (
+            <div className="flex items-end gap-2 pt-1">
+              <div className="flex-1"><PeriodoInputs form={periodo} /></div>
+              <Button variant="outline" onClick={handleAddPeriodo} disabled={addingPeriodo}>Añadir</Button>
+            </div>
+          ) : (
+            <PeriodoInputs form={periodo} />
+          )}
+        </div>
+
         <DialogFooter>
           <Button variant="outline" onClick={onClose} disabled={saving}>Cancelar</Button>
           <Button onClick={handleSubmit} disabled={saving}>Guardar</Button>

@@ -20,6 +20,25 @@ import { fmtDate } from "@/lib/format";
 import { SortHeader } from "@/components/sort-header";
 import { TemporadaDialog } from "@/components/temporada-dialog";
 
+const firstInicio = (t: Temporada) =>
+  t.temporada_periodos.map((p) => p.fecha_inicio).sort()[0] ?? "";
+
+const MAX_CHIPS = 2;
+
+function PeriodosSummary({ temporada }: { temporada: Temporada }) {
+  const ps = [...temporada.temporada_periodos].sort((a, b) => a.fecha_inicio.localeCompare(b.fecha_inicio));
+  if (ps.length === 0) return <span className="text-muted-foreground">—</span>;
+  const label = (p: (typeof ps)[number]) => `${fmtDate(p.fecha_inicio)} – ${fmtDate(p.fecha_fin)}`;
+  return (
+    <div className="flex items-center gap-1 whitespace-nowrap" title={ps.map(label).join(", ")}>
+      {ps.slice(0, MAX_CHIPS).map((p) => (
+        <span key={p.id} className="rounded bg-muted px-1.5 py-0.5 text-xs">{label(p)}</span>
+      ))}
+      {ps.length > MAX_CHIPS && <span className="text-xs text-muted-foreground">+{ps.length - MAX_CHIPS}</span>}
+    </div>
+  );
+}
+
 type SortKey = "codigo" | "nombre" | "coeficiente" | "fechas";
 
 export const Route = createFileRoute("/pricing/temporadas")({
@@ -32,7 +51,7 @@ function TemporadasTab({ anio, aplicaA, temporadas: all, loading, error, onSaved
   const { canEdit } = usePermissions();
   const canEditTemporadas = canEdit("pricing_temporadas");
 
-  const [dialog, setDialog] = useState<{ temporada: Temporada | null } | null>(null);
+  const [dialog, setDialog] = useState<{ id: string | null } | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Temporada | null>(null);
   const [sortKey, setSortKey] = useState<SortKey>("fechas");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
@@ -44,7 +63,7 @@ function TemporadasTab({ anio, aplicaA, temporadas: all, loading, error, onSaved
         case "codigo": return t.codigo;
         case "nombre": return t.nombre;
         case "coeficiente": return t.coeficiente;
-        case "fechas": return t.fecha_inicio;
+        case "fechas": return firstInicio(t);
       }
     };
     return all.filter((t) => t.anio === anio && t.aplica_a === aplicaA).sort((a, b) => {
@@ -76,7 +95,7 @@ function TemporadasTab({ anio, aplicaA, temporadas: all, loading, error, onSaved
     <>
       {canEditTemporadas && (
         <div className="flex justify-end mb-4">
-          <Button size="sm" onClick={() => setDialog({ temporada: null })}>
+          <Button size="sm" onClick={() => setDialog({ id: null })}>
             <Plus className="h-4 w-4 mr-1" /> Nueva temporada
           </Button>
         </div>
@@ -88,7 +107,7 @@ function TemporadasTab({ anio, aplicaA, temporadas: all, loading, error, onSaved
               <TableHead><SortHeader label="Código" active={sortKey === "codigo"} dir={sortDir} onClick={() => toggleSort("codigo")} /></TableHead>
               <TableHead><SortHeader label="Nombre" active={sortKey === "nombre"} dir={sortDir} onClick={() => toggleSort("nombre")} /></TableHead>
               <TableHead><SortHeader label="Coeficiente" active={sortKey === "coeficiente"} dir={sortDir} onClick={() => toggleSort("coeficiente")} /></TableHead>
-              <TableHead><SortHeader label="Fechas" active={sortKey === "fechas"} dir={sortDir} onClick={() => toggleSort("fechas")} /></TableHead>
+              <TableHead><SortHeader label="Períodos" active={sortKey === "fechas"} dir={sortDir} onClick={() => toggleSort("fechas")} /></TableHead>
               {canEditTemporadas && <TableHead className="text-right">Acciones</TableHead>}
             </TableRow>
           </TableHeader>
@@ -119,11 +138,11 @@ function TemporadasTab({ anio, aplicaA, temporadas: all, loading, error, onSaved
                 <TableCell className="font-medium">{t.codigo}</TableCell>
                 <TableCell>{t.nombre}</TableCell>
                 <TableCell>{t.coeficiente}</TableCell>
-                <TableCell className="whitespace-nowrap">{fmtDate(t.fecha_inicio)} – {fmtDate(t.fecha_fin)}</TableCell>
+                <TableCell><PeriodosSummary temporada={t} /></TableCell>
                 {canEditTemporadas && (
                   <TableCell>
                     <div className="flex justify-end gap-2">
-                      <Button size="sm" variant="outline" onClick={() => setDialog({ temporada: t })}>
+                      <Button size="sm" variant="outline" onClick={() => setDialog({ id: t.id })}>
                         <Pencil className="h-4 w-4 mr-1" /> Editar
                       </Button>
                       <Button size="sm" variant="outline" onClick={() => setDeleteTarget(t)}>
@@ -140,8 +159,8 @@ function TemporadasTab({ anio, aplicaA, temporadas: all, loading, error, onSaved
 
       {dialog && (
         <TemporadaDialog
-          key={dialog.temporada?.id ?? "nueva"}
-          temporada={dialog.temporada}
+          key={dialog.id ?? "nueva"}
+          temporada={dialog.id ? all.find((t) => t.id === dialog.id) ?? null : null}
           defaultAnio={anio}
           aplicaA={aplicaA}
           onClose={() => setDialog(null)}
@@ -192,7 +211,7 @@ function ConfiguracionTarifasPage() {
   const years = useMemo(() => [...new Set([...dataYears, anio])].sort((a, b) => b - a), [dataYears, anio]);
   const ActiveTab = TABS[tab].component;
   const suggestedYear = String((dataYears.length ? Math.max(...dataYears) : thisYear) + 1);
-  const nuevoAnio = nuevoAnioInput ?? suggestedYear;
+  const nuevoAnio = nuevoAnioInput || suggestedYear;
   const deleteCounts = useMemo(() => {
     const rows = all.filter((t) => t.anio === deleteYear);
     return { city: rows.filter((t) => t.aplica_a === "city").length, rural: rows.filter((t) => t.aplica_a === "rural").length };
@@ -264,13 +283,13 @@ function ConfiguracionTarifasPage() {
             type="number"
             min={2000}
             max={2100}
-            placeholder="Nuevo año"
+            placeholder={suggestedYear}
             className="w-28"
-            value={nuevoAnio}
+            value={nuevoAnioInput ?? ""}
             onChange={(e) => setNuevoAnioInput(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && addYear()}
           />
-          <Button size="sm" variant="outline" onClick={addYear} disabled={!nuevoAnio}>
+          <Button size="sm" variant="outline" onClick={addYear}>
             <Plus className="h-4 w-4 mr-1" /> Añadir año
           </Button>
           {canEditTemporadas && dataYears.includes(anio) && (
