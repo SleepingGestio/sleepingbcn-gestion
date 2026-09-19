@@ -34,8 +34,8 @@ const NAV_ITEMS: NavItem[] = [
 ];
 
 const PRICING_NAV_ITEMS: NavItem[] = [
-  { title: "Eventos", url: "/pricing/eventos", icon: Tag, menu: "pricing_eventos" },
-  { title: "Plantillas", url: "/pricing/plantillas", icon: Library, menu: "pricing_plantillas" },
+  { title: "Eventos-calendario", url: "/pricing/eventos", icon: Tag, menu: "pricing_eventos" },
+  { title: "Eventos_plantillas", url: "/pricing/plantillas", icon: Library, menu: "pricing_plantillas" },
 ];
 
 export function AppSidebar() {

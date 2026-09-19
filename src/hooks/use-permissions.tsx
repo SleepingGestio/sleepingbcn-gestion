@@ -39,8 +39,8 @@ export const ALL_MENUS: { key: MenuKey; label: string }[] = [
   { key: "config_tareas_genericas", label: "Configuración · Tareas genéricas" },
   { key: "config_espacios_comunes", label: "Configuración · Espacios comunes" },
   { key: "config_tarifas", label: "Configuración · Tarifas y comisiones" },
-  { key: "pricing_eventos", label: "Gestión de precios · Eventos" },
-  { key: "pricing_plantillas", label: "Gestión de precios · Plantillas" },
+  { key: "pricing_eventos", label: "Gestión de precios · Eventos-calendario" },
+  { key: "pricing_plantillas", label: "Gestión de precios · Eventos_plantillas" },
 ];
 
 // Single source of truth for which top-level route maps to which menu
