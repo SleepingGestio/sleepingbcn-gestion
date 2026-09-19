@@ -33,7 +33,7 @@ function PlantillasPage() {
   const colSpan = canEditPlantillas ? 7 : 6;
 
   return (
-    <AppShell title="Plantillas">
+    <AppShell title="Eventos-plantillas">
       <Card className="overflow-hidden bg-white">
         <Table>
           <TableHeader>
