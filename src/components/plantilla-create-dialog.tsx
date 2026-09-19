@@ -7,11 +7,11 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 import {
-  insertPlantillaConPrimeraEdicion,
+  insertPlantillaConPrimeraEdicion, addFuente,
   type EventoAplicaA, type EventoCategoria, type EventoPeriodicidad, type EventoTipoValor,
 } from "@/lib/pricing";
 import {
-  Field, CATEGORIA_OPTIONS, APLICA_A_OPTIONS, PERIODICIDAD_OPTIONS,
+  Field, CATEGORIA_OPTIONS, APLICA_A_OPTIONS, PERIODICIDAD_OPTIONS, isHttpUrl,
 } from "@/components/plantilla-edit-dialog";
 import { isPositiveIntOrEmpty } from "@/components/evento-form-dialog";
 
@@ -35,6 +35,8 @@ export function PlantillaCreateDialog({
   const [valor, setValor] = useState("");
   const [tipoValor, setTipoValor] = useState<EventoTipoValor>("%");
   const [estanciaMinima, setEstanciaMinima] = useState("");
+  const [fuenteUrl, setFuenteUrl] = useState("");
+  const [fuenteDesc, setFuenteDesc] = useState("");
   const [saving, setSaving] = useState(false);
 
   async function handleSubmit() {
@@ -45,10 +47,12 @@ export function PlantillaCreateDialog({
       toast.error("La estancia mínima debe ser un número entero mayor que 0");
       return;
     }
+    const url = fuenteUrl.trim();
+    if (url && !isHttpUrl(url)) { toast.error("La URL debe empezar por http:// o https://"); return; }
 
     setSaving(true);
     try {
-      await insertPlantillaConPrimeraEdicion(
+      const plantillaId = await insertPlantillaConPrimeraEdicion(
         { nombre: nombre.trim(), categoria, aplica_a: aplicaA, periodicidad },
         {
           fecha_inicio: fechaInicio,
@@ -58,6 +62,17 @@ export function PlantillaCreateDialog({
           estancia_minima: estanciaMinima.trim() === "" ? null : Number(estanciaMinima),
         },
       );
+      if (url) {
+        try {
+          await addFuente(plantillaId, url, fuenteDesc.trim() || null);
+        } catch (e) {
+          // The plantilla and its edition already exist; don't roll them back for a link.
+          toast.error("Evento creado, pero no se pudo guardar la fuente: " + (e as Error).message);
+          onSaved();
+          onClose();
+          return;
+        }
+      }
       toast.success("Evento creado");
       onSaved();
       onClose();
@@ -156,6 +171,26 @@ export function PlantillaCreateDialog({
               onChange={(e) => setEstanciaMinima(e.target.value)}
             />
           </Field>
+        </div>
+
+        <div className="border-t pt-3 grid gap-3 text-sm">
+          <div className="font-medium">Fuente (opcional)</div>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="URL">
+              <Input
+                placeholder="https://…"
+                value={fuenteUrl}
+                onChange={(e) => setFuenteUrl(e.target.value)}
+              />
+            </Field>
+            <Field label="Descripción">
+              <Input
+                placeholder="Opcional"
+                value={fuenteDesc}
+                onChange={(e) => setFuenteDesc(e.target.value)}
+              />
+            </Field>
+          </div>
         </div>
 
         <DialogFooter>

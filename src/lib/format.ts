@@ -104,3 +104,10 @@ export function fmtDateTime(v: string | null | undefined): string {
   if (isNaN(d.getTime())) return String(v);
   return `${fmtDate(d)} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
 }
+
+/** "YYYY-MM-DD" plus n days (UTC math, so no DST drift) → "YYYY-MM-DD". */
+export function addDaysISO(iso: string, n: number): string {
+  const d = new Date(iso + "T00:00:00Z");
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+}

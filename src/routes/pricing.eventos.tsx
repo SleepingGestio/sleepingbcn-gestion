@@ -63,12 +63,23 @@ const CATEGORIA_OPTIONS: { value: "todas" | EventoCategoria; label: string }[] =
   { value: "otro", label: "Otro" },
 ];
 
+type RangoFilter = "todas" | "anio_actual" | "proximo_anio" | "ytd";
+
+// "YTD" here is forward-looking: from today to Dec 31 of the current year.
+const RANGO_OPTIONS: { value: RangoFilter; label: string }[] = [
+  { value: "todas", label: "Todas" },
+  { value: "anio_actual", label: "Año actual" },
+  { value: "proximo_anio", label: "Próximo año" },
+  { value: "ytd", label: "YTD" },
+];
+
 function EventosPage() {
   const { canEdit } = usePermissions();
   const canEditEventos = canEdit("pricing_eventos");
 
   const [grupoFilter, setGrupoFilter] = useState<"todos" | EventoAplicaA>("todos");
   const [categoriaFilter, setCategoriaFilter] = useState<"todas" | EventoCategoria>("todas");
+  const [rangoFilter, setRangoFilter] = useState<RangoFilter>("ytd");
   const [incluirDescartados, setIncluirDescartados] = useState(false);
   const [sortKey, setSortKey] = useState<SortKey>("fechas");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
@@ -80,15 +91,29 @@ function EventosPage() {
   const q = useQuery({ queryKey: ["pricing-eventos"], queryFn: fetchEventos });
 
   const rows = useMemo(() => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const today = `${year}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+    function passesRango(e: Evento): boolean {
+      const f = e.fecha_inicio;
+      switch (rangoFilter) {
+        case "todas": return true;
+        case "anio_actual": return f >= `${year}-01-01` && f <= `${year}-12-31`;
+        case "proximo_anio": return f >= `${year + 1}-01-01` && f <= `${year + 1}-12-31`;
+        case "ytd": return f >= today && f <= `${year}-12-31`;
+      }
+    }
     function passesFilters(e: Evento): boolean {
       if (!incluirDescartados && e.estado === "descartado") return false;
       if (grupoFilter !== "todos" && e.aplica_a !== grupoFilter) return false;
       if (categoriaFilter !== "todas" && e.categoria !== categoriaFilter) return false;
+      if (!passesRango(e)) return false;
       return true;
     }
     const eventos = q.data ?? [];
     // Only principal rows are sorted; each keeps its own previo/post children
-    // attached directly beneath it (children stay in fetch order).
+    // around it: previo rows first, then the principal, then post rows
+    // (children stay in fetch order within each group).
     const principales = eventos
       .filter((e) => e.fase === "principal")
       .sort((a, b) => {
@@ -107,12 +132,13 @@ function EventosPage() {
     const out: { evento: Evento; isChild: boolean }[] = [];
     for (const p of principales) {
       if (!passesFilters(p)) continue;
-      out.push({ evento: p, isChild: false });
       const children = (childrenByParent.get(p.id) ?? []).filter(passesFilters);
-      for (const c of children) out.push({ evento: c, isChild: true });
+      for (const c of children) if (c.fase === "previo") out.push({ evento: c, isChild: true });
+      out.push({ evento: p, isChild: false });
+      for (const c of children) if (c.fase === "post") out.push({ evento: c, isChild: true });
     }
     return out;
-  }, [q.data, grupoFilter, categoriaFilter, incluirDescartados, sortKey, sortDir]);
+  }, [q.data, grupoFilter, categoriaFilter, rangoFilter, incluirDescartados, sortKey, sortDir]);
 
   const toggleSort = (k: SortKey) => {
     if (sortKey === k) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
@@ -157,6 +183,14 @@ function EventosPage() {
             <SelectTrigger className="w-auto min-w-[140px] bg-white"><SelectValue /></SelectTrigger>
             <SelectContent>
               {CATEGORIA_OPTIONS.map((o) => (
+                <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select value={rangoFilter} onValueChange={(v) => setRangoFilter(v as RangoFilter)}>
+            <SelectTrigger className="w-auto min-w-[140px] bg-white"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {RANGO_OPTIONS.map((o) => (
                 <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
               ))}
             </SelectContent>

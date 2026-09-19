@@ -177,7 +177,7 @@ export type PrimeraEdicionInput = Pick<
 export async function insertPlantillaConPrimeraEdicion(
   plantilla: NuevaPlantillaInput,
   edicion: PrimeraEdicionInput,
-): Promise<void> {
+): Promise<string> {
   const { data, error } = await pricingDb().from("plantillas_eventos").insert(plantilla).select("id").single();
   if (error) throw error;
   const plantillaId = (data as { id: string }).id;
@@ -195,4 +195,5 @@ export async function insertPlantillaConPrimeraEdicion(
     await pricingDb().from("plantillas_eventos").delete().eq("id", plantillaId);
     throw e;
   }
+  return plantillaId;
 }

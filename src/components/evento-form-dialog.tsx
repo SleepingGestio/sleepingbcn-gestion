@@ -10,9 +10,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { toast } from "sonner";
 import {
   insertEvento, updateEvento,
-  type Evento, type EventoAplicaA, type EventoCategoria, type EventoEstado, type EventoFase,
+  type Evento, type EventoEstado, type EventoFase,
   type EventoTipoValor,
 } from "@/lib/pricing";
+import { addDaysISO } from "@/lib/format";
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -22,19 +23,6 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
     </div>
   );
 }
-
-const CATEGORIA_OPTIONS: { value: EventoCategoria; label: string }[] = [
-  { value: "feria", label: "Feria" },
-  { value: "deporte", label: "Deporte" },
-  { value: "cultura", label: "Cultura" },
-  { value: "otro", label: "Otro" },
-];
-
-const APLICA_A_OPTIONS: { value: EventoAplicaA; label: string }[] = [
-  { value: "city", label: "City" },
-  { value: "rural", label: "Rural" },
-  { value: "ambos", label: "Ambos" },
-];
 
 const ESTADO_OPTIONS: { value: EventoEstado; label: string }[] = [
   { value: "confirmado", label: "Confirmado" },
@@ -47,12 +35,13 @@ export function isPositiveIntOrEmpty(s: string): boolean {
 }
 
 /**
- * Create/edit dialog for pricing.eventos. Create mode (no `evento`) is used
- * for the top-level "+ Nuevo evento" (fase "principal", no parent) and for the
- * per-row "+ Previo" / "+ Post" actions (fase set accordingly,
- * evento_relacionado_id = parent.id). Edit mode (`evento` given, fase =
- * evento.fase, parent unused) pre-fills from the row and updates it; previo/post
- * rows never expose Categoría / Aplica a in either mode (inherited from parent).
+ * Create/edit dialog for pricing.eventos editions. Create mode (no `evento`)
+ * is used by the per-row "+ Previo" / "+ Post" actions (fase set accordingly,
+ * evento_relacionado_id = parent.id; categoria/aplica_a/plantilla_id come from
+ * parent). Edit mode (`evento` given, fase = evento.fase, parent unused)
+ * pre-fills from the row and updates it. Categoría / Aplica a are owned by the
+ * plantilla and never shown here; principal editions are created from the
+ * Plantillas screen, not from this dialog.
  */
 export function EventoFormDialog({
   fase, parent, evento, onClose, onSaved,
@@ -64,14 +53,20 @@ export function EventoFormDialog({
   onSaved: () => void;
 }) {
   const [nombre, setNombre] = useState(evento?.nombre ?? "");
-  const [categoria, setCategoria] = useState<EventoCategoria>(evento?.categoria ?? "feria");
+  // previo: one-day range ending where the principal starts; post: one-day
+  // range starting where the principal ends (both still editable).
   const [fechaInicio, setFechaInicio] = useState(
-    evento?.fecha_inicio ?? (fase === "post" ? (parent?.fecha_fin ?? "") : ""),
+    evento?.fecha_inicio ??
+      (parent && fase === "previo" ? addDaysISO(parent.fecha_inicio, -1)
+        : parent && fase === "post" ? parent.fecha_fin
+        : ""),
   );
   const [fechaFin, setFechaFin] = useState(
-    evento?.fecha_fin ?? (fase === "previo" ? (parent?.fecha_inicio ?? "") : ""),
+    evento?.fecha_fin ??
+      (parent && fase === "previo" ? parent.fecha_inicio
+        : parent && fase === "post" ? addDaysISO(parent.fecha_fin, 1)
+        : ""),
   );
-  const [aplicaA, setAplicaA] = useState<EventoAplicaA>(evento?.aplica_a ?? "ambos");
   const [valor, setValor] = useState(evento?.valor != null ? String(evento.valor) : "");
   const [tipoValor, setTipoValor] = useState<EventoTipoValor>(evento?.tipo_valor ?? "%");
   const [estanciaMinima, setEstanciaMinima] = useState(
@@ -110,7 +105,6 @@ export function EventoFormDialog({
       if (evento) {
         await updateEvento(evento.id, {
           nombre: nombre.trim(),
-          ...(fase === "principal" ? { categoria, aplica_a: aplicaA } : {}),
           fecha_inicio: fechaInicio,
           fecha_fin: fechaFin,
           valor: valor.trim() === "" ? null : Number(valor),
@@ -124,16 +118,16 @@ export function EventoFormDialog({
       } else {
         await insertEvento({
           nombre: nombre.trim(),
-          categoria: fase === "principal" ? categoria : parent!.categoria,
+          categoria: parent!.categoria,
           fecha_inicio: fechaInicio,
           fecha_fin: fechaFin,
-          aplica_a: fase === "principal" ? aplicaA : parent!.aplica_a,
+          aplica_a: parent!.aplica_a,
           valor: valor.trim() === "" ? null : Number(valor),
           tipo_valor: valor.trim() === "" ? null : tipoValor,
           estancia_minima: estanciaMinima.trim() === "" ? null : Number(estanciaMinima),
           fase,
           evento_relacionado_id: parent?.id ?? null,
-          plantilla_id: fase !== "principal" ? (parent?.plantilla_id ?? null) : null,
+          plantilla_id: parent?.plantilla_id ?? null,
           notas: notas.trim() || null,
         });
       }
@@ -160,18 +154,6 @@ export function EventoFormDialog({
           <Field label="Nombre *">
             <Input value={nombre} onChange={(e) => setNombre(e.target.value)} autoFocus />
           </Field>
-          {fase === "principal" && (
-            <Field label="Categoría">
-              <Select value={categoria} onValueChange={(v) => setCategoria(v as EventoCategoria)}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {CATEGORIA_OPTIONS.map((o) => (
-                    <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </Field>
-          )}
           <div className="grid grid-cols-2 gap-3">
             <Field label="Fecha inicio *">
               <Input type="date" value={fechaInicio} onChange={(e) => setFechaInicio(e.target.value)} />
@@ -180,18 +162,6 @@ export function EventoFormDialog({
               <Input type="date" value={fechaFin} onChange={(e) => setFechaFin(e.target.value)} />
             </Field>
           </div>
-          {fase === "principal" && (
-            <Field label="Aplica a">
-              <Select value={aplicaA} onValueChange={(v) => setAplicaA(v as EventoAplicaA)}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {APLICA_A_OPTIONS.map((o) => (
-                    <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </Field>
-          )}
           <div className="grid grid-cols-2 gap-3">
             <Field label="Valor">
               <Input

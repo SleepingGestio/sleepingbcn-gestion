@@ -5,6 +5,8 @@ import { AppShell } from "@/components/app-shell";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Pencil, Plus } from "lucide-react";
 import { usePermissions } from "@/hooks/use-permissions";
@@ -32,6 +34,7 @@ function PlantillasPage() {
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
+  const [incluirInactivas, setIncluirInactivas] = useState(false);
   const [sortKey, setSortKey] = useState<SortKey>("nombre");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const q = useQuery({ queryKey: ["pricing-plantillas"], queryFn: fetchPlantillas });
@@ -49,12 +52,12 @@ function PlantillasPage() {
         case "fuentes": return p.plantillas_fuentes.length;
       }
     };
-    return [...(q.data ?? [])].sort((a, b) => {
+    return (q.data ?? []).filter((p) => incluirInactivas || p.activo).sort((a, b) => {
       const av = pick(a), bv = pick(b);
       const c = typeof av === "number" && typeof bv === "number" ? av - bv : String(av).localeCompare(String(bv));
       return sortDir === "asc" ? c : -c;
     });
-  }, [q.data, sortKey, sortDir]);
+  }, [q.data, sortKey, sortDir, incluirInactivas]);
 
   const toggleSort = (k: SortKey) => {
     if (sortKey === k) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
@@ -63,13 +66,23 @@ function PlantillasPage() {
 
   return (
     <AppShell title="Eventos-plantillas">
-      {canEditPlantillas && (
-        <div className="flex justify-end mb-4">
+      <div className="flex items-center justify-between gap-3 mb-4">
+        <div className="flex items-center gap-2">
+          <Checkbox
+            id="incluir-inactivas"
+            checked={incluirInactivas}
+            onCheckedChange={(v) => setIncluirInactivas(!!v)}
+          />
+          <Label htmlFor="incluir-inactivas" className="text-sm font-normal cursor-pointer">
+            Mostrar inactivas
+          </Label>
+        </div>
+        {canEditPlantillas && (
           <Button size="sm" onClick={() => setCreating(true)}>
             <Plus className="h-4 w-4 mr-1" /> Nuevo evento
           </Button>
-        </div>
-      )}
+        )}
+      </div>
       <Card className="overflow-hidden bg-white">
         <Table>
           <TableHeader>
