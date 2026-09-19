@@ -30,6 +30,7 @@ export type Evento = {
   fase: EventoFase;
   evento_relacionado_id: string | null;
   plantilla_id: string | null;
+  temporada_override_id: string | null;
   estado: EventoEstado;
   periodicidad: EventoPeriodicidad;
   fuente: string;
@@ -98,6 +99,7 @@ export type EventoUpdate = Partial<
     | "ubicacion"
     | "notas"
     | "estado"
+    | "temporada_override_id"
   >
 >;
 
@@ -196,4 +198,44 @@ export async function insertPlantillaConPrimeraEdicion(
     throw e;
   }
   return plantillaId;
+}
+
+export type TemporadaAplicaA = "city" | "rural";
+
+export type Temporada = {
+  id: string;
+  id_negocio: string;
+  aplica_a: TemporadaAplicaA;
+  codigo: string;
+  nombre: string;
+  coeficiente: number;
+  fecha_inicio: string;
+  fecha_fin: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export async function fetchTemporadas(): Promise<Temporada[]> {
+  const { data, error } = await pricingDb()
+    .from("temporadas")
+    .select("*")
+    .order("aplica_a", { ascending: true })
+    .order("fecha_inicio", { ascending: true });
+  if (error) throw error;
+  return (data ?? []) as Temporada[];
+}
+
+export type NuevaTemporadaInput = Pick<
+  Temporada,
+  "aplica_a" | "codigo" | "nombre" | "coeficiente" | "fecha_inicio" | "fecha_fin"
+>;
+
+export async function insertTemporada(input: NuevaTemporadaInput): Promise<void> {
+  const { error } = await pricingDb().from("temporadas").insert(input);
+  if (error) throw error;
+}
+
+export async function updateTemporada(id: string, changes: Partial<NuevaTemporadaInput>): Promise<void> {
+  const { error } = await pricingDb().from("temporadas").update(changes).eq("id", id);
+  if (error) throw error;
 }

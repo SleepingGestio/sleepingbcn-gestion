@@ -1,6 +1,6 @@
 import { Link, useRouterState } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { Calendar, LogIn, Sparkles, CalendarRange, Megaphone, Settings, LogOut, Smartphone, Clock, History, Wrench, Euro, Tag, Library } from "lucide-react";
+import { Calendar, LogIn, Sparkles, CalendarRange, Megaphone, Settings, LogOut, Smartphone, Clock, History, Wrench, Euro, Tag, Library, CalendarDays } from "lucide-react";
 import { getAppEnv } from "@/lib/api/app-env.functions";
 import {
   Sidebar,
@@ -36,6 +36,7 @@ const NAV_ITEMS: NavItem[] = [
 const PRICING_NAV_ITEMS: NavItem[] = [
   { title: "Eventos-calendario", url: "/pricing/eventos", icon: Tag, menu: "pricing_eventos" },
   { title: "Eventos-plantillas", url: "/pricing/plantillas", icon: Library, menu: "pricing_plantillas" },
+  { title: "Temporadas", url: "/pricing/temporadas", icon: CalendarDays, menu: "pricing_temporadas" },
 ];
 
 export function AppSidebar() {

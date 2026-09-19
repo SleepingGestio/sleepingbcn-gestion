@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from "@/components/ui/dialog";
@@ -9,7 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 import {
-  insertEvento, updateEvento,
+  insertEvento, updateEvento, fetchTemporadas,
   type Evento, type EventoEstado, type EventoFase,
   type EventoTipoValor,
 } from "@/lib/pricing";
@@ -30,6 +31,16 @@ const ESTADO_OPTIONS: { value: EventoEstado; label: string }[] = [
   { value: "descartado", label: "Descartado" },
 ];
 
+// Edit mode only: an edition either has no price change, a %/€ effect (valor),
+// or a season override (temporada_override_id) — never both (DB enforces it too).
+type EfectoModo = "ninguno" | "valor" | "temporada";
+
+const EFECTO_OPTIONS: { value: EfectoModo; label: string }[] = [
+  { value: "ninguno", label: "Sin cambio" },
+  { value: "valor", label: "Efecto %/€" },
+  { value: "temporada", label: "Cambio de temporada" },
+];
+
 export function isPositiveIntOrEmpty(s: string): boolean {
   return s.trim() === "" || (Number.isInteger(Number(s)) && Number(s) > 0);
 }
@@ -38,8 +49,9 @@ export function isPositiveIntOrEmpty(s: string): boolean {
  * Create/edit dialog for pricing.eventos editions. Create mode (no `evento`)
  * is used by the per-row "+ Previo" / "+ Post" actions (fase set accordingly,
  * evento_relacionado_id = parent.id; categoria/aplica_a/plantilla_id come from
- * parent). Edit mode (`evento` given, fase = evento.fase, parent unused)
- * pre-fills from the row and updates it. Categoría / Aplica a are owned by the
+ * parent). Edit mode (`evento` given, fase = evento.fase; `parent` is only used
+ * to resolve aplica_a for a previo/post's season choices) pre-fills from the
+ * row and updates it. Categoría / Aplica a are owned by the
  * plantilla and never shown here; principal editions are created from the
  * Plantillas screen, not from this dialog.
  */
@@ -69,6 +81,10 @@ export function EventoFormDialog({
   );
   const [valor, setValor] = useState(evento?.valor != null ? String(evento.valor) : "");
   const [tipoValor, setTipoValor] = useState<EventoTipoValor>(evento?.tipo_valor ?? "%");
+  const [efecto, setEfecto] = useState<EfectoModo>(
+    evento?.temporada_override_id ? "temporada" : evento?.valor != null ? "valor" : "ninguno",
+  );
+  const [temporadaId, setTemporadaId] = useState(evento?.temporada_override_id ?? "");
   const [estanciaMinima, setEstanciaMinima] = useState(
     evento?.estancia_minima != null ? String(evento.estancia_minima) : "",
   );
@@ -79,6 +95,23 @@ export function EventoFormDialog({
   const [estado, setEstado] = useState<EventoEstado>(evento?.estado ?? "confirmado");
   const [notas, setNotas] = useState(evento?.notas ?? "");
   const [saving, setSaving] = useState(false);
+
+  const temporadasQ = useQuery({
+    queryKey: ["pricing-temporadas"],
+    queryFn: fetchTemporadas,
+    enabled: !!evento,
+  });
+  // previo/post editions are inherited from their principal, so its aplica_a rules.
+  const aplicaTemporada = evento ? (fase === "principal" ? evento.aplica_a : (parent?.aplica_a ?? evento.aplica_a)) : null;
+  const temporadaOptions = (temporadasQ.data ?? []).filter(
+    (t) => aplicaTemporada === "ambos" || t.aplica_a === aplicaTemporada,
+  );
+
+  function changeEfecto(next: EfectoModo) {
+    setEfecto(next);
+    if (next !== "valor") setValor("");
+    if (next !== "temporada") setTemporadaId("");
+  }
 
   const title = evento
     ? fase === "previo" ? "Editar previo" : fase === "post" ? "Editar post" : `Editar — ${evento.nombre}`
@@ -99,6 +132,14 @@ export function EventoFormDialog({
       toast.error("La afluencia estimada debe ser un número entero mayor que 0");
       return;
     }
+    if (evento && efecto === "valor" && valor.trim() === "") {
+      toast.error("Introduce un valor o elige «Sin cambio»");
+      return;
+    }
+    if (evento && efecto === "temporada" && !temporadaId) {
+      toast.error("Elige una temporada o «Sin cambio»");
+      return;
+    }
 
     setSaving(true);
     try {
@@ -107,8 +148,10 @@ export function EventoFormDialog({
           nombre: nombre.trim(),
           fecha_inicio: fechaInicio,
           fecha_fin: fechaFin,
-          valor: valor.trim() === "" ? null : Number(valor),
-          tipo_valor: valor.trim() === "" ? null : tipoValor,
+          // Only the chosen option is written; the other one is explicitly nulled.
+          valor: efecto === "valor" ? Number(valor) : null,
+          tipo_valor: efecto === "valor" ? tipoValor : null,
+          temporada_override_id: efecto === "temporada" ? temporadaId : null,
           estancia_minima: estanciaMinima.trim() === "" ? null : Number(estanciaMinima),
           afluencia_estimada: afluencia.trim() === "" ? null : Number(afluencia),
           ubicacion: ubicacion.trim() || null,
@@ -141,6 +184,31 @@ export function EventoFormDialog({
     }
   }
 
+  const valorTipoFields = (
+    <div className="grid grid-cols-2 gap-3">
+      <Field label="Valor">
+        <Input
+          type="number"
+          step="any"
+          placeholder="Opcional"
+          value={valor}
+          onChange={(e) => setValor(e.target.value)}
+        />
+      </Field>
+      {valor.trim() !== "" && (
+        <Field label="Tipo">
+          <Select value={tipoValor} onValueChange={(v) => setTipoValor(v as EventoTipoValor)}>
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="%">%</SelectItem>
+              <SelectItem value="€">€</SelectItem>
+            </SelectContent>
+          </Select>
+        </Field>
+      )}
+    </div>
+  );
+
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
@@ -162,28 +230,38 @@ export function EventoFormDialog({
               <Input type="date" value={fechaFin} onChange={(e) => setFechaFin(e.target.value)} />
             </Field>
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Valor">
-              <Input
-                type="number"
-                step="any"
-                placeholder="Opcional"
-                value={valor}
-                onChange={(e) => setValor(e.target.value)}
-              />
-            </Field>
-            {valor.trim() !== "" && (
-              <Field label="Tipo">
-                <Select value={tipoValor} onValueChange={(v) => setTipoValor(v as EventoTipoValor)}>
+          {evento ? (
+            <>
+              <Field label="Efecto / Cambio de temporada">
+                <Select value={efecto} onValueChange={(v) => changeEfecto(v as EfectoModo)}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="%">%</SelectItem>
-                    <SelectItem value="€">€</SelectItem>
+                    {EFECTO_OPTIONS.map((o) => (
+                      <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </Field>
-            )}
-          </div>
+              {efecto === "valor" && valorTipoFields}
+              {efecto === "temporada" && (
+                <Field label="Temporada">
+                  <Select value={temporadaId || undefined} onValueChange={setTemporadaId}>
+                    <SelectTrigger><SelectValue placeholder="Elige una temporada" /></SelectTrigger>
+                    <SelectContent>
+                      {temporadaOptions.map((t) => (
+                        <SelectItem key={t.id} value={t.id}>
+                          {aplicaTemporada === "ambos" ? `${t.aplica_a === "city" ? "City" : "Rural"} · ` : ""}
+                          {t.codigo} — {t.nombre}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </Field>
+              )}
+            </>
+          ) : (
+            valorTipoFields
+          )}
           <Field label="Estancia mínima (noches)">
             <Input
               type="number"

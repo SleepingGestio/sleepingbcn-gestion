@@ -17,7 +17,7 @@ import { fmtDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { usePermissions } from "@/hooks/use-permissions";
 import {
-  fetchEventos, descartarEvento, confirmarEvento,
+  fetchEventos, descartarEvento, confirmarEvento, fetchTemporadas,
   type Evento, type EventoAplicaA, type EventoCategoria, type EventoFase,
 } from "@/lib/pricing";
 import { CategoriaBadge, AplicaABadge, EventoEstadoBadge } from "@/components/pricing-badges";
@@ -90,6 +90,11 @@ function EventosPage() {
   const [descartarTarget, setDescartarTarget] = useState<Evento | null>(null);
 
   const q = useQuery({ queryKey: ["pricing-eventos"], queryFn: fetchEventos });
+  const temporadasQ = useQuery({ queryKey: ["pricing-temporadas"], queryFn: fetchTemporadas });
+  const temporadaById = useMemo(
+    () => new Map((temporadasQ.data ?? []).map((t) => [t.id, t])),
+    [temporadasQ.data],
+  );
 
   const rows = useMemo(() => {
     const now = new Date();
@@ -259,6 +264,7 @@ function EventosPage() {
             )}
             {rows.map(({ evento: e, isChild }) => {
               const efecto = formatEfecto(e.valor, e.tipo_valor);
+              const temporada = e.temporada_override_id ? temporadaById.get(e.temporada_override_id) : undefined;
               return (
                 <TableRow key={e.id} className={cn(isChild && "bg-muted/30")}>
                   <TableCell className={cn("font-medium", isChild && "pl-8 font-normal text-muted-foreground")}>
@@ -268,7 +274,10 @@ function EventosPage() {
                   <TableCell className="whitespace-nowrap">{fmtDate(e.fecha_inicio)} – {fmtDate(e.fecha_fin)}</TableCell>
                   <TableCell><AplicaABadge aplicaA={e.aplica_a} /></TableCell>
                   <TableCell>
-                    {efecto ? efecto : <span className="text-muted-foreground">Sin fórmula</span>}
+                    {efecto ? efecto
+                      : temporada ? `→ ${temporada.codigo} (${temporada.nombre})`
+                      : e.temporada_override_id ? <span className="text-muted-foreground">→ Temporada</span>
+                      : <span className="text-muted-foreground">Sin fórmula</span>}
                   </TableCell>
                   <TableCell>
                     {e.estancia_minima != null ? e.estancia_minima : <span className="text-muted-foreground">—</span>}
@@ -336,7 +345,11 @@ function EventosPage() {
       {editTarget && (
         <EventoFormDialog
           fase={editTarget.fase}
-          parent={null}
+          parent={
+            editTarget.evento_relacionado_id
+              ? (q.data ?? []).find((x) => x.id === editTarget.evento_relacionado_id) ?? null
+              : null
+          }
           evento={editTarget}
           onClose={() => setEditTarget(null)}
           onSaved={() => q.refetch()}
