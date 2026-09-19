@@ -13,10 +13,10 @@ import { Field } from "@/components/plantilla-edit-dialog";
 
 /** Create (no `temporada`) / edit (`temporada` given) dialog for pricing.temporadas. */
 export function TemporadaDialog({
-  temporada, anio, aplicaA, onClose, onSaved,
+  temporada, defaultAnio, aplicaA, onClose, onSaved,
 }: {
   temporada?: Temporada | null;
-  anio: number;
+  defaultAnio: number;
   aplicaA: TemporadaAplicaA;
   onClose: () => void;
   onSaved: () => void;
@@ -24,7 +24,7 @@ export function TemporadaDialog({
   const [codigo, setCodigo] = useState(temporada?.codigo ?? "");
   const [nombre, setNombre] = useState(temporada?.nombre ?? "");
   const [coeficiente, setCoeficiente] = useState(temporada ? String(temporada.coeficiente) : "");
-  const [fechaInicio, setFechaInicio] = useState(temporada?.fecha_inicio ?? "");
+  const [fechaInicio, setFechaInicio] = useState(temporada?.fecha_inicio ?? `${defaultAnio}-01-01`);
   const [fechaFin, setFechaFin] = useState(temporada?.fecha_fin ?? "");
   const [saving, setSaving] = useState(false);
 
@@ -38,6 +38,10 @@ export function TemporadaDialog({
     }
     if (!fechaInicio || !fechaFin) { toast.error("Las fechas son obligatorias"); return; }
     if (fechaFin < fechaInicio) { toast.error("La fecha de fin no puede ser anterior a la de inicio"); return; }
+
+    // anio always follows fecha_inicio, so editing dates moves the row to the right year.
+    const anio = Number(fechaInicio.slice(0, 4));
+    if (!Number.isInteger(anio)) { toast.error("Fecha de inicio no válida"); return; }
 
     const values = {
       aplica_a: aplicaA,
@@ -66,7 +70,7 @@ export function TemporadaDialog({
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>{temporada ? "Editar temporada" : "Nueva temporada"} · {anio} · {aplicaA === "city" ? "City" : "Rural"}</DialogTitle>
+          <DialogTitle>{temporada ? "Editar temporada" : "Nueva temporada"} · {aplicaA === "city" ? "City" : "Rural"}</DialogTitle>
           <DialogDescription className="sr-only">Formulario de temporada</DialogDescription>
         </DialogHeader>
         <div className="grid gap-3 text-sm">

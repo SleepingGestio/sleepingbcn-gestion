@@ -260,3 +260,14 @@ export async function copyTemporadasToYear(fromYear: number, toYear: number): Pr
   if (insErr) throw insErr;
   return rows.length;
 }
+
+export async function deleteTemporada(id: string): Promise<void> {
+  const { error } = await pricingDb().from("temporadas").delete().eq("id", id);
+  if (error) throw error;
+}
+
+/** Deletes every temporada of the year, both groups. */
+export async function deleteTemporadasByYear(anio: number): Promise<void> {
+  const { error } = await pricingDb().from("temporadas").delete().eq("anio", anio);
+  if (error) throw error;
+}

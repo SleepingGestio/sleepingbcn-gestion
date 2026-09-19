@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { AppShell } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -11,10 +12,10 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Pencil, Plus } from "lucide-react";
+import { Pencil, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { usePermissions } from "@/hooks/use-permissions";
-import { fetchTemporadas, copyTemporadasToYear, type Temporada, type TemporadaAplicaA } from "@/lib/pricing";
+import { fetchTemporadas, copyTemporadasToYear, deleteTemporada, deleteTemporadasByYear, type Temporada, type TemporadaAplicaA } from "@/lib/pricing";
 import { fmtDate } from "@/lib/format";
 import { SortHeader } from "@/components/sort-header";
 import { TemporadaDialog } from "@/components/temporada-dialog";
@@ -32,6 +33,7 @@ function TemporadasTab({ anio, aplicaA, temporadas: all, loading, error, onSaved
   const canEditTemporadas = canEdit("pricing_temporadas");
 
   const [dialog, setDialog] = useState<{ temporada: Temporada | null } | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Temporada | null>(null);
   const [sortKey, setSortKey] = useState<SortKey>("fechas");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const colSpan = canEditTemporadas ? 5 : 4;
@@ -56,6 +58,19 @@ function TemporadasTab({ anio, aplicaA, temporadas: all, loading, error, onSaved
     if (sortKey === k) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
     else { setSortKey(k); setSortDir("asc"); }
   };
+
+  async function confirmDelete() {
+    if (!deleteTarget) return;
+    try {
+      await deleteTemporada(deleteTarget.id);
+      toast.success("Temporada eliminada");
+      onSaved();
+    } catch (e) {
+      toast.error("Error: " + (e as Error).message);
+    } finally {
+      setDeleteTarget(null);
+    }
+  }
 
   return (
     <>
@@ -107,9 +122,12 @@ function TemporadasTab({ anio, aplicaA, temporadas: all, loading, error, onSaved
                 <TableCell className="whitespace-nowrap">{fmtDate(t.fecha_inicio)} – {fmtDate(t.fecha_fin)}</TableCell>
                 {canEditTemporadas && (
                   <TableCell>
-                    <div className="flex justify-end">
+                    <div className="flex justify-end gap-2">
                       <Button size="sm" variant="outline" onClick={() => setDialog({ temporada: t })}>
                         <Pencil className="h-4 w-4 mr-1" /> Editar
+                      </Button>
+                      <Button size="sm" variant="outline" onClick={() => setDeleteTarget(t)}>
+                        <Trash2 className="h-4 w-4 mr-1" /> Eliminar
                       </Button>
                     </div>
                   </TableCell>
@@ -124,12 +142,27 @@ function TemporadasTab({ anio, aplicaA, temporadas: all, loading, error, onSaved
         <TemporadaDialog
           key={dialog.temporada?.id ?? "nueva"}
           temporada={dialog.temporada}
-          anio={anio}
+          defaultAnio={anio}
           aplicaA={aplicaA}
           onClose={() => setDialog(null)}
           onSaved={onSaved}
         />
       )}
+
+      <AlertDialog open={!!deleteTarget} onOpenChange={(o) => !o && setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Eliminar "{deleteTarget?.nombre}"?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Se eliminará la temporada {deleteTarget?.codigo}. Esta acción no se puede deshacer.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDelete}>Eliminar</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }
@@ -139,12 +172,17 @@ const TABS: { label: string; component: ComponentType<TabProps> }[] = [
 ];
 
 function ConfiguracionTarifasPage() {
+  const { canEdit } = usePermissions();
+  const canEditTemporadas = canEdit("pricing_temporadas");
   const q = useQuery({ queryKey: ["pricing-temporadas"], queryFn: fetchTemporadas });
   const all = useMemo(() => q.data ?? [], [q.data]);
   const [anioSel, setAnioSel] = useState<number | null>(null);
   const [aplicaA, setAplicaA] = useState<TemporadaAplicaA>("city");
   const [tab, setTab] = useState(0);
-  const [nuevoAnio, setNuevoAnio] = useState("");
+  const [nuevoAnioInput, setNuevoAnioInput] = useState<string | null>(null);
+  const [deleteYear, setDeleteYear] = useState<number | null>(null);
+  const [deleteAck, setDeleteAck] = useState(false);
+  const [deletingYear, setDeletingYear] = useState(false);
   const [copyPrompt, setCopyPrompt] = useState<number | null>(null);
   const [copying, setCopying] = useState(false);
 
@@ -153,11 +191,17 @@ function ConfiguracionTarifasPage() {
   const anio = anioSel ?? (dataYears.includes(thisYear) ? thisYear : dataYears.length ? Math.max(...dataYears) : thisYear);
   const years = useMemo(() => [...new Set([...dataYears, anio])].sort((a, b) => b - a), [dataYears, anio]);
   const ActiveTab = TABS[tab].component;
+  const suggestedYear = String((dataYears.length ? Math.max(...dataYears) : thisYear) + 1);
+  const nuevoAnio = nuevoAnioInput ?? suggestedYear;
+  const deleteCounts = useMemo(() => {
+    const rows = all.filter((t) => t.anio === deleteYear);
+    return { city: rows.filter((t) => t.aplica_a === "city").length, rural: rows.filter((t) => t.aplica_a === "rural").length };
+  }, [all, deleteYear]);
 
   function addYear() {
     const y = Number(nuevoAnio);
     if (!Number.isInteger(y) || y < 2000 || y > 2100) { toast.error("Año no válido"); return; }
-    setNuevoAnio("");
+    setNuevoAnioInput(null);
     if (dataYears.includes(y)) { setAnioSel(y); return; }
     if (dataYears.includes(y - 1)) setCopyPrompt(y);
     else setAnioSel(y);
@@ -167,6 +211,23 @@ function ConfiguracionTarifasPage() {
     if (copyPrompt == null || copying) return;
     setAnioSel(copyPrompt);
     setCopyPrompt(null);
+  }
+
+  async function confirmDeleteYear() {
+    if (deleteYear == null) return;
+    setDeletingYear(true);
+    try {
+      await deleteTemporadasByYear(deleteYear);
+      toast.success(`Año ${deleteYear} eliminado`);
+      await q.refetch();
+      setAnioSel(null);
+    } catch (e) {
+      toast.error("Error al eliminar: " + (e as Error).message);
+    } finally {
+      setDeletingYear(false);
+      setDeleteYear(null);
+      setDeleteAck(false);
+    }
   }
 
   async function confirmCopy() {
@@ -201,15 +262,22 @@ function ConfiguracionTarifasPage() {
         <div className="flex items-end gap-2">
           <Input
             type="number"
+            min={2000}
+            max={2100}
             placeholder="Nuevo año"
             className="w-28"
             value={nuevoAnio}
-            onChange={(e) => setNuevoAnio(e.target.value)}
+            onChange={(e) => setNuevoAnioInput(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && addYear()}
           />
           <Button size="sm" variant="outline" onClick={addYear} disabled={!nuevoAnio}>
             <Plus className="h-4 w-4 mr-1" /> Añadir año
           </Button>
+          {canEditTemporadas && dataYears.includes(anio) && (
+            <Button size="sm" variant="outline" onClick={() => { setDeleteAck(false); setDeleteYear(anio); }}>
+              <Trash2 className="h-4 w-4 mr-1" /> Eliminar año {anio}
+            </Button>
+          )}
         </div>
         <div className="grid gap-1">
           <span className="text-xs text-muted-foreground">Grupo</span>
@@ -257,6 +325,29 @@ function ConfiguracionTarifasPage() {
             <AlertDialogCancel disabled={copying}>No copiar</AlertDialogCancel>
             <AlertDialogAction disabled={copying} onClick={(e) => { e.preventDefault(); void confirmCopy(); }}>
               Copiar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={deleteYear != null} onOpenChange={(o) => !o && !deletingYear && setDeleteYear(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Eliminar todo el año {deleteYear}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Se borrarán todas las temporadas de {deleteYear} en City y Rural. Esta acción no se puede deshacer.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <label className="flex items-start gap-2 text-sm">
+            <Checkbox checked={deleteAck} onCheckedChange={(c) => setDeleteAck(c === true)} className="mt-0.5" />
+            <span>
+              Entiendo que se borrarán todas las temporadas de {deleteYear} ({deleteCounts.city} de City, {deleteCounts.rural} de Rural)
+            </span>
+          </label>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deletingYear}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction disabled={!deleteAck || deletingYear} onClick={(e) => { e.preventDefault(); void confirmDeleteYear(); }}>
+              Eliminar año
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
