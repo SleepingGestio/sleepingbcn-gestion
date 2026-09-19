@@ -12,6 +12,258 @@ export type Database = {
   __InternalSupabase: {
     PostgrestVersion: "14.5"
   }
+  pricing: {
+    Tables: {
+      eventos: {
+        Row: {
+          afluencia_estimada: number | null
+          aplica_a: string
+          categoria: string
+          created_at: string
+          estado: string
+          estancia_minima: number | null
+          evento_relacionado_id: string | null
+          fase: string
+          fecha_fin: string
+          fecha_inicio: string
+          fuente: string
+          id: string
+          id_negocio: string
+          nombre: string
+          notas: string | null
+          periodicidad: string
+          plantilla_id: string | null
+          temporada_override_id: string | null
+          tipo_valor: string | null
+          ubicacion: string | null
+          updated_at: string
+          valor: number | null
+        }
+        Insert: {
+          afluencia_estimada?: number | null
+          aplica_a: string
+          categoria: string
+          created_at?: string
+          estado?: string
+          estancia_minima?: number | null
+          evento_relacionado_id?: string | null
+          fase?: string
+          fecha_fin: string
+          fecha_inicio: string
+          fuente?: string
+          id?: string
+          id_negocio?: string
+          nombre: string
+          notas?: string | null
+          periodicidad?: string
+          plantilla_id?: string | null
+          temporada_override_id?: string | null
+          tipo_valor?: string | null
+          ubicacion?: string | null
+          updated_at?: string
+          valor?: number | null
+        }
+        Update: {
+          afluencia_estimada?: number | null
+          aplica_a?: string
+          categoria?: string
+          created_at?: string
+          estado?: string
+          estancia_minima?: number | null
+          evento_relacionado_id?: string | null
+          fase?: string
+          fecha_fin?: string
+          fecha_inicio?: string
+          fuente?: string
+          id?: string
+          id_negocio?: string
+          nombre?: string
+          notas?: string | null
+          periodicidad?: string
+          plantilla_id?: string | null
+          temporada_override_id?: string | null
+          tipo_valor?: string | null
+          ubicacion?: string | null
+          updated_at?: string
+          valor?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "eventos_evento_relacionado_id_fkey"
+            columns: ["evento_relacionado_id"]
+            isOneToOne: false
+            referencedRelation: "eventos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "eventos_plantilla_id_fkey"
+            columns: ["plantilla_id"]
+            isOneToOne: false
+            referencedRelation: "plantillas_eventos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "eventos_temporada_override_id_fkey"
+            columns: ["temporada_override_id"]
+            isOneToOne: false
+            referencedRelation: "temporadas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      plantillas_eventos: {
+        Row: {
+          activo: boolean
+          aplica_a: string
+          categoria: string
+          created_at: string
+          id: string
+          id_negocio: string
+          nombre: string
+          periodicidad: string
+          updated_at: string
+        }
+        Insert: {
+          activo?: boolean
+          aplica_a: string
+          categoria: string
+          created_at?: string
+          id?: string
+          id_negocio?: string
+          nombre: string
+          periodicidad?: string
+          updated_at?: string
+        }
+        Update: {
+          activo?: boolean
+          aplica_a?: string
+          categoria?: string
+          created_at?: string
+          id?: string
+          id_negocio?: string
+          nombre?: string
+          periodicidad?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      plantillas_fuentes: {
+        Row: {
+          created_at: string
+          descripcion: string | null
+          id: string
+          plantilla_id: string
+          url: string
+        }
+        Insert: {
+          created_at?: string
+          descripcion?: string | null
+          id?: string
+          plantilla_id: string
+          url: string
+        }
+        Update: {
+          created_at?: string
+          descripcion?: string | null
+          id?: string
+          plantilla_id?: string
+          url?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "plantillas_fuentes_plantilla_id_fkey"
+            columns: ["plantilla_id"]
+            isOneToOne: false
+            referencedRelation: "plantillas_eventos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      temporada_periodos: {
+        Row: {
+          created_at: string
+          estancia_minima: number | null
+          fecha_fin: string
+          fecha_inicio: string
+          id: string
+          temporada_id: string
+        }
+        Insert: {
+          created_at?: string
+          estancia_minima?: number | null
+          fecha_fin: string
+          fecha_inicio: string
+          id?: string
+          temporada_id: string
+        }
+        Update: {
+          created_at?: string
+          estancia_minima?: number | null
+          fecha_fin?: string
+          fecha_inicio?: string
+          id?: string
+          temporada_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "temporada_periodos_temporada_id_fkey"
+            columns: ["temporada_id"]
+            isOneToOne: false
+            referencedRelation: "temporadas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      temporadas: {
+        Row: {
+          anio: number
+          aplica_a: string
+          codigo: string
+          coeficiente: number
+          created_at: string
+          id: string
+          id_negocio: string
+          nombre: string
+          updated_at: string
+        }
+        Insert: {
+          anio: number
+          aplica_a: string
+          codigo: string
+          coeficiente: number
+          created_at?: string
+          id?: string
+          id_negocio?: string
+          nombre: string
+          updated_at?: string
+        }
+        Update: {
+          anio?: number
+          aplica_a?: string
+          codigo?: string
+          coeficiente?: number
+          created_at?: string
+          id?: string
+          id_negocio?: string
+          nombre?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      [_ in never]: never
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
+  }
   public: {
     Tables: {
       ajustes_app: {
@@ -2815,6 +3067,9 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
+  pricing: {
+    Enums: {},
+  },
   public: {
     Enums: {},
   },
