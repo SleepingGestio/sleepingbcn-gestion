@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import { addYearsISO } from "@/lib/format";
 
 // pricing.eventos lives in the `pricing` Postgres schema, not `public` — the
 // generated Database type (src/integrations/supabase/types.ts) doesn't cover
@@ -206,6 +207,7 @@ export type Temporada = {
   id: string;
   id_negocio: string;
   aplica_a: TemporadaAplicaA;
+  anio: number;
   codigo: string;
   nombre: string;
   coeficiente: number;
@@ -227,7 +229,7 @@ export async function fetchTemporadas(): Promise<Temporada[]> {
 
 export type NuevaTemporadaInput = Pick<
   Temporada,
-  "aplica_a" | "codigo" | "nombre" | "coeficiente" | "fecha_inicio" | "fecha_fin"
+  "aplica_a" | "anio" | "codigo" | "nombre" | "coeficiente" | "fecha_inicio" | "fecha_fin"
 >;
 
 export async function insertTemporada(input: NuevaTemporadaInput): Promise<void> {
@@ -238,4 +240,23 @@ export async function insertTemporada(input: NuevaTemporadaInput): Promise<void>
 export async function updateTemporada(id: string, changes: Partial<NuevaTemporadaInput>): Promise<void> {
   const { error } = await pricingDb().from("temporadas").update(changes).eq("id", id);
   if (error) throw error;
+}
+
+/** Copies every temporada of `fromYear` (both groups) into `toYear`, dates shifted by the year gap, in one insert. Returns rows copied. */
+export async function copyTemporadasToYear(fromYear: number, toYear: number): Promise<number> {
+  const { data, error } = await pricingDb().from("temporadas").select("*").eq("anio", fromYear);
+  if (error) throw error;
+  const rows = ((data ?? []) as Temporada[]).map((t) => ({
+    aplica_a: t.aplica_a,
+    anio: toYear,
+    codigo: t.codigo,
+    nombre: t.nombre,
+    coeficiente: t.coeficiente,
+    fecha_inicio: addYearsISO(t.fecha_inicio, toYear - fromYear),
+    fecha_fin: addYearsISO(t.fecha_fin, toYear - fromYear),
+  }));
+  if (rows.length === 0) return 0;
+  const { error: insErr } = await pricingDb().from("temporadas").insert(rows);
+  if (insErr) throw insErr;
+  return rows.length;
 }

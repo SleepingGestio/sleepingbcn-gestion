@@ -111,3 +111,11 @@ export function addDaysISO(iso: string, n: number): string {
   d.setUTCDate(d.getUTCDate() + n);
   return d.toISOString().slice(0, 10);
 }
+
+/** Shift an ISO date by whole years keeping month/day (Feb 29 clamps to Feb 28 in non-leap years). */
+export function addYearsISO(iso: string, n: number): string {
+  const [y, m, day] = iso.slice(0, 10).split("-").map(Number);
+  const d = new Date(Date.UTC(y + n, m - 1, day));
+  if (d.getUTCMonth() !== m - 1) d.setUTCDate(0);
+  return d.toISOString().slice(0, 10);
+}

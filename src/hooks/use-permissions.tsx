@@ -42,7 +42,7 @@ export const ALL_MENUS: { key: MenuKey; label: string }[] = [
   { key: "config_tarifas", label: "Configuración · Tarifas y comisiones" },
   { key: "pricing_eventos", label: "Gestión de precios · Eventos-calendario" },
   { key: "pricing_plantillas", label: "Gestión de precios · Eventos-plantillas" },
-  { key: "pricing_temporadas", label: "Gestión de precios · Temporadas" },
+  { key: "pricing_temporadas", label: "Gestión de precios · Configuración Tarifas" },
 ];
 
 // Single source of truth for which top-level route maps to which menu

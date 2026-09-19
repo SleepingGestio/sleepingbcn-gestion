@@ -4,7 +4,6 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 import {
   insertTemporada, updateTemporada,
@@ -14,13 +13,14 @@ import { Field } from "@/components/plantilla-edit-dialog";
 
 /** Create (no `temporada`) / edit (`temporada` given) dialog for pricing.temporadas. */
 export function TemporadaDialog({
-  temporada, onClose, onSaved,
+  temporada, anio, aplicaA, onClose, onSaved,
 }: {
   temporada?: Temporada | null;
+  anio: number;
+  aplicaA: TemporadaAplicaA;
   onClose: () => void;
   onSaved: () => void;
 }) {
-  const [aplicaA, setAplicaA] = useState<TemporadaAplicaA>(temporada?.aplica_a ?? "city");
   const [codigo, setCodigo] = useState(temporada?.codigo ?? "");
   const [nombre, setNombre] = useState(temporada?.nombre ?? "");
   const [coeficiente, setCoeficiente] = useState(temporada ? String(temporada.coeficiente) : "");
@@ -41,6 +41,7 @@ export function TemporadaDialog({
 
     const values = {
       aplica_a: aplicaA,
+      anio,
       codigo: codigo.trim(),
       nombre: nombre.trim(),
       coeficiente: coef,
@@ -65,19 +66,10 @@ export function TemporadaDialog({
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>{temporada ? "Editar temporada" : "Nueva temporada"}</DialogTitle>
+          <DialogTitle>{temporada ? "Editar temporada" : "Nueva temporada"} · {anio} · {aplicaA === "city" ? "City" : "Rural"}</DialogTitle>
           <DialogDescription className="sr-only">Formulario de temporada</DialogDescription>
         </DialogHeader>
         <div className="grid gap-3 text-sm">
-          <Field label="Aplica a">
-            <Select value={aplicaA} onValueChange={(v) => setAplicaA(v as TemporadaAplicaA)}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="city">City</SelectItem>
-                <SelectItem value="rural">Rural</SelectItem>
-              </SelectContent>
-            </Select>
-          </Field>
           <div className="grid grid-cols-2 gap-3">
             <Field label="Código *">
               <Input value={codigo} onChange={(e) => setCodigo(e.target.value)} autoFocus />
