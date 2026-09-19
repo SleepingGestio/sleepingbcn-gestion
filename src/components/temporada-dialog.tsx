@@ -30,10 +30,10 @@ function usePeriodoForm(initialInicio: string) {
     finTouched.current = true;
     setFechaFinRaw(v);
   }
-  function reset() {
+  function reset(nextInicio = "") {
     finTouched.current = false;
-    setFechaInicioRaw("");
-    setFechaFinRaw("");
+    setFechaInicioRaw(nextInicio);
+    setFechaFinRaw(nextInicio ? addDaysISO(nextInicio, 1) : "");
   }
   return { fechaInicio, fechaFin, setFechaInicio, setFechaFin, reset };
 }
@@ -79,12 +79,13 @@ export function TemporadaDialog({
   const [coeficiente, setCoeficiente] = useState(temporada ? String(temporada.coeficiente) : "");
   const [saving, setSaving] = useState(false);
   const [addingPeriodo, setAddingPeriodo] = useState(false);
-  // First period in create mode; the add-period mini-form in edit mode.
-  const periodo = usePeriodoForm(temporada ? "" : `${defaultAnio}-01-01`);
-
   const periodos = [...(temporada?.temporada_periodos ?? [])].sort((a, b) =>
     a.fecha_inicio.localeCompare(b.fecha_inicio),
   );
+  const latestFin = periodos.reduce((max, p) => (p.fecha_fin > max ? p.fecha_fin : max), "");
+  // First period in create mode; the add-period mini-form in edit mode. Starts
+  // the day after the latest existing period, or Jan 1 when there is none.
+  const periodo = usePeriodoForm(latestFin ? addDaysISO(latestFin, 1) : `${defaultAnio}-01-01`);
 
   async function handleSubmit() {
     if (!codigo.trim()) { toast.error("El código es obligatorio"); return; }
@@ -127,7 +128,8 @@ export function TemporadaDialog({
     setAddingPeriodo(true);
     try {
       await insertPeriodo(temporada.id, periodo.fechaInicio, periodo.fechaFin);
-      periodo.reset();
+      const newLatest = periodo.fechaFin > latestFin ? periodo.fechaFin : latestFin;
+      periodo.reset(addDaysISO(newLatest, 1));
       onSaved();
     } catch (e) {
       toast.error("Error: " + (e as Error).message);
