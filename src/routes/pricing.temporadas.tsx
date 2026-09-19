@@ -31,7 +31,8 @@ const MAX_CHIPS = 2;
 function PeriodosSummary({ temporada }: { temporada: Temporada }) {
   const ps = [...temporada.temporada_periodos].sort((a, b) => a.fecha_inicio.localeCompare(b.fecha_inicio));
   if (ps.length === 0) return <span className="text-muted-foreground">—</span>;
-  const label = (p: (typeof ps)[number]) => `${fmtDate(p.fecha_inicio)} – ${fmtDate(p.fecha_fin)}`;
+  const label = (p: (typeof ps)[number]) =>
+    `${fmtDate(p.fecha_inicio)} – ${fmtDate(p.fecha_fin)}${p.estancia_minima != null ? ` · mín. ${p.estancia_minima}` : ""}`;
   return (
     <div className="flex items-center gap-1 whitespace-nowrap" title={ps.map(label).join(", ")}>
       {ps.slice(0, MAX_CHIPS).map((p) => (

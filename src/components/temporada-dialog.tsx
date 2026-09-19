@@ -12,14 +12,16 @@ import {
 } from "@/lib/pricing";
 import { addDaysISO, fmtDate } from "@/lib/format";
 import { Field } from "@/components/plantilla-edit-dialog";
+import { isPositiveIntOrEmpty } from "@/components/evento-form-dialog";
 
 /**
- * Fecha inicio / Fecha fin state. While Fecha fin hasn't been touched by the
+ * Fecha inicio / Fecha fin / Estancia mínima state. While Fecha fin hasn't been touched by the
  * person, it follows Fecha inicio + 1 day; once they set it, it's left alone.
  */
 function usePeriodoForm(initialInicio: string) {
   const [fechaInicio, setFechaInicioRaw] = useState(initialInicio);
   const [fechaFin, setFechaFinRaw] = useState(initialInicio ? addDaysISO(initialInicio, 1) : "");
+  const [estanciaMinima, setEstanciaMinima] = useState("");
   const finTouched = useRef(false);
 
   function setFechaInicio(v: string) {
@@ -34,25 +36,39 @@ function usePeriodoForm(initialInicio: string) {
     finTouched.current = false;
     setFechaInicioRaw(nextInicio);
     setFechaFinRaw(nextInicio ? addDaysISO(nextInicio, 1) : "");
+    setEstanciaMinima("");
   }
-  return { fechaInicio, fechaFin, setFechaInicio, setFechaFin, reset };
+  return { fechaInicio, fechaFin, estanciaMinima, setFechaInicio, setFechaFin, setEstanciaMinima, reset };
 }
 
 /** Returns an error message, or null when the range is valid. */
-function validatePeriodo(fechaInicio: string, fechaFin: string): string | null {
+function validatePeriodo(fechaInicio: string, fechaFin: string, estanciaMinima: string): string | null {
   if (!fechaInicio || !fechaFin) return "Las fechas son obligatorias";
   if (fechaFin < fechaInicio) return "La fecha de fin no puede ser anterior a la de inicio";
+  if (!isPositiveIntOrEmpty(estanciaMinima)) return "La estancia mínima debe ser un número entero mayor que 0";
   return null;
 }
 
+const estanciaOrNull = (s: string) => (s.trim() === "" ? null : Number(s));
+
 function PeriodoInputs({ form }: { form: ReturnType<typeof usePeriodoForm> }) {
   return (
-    <div className="grid grid-cols-2 gap-3">
+    <div className="grid grid-cols-3 gap-3">
       <Field label="Fecha inicio *">
         <Input type="date" value={form.fechaInicio} onChange={(e) => form.setFechaInicio(e.target.value)} />
       </Field>
       <Field label="Fecha fin *">
         <Input type="date" value={form.fechaFin} onChange={(e) => form.setFechaFin(e.target.value)} />
+      </Field>
+      <Field label="Estancia mínima (noches)">
+        <Input
+          type="number"
+          min={1}
+          step={1}
+          placeholder="Opcional"
+          value={form.estanciaMinima}
+          onChange={(e) => form.setEstanciaMinima(e.target.value)}
+        />
       </Field>
     </div>
   );
@@ -109,7 +125,7 @@ export function TemporadaDialog({
     }
     const identity = { codigo: codigo.trim(), nombre: nombre.trim(), coeficiente: coef };
     if (!temporada) {
-      const err = validatePeriodo(periodo.fechaInicio, periodo.fechaFin);
+      const err = validatePeriodo(periodo.fechaInicio, periodo.fechaFin, periodo.estanciaMinima);
       if (err) { toast.error(err); return; }
       if (hasConflict(periodo.fechaInicio, periodo.fechaFin)) return;
     }
@@ -121,7 +137,7 @@ export function TemporadaDialog({
       } else {
         await insertTemporadaConPrimerPeriodo(
           { ...identity, aplica_a: aplicaA, anio: defaultAnio },
-          { fecha_inicio: periodo.fechaInicio, fecha_fin: periodo.fechaFin },
+          { fecha_inicio: periodo.fechaInicio, fecha_fin: periodo.fechaFin, estancia_minima: estanciaOrNull(periodo.estanciaMinima) },
         );
       }
       toast.success("Temporada guardada");
@@ -136,12 +152,12 @@ export function TemporadaDialog({
 
   async function handleAddPeriodo() {
     if (!temporada) return;
-    const err = validatePeriodo(periodo.fechaInicio, periodo.fechaFin);
+    const err = validatePeriodo(periodo.fechaInicio, periodo.fechaFin, periodo.estanciaMinima);
     if (err) { toast.error(err); return; }
     if (hasConflict(periodo.fechaInicio, periodo.fechaFin)) return;
     setAddingPeriodo(true);
     try {
-      await insertPeriodo(temporada.id, periodo.fechaInicio, periodo.fechaFin);
+      await insertPeriodo(temporada.id, periodo.fechaInicio, periodo.fechaFin, estanciaOrNull(periodo.estanciaMinima));
       const newLatest = periodo.fechaFin > latestFin ? periodo.fechaFin : latestFin;
       periodo.reset(addDaysISO(newLatest, 1));
       onSaved();
@@ -197,7 +213,10 @@ export function TemporadaDialog({
           )}
           {periodos.map((p) => (
             <div key={p.id} className="flex items-center justify-between gap-2">
-              <span className="whitespace-nowrap">{fmtDate(p.fecha_inicio)} – {fmtDate(p.fecha_fin)}</span>
+              <span className="whitespace-nowrap">
+                {fmtDate(p.fecha_inicio)} – {fmtDate(p.fecha_fin)}
+                {p.estancia_minima != null && ` · mín. ${p.estancia_minima}`}
+              </span>
               <Button size="icon" variant="ghost" title="Eliminar período" onClick={() => handleDeletePeriodo(p.id)}>
                 <Trash2 className="h-4 w-4" />
               </Button>

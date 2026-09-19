@@ -208,6 +208,7 @@ export type TemporadaPeriodo = {
   temporada_id: string;
   fecha_inicio: string;
   fecha_fin: string;
+  estancia_minima: number | null;
   created_at: string;
 };
 
@@ -238,7 +239,7 @@ export type NuevaTemporadaInput = Pick<Temporada, "aplica_a" | "anio" | "codigo"
 
 export type TemporadaEditable = Pick<Temporada, "codigo" | "nombre" | "coeficiente">;
 
-export type PeriodoInput = Pick<TemporadaPeriodo, "fecha_inicio" | "fecha_fin">;
+export type PeriodoInput = Pick<TemporadaPeriodo, "fecha_inicio" | "fecha_fin" | "estancia_minima">;
 
 // Two inserts, not a transaction: if the period insert fails, the temporada
 // just created is deleted again (best effort) so no orphan is left behind.
@@ -250,7 +251,7 @@ export async function insertTemporadaConPrimerPeriodo(
   if (error) throw error;
   const temporadaId = (data as { id: string }).id;
   try {
-    await insertPeriodo(temporadaId, periodo.fecha_inicio, periodo.fecha_fin);
+    await insertPeriodo(temporadaId, periodo.fecha_inicio, periodo.fecha_fin, periodo.estancia_minima);
   } catch (e) {
     await pricingDb().from("temporadas").delete().eq("id", temporadaId);
     throw e;
@@ -263,10 +264,15 @@ export async function updateTemporada(id: string, changes: Partial<TemporadaEdit
   if (error) throw error;
 }
 
-export async function insertPeriodo(temporadaId: string, fechaInicio: string, fechaFin: string): Promise<void> {
+export async function insertPeriodo(
+  temporadaId: string,
+  fechaInicio: string,
+  fechaFin: string,
+  estanciaMinima: number | null = null,
+): Promise<void> {
   const { error } = await pricingDb()
     .from("temporada_periodos")
-    .insert({ temporada_id: temporadaId, fecha_inicio: fechaInicio, fecha_fin: fechaFin });
+    .insert({ temporada_id: temporadaId, fecha_inicio: fechaInicio, fecha_fin: fechaFin, estancia_minima: estanciaMinima });
   if (error) throw error;
 }
 
@@ -308,6 +314,7 @@ export async function copyTemporadasToYear(fromYear: number, toYear: number): Pr
             temporada_id: newId,
             fecha_inicio: addYearsISO(p.fecha_inicio, gap),
             fecha_fin: addYearsISO(p.fecha_fin, gap),
+            estancia_minima: p.estancia_minima,
           })),
         );
       if (perErr) throw perErr;
