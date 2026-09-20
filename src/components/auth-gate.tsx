@@ -20,6 +20,8 @@ const PUBLIC_PATHS = new Set(["/politica-privacidad"]);
 export function AuthGate({ children }: { children: ReactNode }) {
   const path = useRouterState({ select: (s) => s.location.pathname });
   const { user, loading, isPasswordRecovery } = useAuth();
+  // TEMPORARY DEBUG ([auth-dbg]): remove once the gate remount cause is known.
+  console.log("[auth-dbg] AuthGate render", { path, loading, userId: user?.id ?? null, isPasswordRecovery });
   if (PUBLIC_PATHS.has(path)) return <>{children}</>;
   if (loading) {
     return (
@@ -55,6 +57,22 @@ function RoleRouter({ children }: { children: ReactNode }) {
     const match = ROUTE_TO_MENU.find((m) => path === m.route || path.startsWith(m.route + "/"));
     return match ? canView(match.menu) : true;
   }, [isAdmin, onlyMiDia, path, canView]);
+
+  // TEMPORARY DEBUG ([auth-dbg]): remove once the gate remount cause is known.
+  const branch = loading
+    ? "spinner:loading"
+    : permLoading
+      ? "spinner:permLoading"
+      : notConfigured || !hasAnyAccess
+        ? "no-configurado"
+        : !routeAllowed
+          ? "spinner:!routeAllowed"
+          : "children";
+  console.log("[auth-dbg] RoleRouter render ->", branch, { loading, permLoading, routeAllowed, isAdmin, path });
+  useEffect(() => {
+    console.log("[auth-dbg] RoleRouter mounted");
+    return () => console.log("[auth-dbg] RoleRouter unmounted");
+  }, []);
 
   useEffect(() => {
     if (loading || permLoading || routeAllowed) return;

@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import type { Session, User } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -18,17 +18,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
   const [isPasswordRecovery, setIsPasswordRecovery] = useState(false);
+  // TEMPORARY DEBUG ([auth-dbg]): remove once the gate remount cause is known.
+  const loadingRef = useRef(loading);
+  loadingRef.current = loading;
 
   useEffect(() => {
+    console.log("[auth-dbg] AuthProvider mounted");
     const { data: sub } = supabase.auth.onAuthStateChange((event, s) => {
+      console.log("[auth-dbg] onAuthStateChange", event, { userId: s?.user?.id ?? null, loading: loadingRef.current });
       if (event === "PASSWORD_RECOVERY") setIsPasswordRecovery(true);
       setSession(s);
     });
     supabase.auth.getSession().then(({ data }) => {
+      console.log("[auth-dbg] getSession resolved", { userId: data.session?.user?.id ?? null, loading: loadingRef.current });
       setSession(data.session);
       setLoading(false);
     });
-    return () => sub.subscription.unsubscribe();
+    return () => {
+      console.log("[auth-dbg] AuthProvider unmounted");
+      sub.subscription.unsubscribe();
+    };
   }, []);
 
   const value: AuthCtx = {
