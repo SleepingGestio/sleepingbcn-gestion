@@ -22,6 +22,7 @@ import { fetchTemporadas, copyTemporadasToYear, deleteTemporada, deleteTemporada
 import { fmtDate } from "@/lib/format";
 import { SortHeader } from "@/components/sort-header";
 import { TemporadaDialog } from "@/components/temporada-dialog";
+import { useMountDebug } from "@/hooks/use-mount-debug";
 
 const firstInicio = (t: Temporada) =>
   t.temporada_periodos.map((p) => p.fecha_inicio).sort()[0] ?? "";
@@ -52,6 +53,7 @@ export const Route = createFileRoute("/pricing/temporadas")({
 type TabProps = { anio: number; aplicaA: TemporadaAplicaA; temporadas: Temporada[]; loading: boolean; error: Error | null; onSaved: () => void };
 
 function TemporadasTab({ anio, aplicaA, temporadas: all, loading, error, onSaved }: TabProps) {
+  useMountDebug("TemporadasTab");
   const { canEdit } = usePermissions();
   const canEditTemporadas = canEdit("pricing_temporadas");
 
@@ -221,6 +223,7 @@ const TABS: { label: string; component: ComponentType<TabProps> }[] = [
 ];
 
 function ConfiguracionTarifasPage() {
+  useMountDebug("ConfiguracionTarifasPage");
   const { canEdit } = usePermissions();
   const canEditTemporadas = canEdit("pricing_temporadas");
   const q = useQuery({ queryKey: ["pricing-temporadas"], queryFn: fetchTemporadas });

@@ -2,8 +2,11 @@ import type { ReactNode } from "react";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "./app-sidebar";
 import { useReleaseStuckPointerEvents } from "@/hooks/use-release-stuck-pointer-events";
+import { useMountDebug, useRouterEventsDebug } from "@/hooks/use-mount-debug";
 
 export function AppShell({ title, children }: { title: string; children: ReactNode }) {
+  useMountDebug("AppShell");
+  useRouterEventsDebug();
   useReleaseStuckPointerEvents();
   return (
     <SidebarProvider>
