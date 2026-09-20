@@ -24,50 +24,22 @@ export function useReleaseStuckPointerEvents() {
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout> | undefined;
 
-    // TEMPORARY DEBUG: remove once the stuck pointer-events cause is known.
-    const state = () => ({
-      inline: document.body.style.pointerEvents,
-      computed: getComputedStyle(document.body).pointerEvents,
-      styleAttr: document.body.getAttribute("style"),
-      dataScrollLocked: document.body.getAttribute("data-scroll-locked"),
-      visibility: document.visibilityState,
-    });
-    console.log("[stuck-pe] hook mounted", state());
-
     const check = () => {
       timer = undefined;
-      const st = state();
-      if (document.body.style.pointerEvents !== "none") {
-        console.log("[stuck-pe] check: inline pointer-events is not 'none', nothing to do", st);
-        return;
-      }
-      const open = document.querySelector(OPEN_OVERLAY);
-      if (open) {
-        console.log("[stuck-pe] check: open overlay found, not clearing", open, st);
-        return;
-      }
-      console.log("[stuck-pe] check: clearing stuck pointer-events", st);
+      if (document.body.style.pointerEvents !== "none") return;
+      if (document.querySelector(OPEN_OVERLAY)) return;
       document.body.style.pointerEvents = "";
-      console.log("[stuck-pe] check: after clearing", state());
     };
     const schedule = () => {
       if (timer) clearTimeout(timer);
       timer = setTimeout(check, SETTLE_MS);
     };
 
-    const observer = new MutationObserver((records) => {
-      console.log(
-        "[stuck-pe] observer fired",
-        records.map((r) => `${r.type}${r.attributeName ? `:${r.attributeName}` : ""}`),
-        state(),
-      );
-      schedule();
-    });
+    const observer = new MutationObserver(schedule);
     observer.observe(document.body, { attributes: true, attributeFilter: ["style"], childList: true });
     schedule();
 
     return () => {
-      console.log("[stuck-pe] hook unmounted", document.visibilityState);
       observer.disconnect();
       if (timer) clearTimeout(timer);
     };
