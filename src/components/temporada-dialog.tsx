@@ -17,28 +17,38 @@ import { isPositiveIntOrEmpty } from "@/components/evento-form-dialog";
 /**
  * Fecha inicio / Fecha fin / Estancia mínima state. While Fecha fin hasn't been touched by the
  * person, it follows Fecha inicio + 1 day; once they set it, it's left alone.
+ * `dirty` is true once the person has typed in any of the fields (the pre-filled
+ * defaults alone don't count), so a pending, unsaved period can be told apart.
  */
 function usePeriodoForm(initialInicio: string) {
   const [fechaInicio, setFechaInicioRaw] = useState(initialInicio);
   const [fechaFin, setFechaFinRaw] = useState(initialInicio ? addDaysISO(initialInicio, 1) : "");
-  const [estanciaMinima, setEstanciaMinima] = useState("");
+  const [estanciaMinima, setEstanciaMinimaRaw] = useState("");
+  const [dirty, setDirty] = useState(false);
   const finTouched = useRef(false);
 
   function setFechaInicio(v: string) {
+    setDirty(true);
     setFechaInicioRaw(v);
     if (!finTouched.current) setFechaFinRaw(v ? addDaysISO(v, 1) : "");
   }
   function setFechaFin(v: string) {
+    setDirty(true);
     finTouched.current = true;
     setFechaFinRaw(v);
   }
+  function setEstanciaMinima(v: string) {
+    setDirty(true);
+    setEstanciaMinimaRaw(v);
+  }
   function reset(nextInicio = "") {
+    setDirty(false);
     finTouched.current = false;
     setFechaInicioRaw(nextInicio);
     setFechaFinRaw(nextInicio ? addDaysISO(nextInicio, 1) : "");
-    setEstanciaMinima("");
+    setEstanciaMinimaRaw("");
   }
-  return { fechaInicio, fechaFin, estanciaMinima, setFechaInicio, setFechaFin, setEstanciaMinima, reset };
+  return { fechaInicio, fechaFin, estanciaMinima, dirty, setFechaInicio, setFechaFin, setEstanciaMinima, reset };
 }
 
 /** Returns an error message, or null when the range is valid. */
@@ -127,7 +137,10 @@ export function TemporadaDialog({
       return;
     }
     const identity = { codigo: codigo.trim(), nombre: nombre.trim(), coeficiente: coef };
-    if (!temporada) {
+    // Create always needs its first period. In edit mode, a period the person started
+    // typing but didn't add with "Añadir" is saved along with the identity fields.
+    const pendingPeriodo = !!temporada && periodo.dirty && periodo.fechaInicio !== "";
+    if (!temporada || pendingPeriodo) {
       const err = validatePeriodo(periodo.fechaInicio, periodo.fechaFin, periodo.estanciaMinima);
       if (err) { toast.error(err); return; }
       if (hasConflict(periodo.fechaInicio, periodo.fechaFin)) return;
@@ -137,13 +150,23 @@ export function TemporadaDialog({
     try {
       if (temporada) {
         await updateTemporada(temporada.id, identity);
+        if (pendingPeriodo) {
+          try {
+            await insertPeriodo(temporada.id, periodo.fechaInicio, periodo.fechaFin, estanciaOrNull(periodo.estanciaMinima));
+          } catch (e) {
+            // Identity fields are already saved; keep the dialog open so the period can be retried.
+            onSaved();
+            toast.error("Datos guardados, pero no se pudo añadir el período: " + (e as Error).message);
+            return;
+          }
+        }
       } else {
         await insertTemporadaConPrimerPeriodo(
           { ...identity, aplica_a: aplicaA, anio: defaultAnio },
           { fecha_inicio: periodo.fechaInicio, fecha_fin: periodo.fechaFin, estancia_minima: estanciaOrNull(periodo.estanciaMinima) },
         );
       }
-      toast.success("Temporada guardada");
+      toast.success(pendingPeriodo ? "Temporada y período guardados" : "Temporada guardada");
       onSaved();
       onClose();
     } catch (e) {
