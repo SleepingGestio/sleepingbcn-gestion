@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from "@/components/ui/dialog";
@@ -51,9 +51,11 @@ function validatePeriodo(fechaInicio: string, fechaFin: string, estanciaMinima: 
 
 const estanciaOrNull = (s: string) => (s.trim() === "" ? null : Number(s));
 
-function PeriodoInputs({ form }: { form: ReturnType<typeof usePeriodoForm> }) {
+// Two columns, like the eventos form: a native date input needs roughly 150px or
+// more to keep its calendar-picker icon visible, which three columns don't leave.
+function PeriodoInputs({ form, action }: { form: ReturnType<typeof usePeriodoForm>; action?: ReactNode }) {
   return (
-    <div className="grid grid-cols-3 gap-3">
+    <div className="grid grid-cols-2 gap-3">
       <Field label="Fecha inicio *">
         <Input type="date" value={form.fechaInicio} onChange={(e) => form.setFechaInicio(e.target.value)} />
       </Field>
@@ -70,6 +72,7 @@ function PeriodoInputs({ form }: { form: ReturnType<typeof usePeriodoForm> }) {
           onChange={(e) => form.setEstanciaMinima(e.target.value)}
         />
       </Field>
+      {action && <div className="flex items-end justify-end">{action}</div>}
     </div>
   );
 }
@@ -222,14 +225,14 @@ export function TemporadaDialog({
               </Button>
             </div>
           ))}
-          {temporada ? (
-            <div className="flex items-end gap-2 pt-1">
-              <div className="flex-1"><PeriodoInputs form={periodo} /></div>
-              <Button variant="outline" onClick={handleAddPeriodo} disabled={addingPeriodo}>Añadir</Button>
-            </div>
-          ) : (
-            <PeriodoInputs form={periodo} />
-          )}
+          <PeriodoInputs
+            form={periodo}
+            action={
+              temporada ? (
+                <Button variant="outline" onClick={handleAddPeriodo} disabled={addingPeriodo}>Añadir</Button>
+              ) : undefined
+            }
+          />
         </div>
 
         <DialogFooter>
