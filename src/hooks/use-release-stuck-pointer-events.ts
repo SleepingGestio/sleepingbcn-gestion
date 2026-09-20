@@ -30,6 +30,7 @@ export function useReleaseStuckPointerEvents() {
       computed: getComputedStyle(document.body).pointerEvents,
       styleAttr: document.body.getAttribute("style"),
       dataScrollLocked: document.body.getAttribute("data-scroll-locked"),
+      visibility: document.visibilityState,
     });
     console.log("[stuck-pe] hook mounted", state());
 
@@ -66,7 +67,7 @@ export function useReleaseStuckPointerEvents() {
     schedule();
 
     return () => {
-      console.log("[stuck-pe] hook unmounted");
+      console.log("[stuck-pe] hook unmounted", document.visibilityState);
       observer.disconnect();
       if (timer) clearTimeout(timer);
     };

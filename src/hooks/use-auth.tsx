@@ -23,19 +23,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   loadingRef.current = loading;
 
   useEffect(() => {
-    console.log("[auth-dbg] AuthProvider mounted");
+    console.log("[auth-dbg] AuthProvider mounted", document.visibilityState);
+    const onVisibility = () => console.log("[auth-dbg] visibilitychange ->", document.visibilityState);
+    document.addEventListener("visibilitychange", onVisibility);
     const { data: sub } = supabase.auth.onAuthStateChange((event, s) => {
-      console.log("[auth-dbg] onAuthStateChange", event, { userId: s?.user?.id ?? null, loading: loadingRef.current });
+      console.log("[auth-dbg] onAuthStateChange", event, {
+        userId: s?.user?.id ?? null,
+        loading: loadingRef.current,
+        visibility: document.visibilityState,
+      });
       if (event === "PASSWORD_RECOVERY") setIsPasswordRecovery(true);
       setSession(s);
     });
     supabase.auth.getSession().then(({ data }) => {
-      console.log("[auth-dbg] getSession resolved", { userId: data.session?.user?.id ?? null, loading: loadingRef.current });
+      console.log("[auth-dbg] getSession resolved", {
+        userId: data.session?.user?.id ?? null,
+        loading: loadingRef.current,
+        visibility: document.visibilityState,
+      });
       setSession(data.session);
       setLoading(false);
     });
     return () => {
       console.log("[auth-dbg] AuthProvider unmounted");
+      document.removeEventListener("visibilitychange", onVisibility);
       sub.subscription.unsubscribe();
     };
   }, []);
