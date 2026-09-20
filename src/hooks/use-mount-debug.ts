@@ -8,18 +8,27 @@ let nextInstanceId = 0;
  * Gives every component instance an id, so the log tells a real remount (new
  * id) apart from an effect re-running on the same, still-mounted instance.
  */
-export function useMountDebug(name: string) {
+export function useMountDebug(name: string, extra?: Record<string, unknown>) {
   const idRef = useRef<number | null>(null);
   if (idRef.current === null) idRef.current = ++nextInstanceId;
   const renderCount = useRef(0);
   renderCount.current += 1;
   const id = idRef.current;
-  console.log(`[mount-dbg] ${name}#${id} render #${renderCount.current}`);
+  console.log(`[mount-dbg] ${name}#${id} render #${renderCount.current}`, extra ?? "");
 
   useEffect(() => {
     console.log(`[mount-dbg] ${name}#${id} mounted`, document.visibilityState);
     return () => console.log(`[mount-dbg] ${name}#${id} unmounted`);
   }, [name, id]);
+}
+
+/** TEMPORARY DEBUG ([mount-dbg]): logs when a value's identity changes between renders. */
+export function useRefChangeDebug(label: string, value: unknown) {
+  const prev = useRef(value);
+  if (prev.current !== value) {
+    console.log(`[mount-dbg] ${label} changed identity`);
+    prev.current = value;
+  }
 }
 
 /** TEMPORARY DEBUG ([mount-dbg]): logs TanStack Router lifecycle events (loads/navigations re-running). */

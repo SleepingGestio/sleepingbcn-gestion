@@ -12,6 +12,7 @@ import {
 } from "@/lib/pricing";
 import { addDaysISO, fmtDate } from "@/lib/format";
 import { Field } from "@/components/plantilla-edit-dialog";
+import { useMountDebug } from "@/hooks/use-mount-debug";
 import { isPositiveIntOrEmpty } from "@/components/evento-form-dialog";
 
 /**
@@ -92,6 +93,11 @@ export function TemporadaDialog({
   onClose: () => void;
   onSaved: () => void;
 }) {
+  useMountDebug("TemporadaDialog", {
+    temporadaId: temporada?.id ?? null,
+    periodos: temporada?.temporada_periodos.length ?? null,
+    defaultAnio,
+  });
   const [codigo, setCodigo] = useState(temporada?.codigo ?? "");
   const [nombre, setNombre] = useState(temporada?.nombre ?? "");
   const [coeficiente, setCoeficiente] = useState(temporada ? String(temporada.coeficiente) : "");
@@ -178,8 +184,20 @@ export function TemporadaDialog({
   }
 
   return (
-    <Dialog open onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+    <Dialog
+      open
+      onOpenChange={(o) => {
+        console.log("[mount-dbg] TemporadaDialog onOpenChange", o);
+        if (!o) onClose();
+      }}
+    >
+      <DialogContent
+        className="max-w-lg max-h-[90vh] overflow-y-auto"
+        onPointerDownOutside={(e) => console.log("[mount-dbg] TemporadaDialog pointerDownOutside", e.target)}
+        onFocusOutside={(e) => console.log("[mount-dbg] TemporadaDialog focusOutside", e.target)}
+        onInteractOutside={(e) => console.log("[mount-dbg] TemporadaDialog interactOutside", e.target)}
+        onEscapeKeyDown={() => console.log("[mount-dbg] TemporadaDialog escapeKeyDown")}
+      >
         <DialogHeader>
           <DialogTitle>
             {temporada ? "Editar temporada" : "Nueva temporada"} · {defaultAnio} · {aplicaA === "city" ? "City" : "Rural"}

@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useState, type ComponentType } from "react";
+import { useEffect, useMemo, useState, type ComponentType } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { AppShell } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
@@ -22,7 +22,7 @@ import { fetchTemporadas, copyTemporadasToYear, deleteTemporada, deleteTemporada
 import { fmtDate } from "@/lib/format";
 import { SortHeader } from "@/components/sort-header";
 import { TemporadaDialog } from "@/components/temporada-dialog";
-import { useMountDebug } from "@/hooks/use-mount-debug";
+import { useMountDebug, useRefChangeDebug } from "@/hooks/use-mount-debug";
 
 const firstInicio = (t: Temporada) =>
   t.temporada_periodos.map((p) => p.fecha_inicio).sort()[0] ?? "";
@@ -54,6 +54,8 @@ type TabProps = { anio: number; aplicaA: TemporadaAplicaA; temporadas: Temporada
 
 function TemporadasTab({ anio, aplicaA, temporadas: all, loading, error, onSaved }: TabProps) {
   useMountDebug("TemporadasTab");
+  useRefChangeDebug("TemporadasTab prop all", all);
+  useRefChangeDebug("TemporadasTab prop onSaved", onSaved);
   const { canEdit } = usePermissions();
   const canEditTemporadas = canEdit("pricing_temporadas");
 
@@ -63,6 +65,15 @@ function TemporadasTab({ anio, aplicaA, temporadas: all, loading, error, onSaved
   const [sortKey, setSortKey] = useState<SortKey>("fechas");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const colSpan = canEditTemporadas ? 5 : 4;
+
+  // TEMPORARY DEBUG ([mount-dbg]): every change of the dialog state, and the key it renders with.
+  useEffect(() => {
+    console.log("[mount-dbg] TemporadasTab dialog state ->", dialog, "key:", dialog ? (dialog.id ?? "nueva") : null);
+  }, [dialog]);
+  const dialogTemporada = dialog?.id ? (all.find((t) => t.id === dialog.id) ?? null) : null;
+  if (dialog?.id && !dialogTemporada) {
+    console.log("[mount-dbg] TemporadasTab: dialog.id not found in `all`, dialog falls back to create mode", dialog.id);
+  }
 
   const temporadas = useMemo(() => {
     const pick = (t: Temporada) => {
@@ -170,7 +181,7 @@ function TemporadasTab({ anio, aplicaA, temporadas: all, loading, error, onSaved
       {dialog && (
         <TemporadaDialog
           key={dialog.id ?? "nueva"}
-          temporada={dialog.id ? all.find((t) => t.id === dialog.id) ?? null : null}
+          temporada={dialogTemporada}
           temporadasEnContexto={temporadas}
           defaultAnio={anio}
           aplicaA={aplicaA}
@@ -223,10 +234,15 @@ const TABS: { label: string; component: ComponentType<TabProps> }[] = [
 ];
 
 function ConfiguracionTarifasPage() {
-  useMountDebug("ConfiguracionTarifasPage");
   const { canEdit } = usePermissions();
   const canEditTemporadas = canEdit("pricing_temporadas");
   const q = useQuery({ queryKey: ["pricing-temporadas"], queryFn: fetchTemporadas });
+  useMountDebug("ConfiguracionTarifasPage", {
+    status: q.status,
+    fetchStatus: q.fetchStatus,
+    dataUpdatedAt: q.dataUpdatedAt,
+  });
+  useRefChangeDebug("ConfiguracionTarifasPage q.data", q.data);
   const all = useMemo(() => q.data ?? [], [q.data]);
   const [anioSel, setAnioSel] = useState<number | null>(null);
   const [aplicaA, setAplicaA] = useState<TemporadaAplicaA>("city");
