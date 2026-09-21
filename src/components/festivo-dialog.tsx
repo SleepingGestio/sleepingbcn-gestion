@@ -5,19 +5,23 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
-import { insertFestivo } from "@/lib/pricing";
+import { insertFestivo, updateFestivo, type Festivo } from "@/lib/pricing";
 import { Field } from "@/components/plantilla-edit-dialog";
 
-/** Small dialog to add a local festivo (Fecha + Nombre) to the año in view. */
+/**
+ * Create (no `festivo`, always a "local" one) / edit (`festivo` given) dialog: Fecha + Nombre only.
+ * The tipo of an existing festivo is not editable.
+ */
 export function FestivoDialog({
-  anio, onClose, onSaved,
+  festivo, anio, onClose, onSaved,
 }: {
+  festivo?: Festivo | null;
   anio: number;
   onClose: () => void;
   onSaved: () => void;
 }) {
-  const [fecha, setFecha] = useState(`${anio}-01-01`);
-  const [nombre, setNombre] = useState("");
+  const [fecha, setFecha] = useState(festivo?.fecha ?? `${anio}-01-01`);
+  const [nombre, setNombre] = useState(festivo?.nombre ?? "");
   const [saving, setSaving] = useState(false);
 
   async function handleSubmit() {
@@ -27,8 +31,9 @@ export function FestivoDialog({
     if (!nombre.trim()) { toast.error("El nombre es obligatorio"); return; }
     setSaving(true);
     try {
-      await insertFestivo(fecha, nombre.trim());
-      toast.success("Festivo añadido");
+      if (festivo) await updateFestivo(festivo.id, { fecha, nombre: nombre.trim() });
+      else await insertFestivo(fecha, nombre.trim());
+      toast.success(festivo ? "Festivo guardado" : "Festivo añadido");
       onSaved();
       onClose();
     } catch (e) {
@@ -42,7 +47,7 @@ export function FestivoDialog({
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-w-sm">
         <DialogHeader>
-          <DialogTitle>Añadir festivo local · {anio}</DialogTitle>
+          <DialogTitle>{festivo ? "Editar festivo" : "Añadir festivo local"} · {anio}</DialogTitle>
           <DialogDescription className="sr-only">Formulario de festivo local</DialogDescription>
         </DialogHeader>
         <div className="grid gap-3 text-sm">

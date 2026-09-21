@@ -500,7 +500,12 @@ export async function deletePrecioBaseByYear(anio: number): Promise<void> {
   if (error) throw error;
 }
 
-export type FestivoTipo = "nacional_catalan" | "local";
+/**
+ * nacional / catalan come from generarFestivosNacionalYCatalan; comunidad_otras / internacional (and
+ * Barcelona's Segunda Pascua as a "local") from generarFestivosComunidadesEInternacionales; every other
+ * "local" is added by hand.
+ */
+export type FestivoTipo = "nacional" | "catalan" | "comunidad_otras" | "internacional" | "local";
 
 /** Calendar fact, not a pricing one: no aplica_a, and no effect on the price calculation for now. */
 export type Festivo = {
@@ -522,6 +527,12 @@ export async function fetchFestivos(): Promise<Festivo[]> {
 /** Manual entries are always "local". */
 export async function insertFestivo(fecha: string, nombre: string): Promise<void> {
   const { error } = await pricingDb().from("festivos").insert({ fecha, nombre, tipo: "local" });
+  if (error) throw error;
+}
+
+/** Only fecha and nombre change; the tipo of an existing festivo stays as it is. */
+export async function updateFestivo(id: string, changes: { fecha: string; nombre: string }): Promise<void> {
+  const { error } = await pricingDb().from("festivos").update(changes).eq("id", id);
   if (error) throw error;
 }
 
@@ -549,42 +560,133 @@ function domingoResurreccion(anio: number): Date {
   return new Date(Date.UTC(anio, mes - 1, dia));
 }
 
-/** The national + Catalan holidays of a year as { fecha, nombre }, sorted by date. Pure. */
-export function festivosNacionalesCatalanes(anio: number): { fecha: string; nombre: string }[] {
-  const fixed: [number, number, string][] = [
-    [1, 1, "Año Nuevo"],
-    [1, 6, "Reyes"],
-    [5, 1, "Fiesta del Trabajo"],
-    [6, 24, "San Juan"],
-    [8, 15, "La Asunción"],
-    [9, 11, "Diada Nacional de Cataluña"],
-    [10, 12, "Fiesta Nacional de España"],
-    [11, 1, "Todos los Santos"],
-    [12, 6, "Día de la Constitución"],
-    [12, 8, "La Inmaculada"],
-    [12, 25, "Navidad"],
-    [12, 26, "San Esteban"],
+// Several festivos can share a date, so the unique constraint is (id_negocio, fecha, nombre).
+const FESTIVOS_CONFLICT = "id_negocio,fecha,nombre";
+
+/**
+ * The national and Catalan-only holidays of a year, sorted by date. Pure.
+ * "nacional" is observed all over Spain; "catalan" only in Catalonia.
+ */
+export function festivosNacionalYCatalan(anio: number): { fecha: string; nombre: string; tipo: "nacional" | "catalan" }[] {
+  const fixed: [number, number, string, "nacional" | "catalan"][] = [
+    [1, 1, "Año Nuevo", "nacional"],
+    [1, 6, "Reyes", "nacional"],
+    [5, 1, "Fiesta del Trabajo", "nacional"],
+    [6, 24, "San Juan", "catalan"],
+    [8, 15, "La Asunción", "nacional"],
+    [9, 11, "Diada Nacional de Cataluña", "catalan"],
+    [10, 12, "Fiesta Nacional de España", "nacional"],
+    [11, 1, "Todos los Santos", "nacional"],
+    [12, 6, "Día de la Constitución", "nacional"],
+    [12, 8, "La Inmaculada", "nacional"],
+    [12, 25, "Navidad", "nacional"],
+    [12, 26, "San Esteban", "catalan"],
   ];
   const pad = (n: number) => String(n).padStart(2, "0");
-  const lista = fixed.map(([mes, dia, nombre]) => ({ fecha: `${anio}-${pad(mes)}-${pad(dia)}`, nombre }));
+  const lista = fixed.map(([mes, dia, nombre, tipo]) => ({ fecha: `${anio}-${pad(mes)}-${pad(dia)}`, nombre, tipo }));
 
   const pascua = domingoResurreccion(anio).toISOString().slice(0, 10);
   lista.push(
-    { fecha: addDaysISO(pascua, -3), nombre: "Jueves Santo" },
-    { fecha: addDaysISO(pascua, -2), nombre: "Viernes Santo" },
-    { fecha: addDaysISO(pascua, 1), nombre: "Lunes de Pascua Florida" },
+    { fecha: addDaysISO(pascua, -3), nombre: "Jueves Santo", tipo: "catalan" },
+    { fecha: addDaysISO(pascua, -2), nombre: "Viernes Santo", tipo: "nacional" },
+    { fecha: addDaysISO(pascua, 1), nombre: "Lunes de Pascua Florida", tipo: "catalan" },
   );
   return lista.sort((x, y) => x.fecha.localeCompare(y.fecha));
 }
 
 /**
- * Upserts the national/Catalan holidays of `anio` (onConflict on the unique (id_negocio, fecha)), so
- * running it again for the same year updates the rows instead of duplicating them. A date that is
- * already stored — even as a "local" holiday — is overwritten as nacional_catalan. Returns rows upserted.
+ * Upserts the national and Catalan holidays of `anio` (onConflict on the unique (id_negocio, fecha, nombre)),
+ * so running it again for the same year updates the rows instead of duplicating them. A stored row with the
+ * same fecha AND nombre — whatever its tipo, even "local" — is overwritten with the generated tipo.
+ * Returns rows upserted.
  */
-export async function generarFestivosNacionalesCatalanes(anio: number): Promise<number> {
-  const rows = festivosNacionalesCatalanes(anio).map((f) => ({ ...f, tipo: "nacional_catalan" as const }));
-  const { error } = await pricingDb().from("festivos").upsert(rows, { onConflict: "id_negocio,fecha" });
+export async function generarFestivosNacionalYCatalan(anio: number): Promise<number> {
+  const rows = festivosNacionalYCatalan(anio);
+  const { error } = await pricingDb().from("festivos").upsert(rows, { onConflict: FESTIVOS_CONFLICT });
+  if (error) throw error;
+  return rows.length;
+}
+
+/** First (or last, if `ultimo`) Monday of a month, in UTC. `mes` is 1-12. */
+function lunesDelMes(anio: number, mes: number, ultimo: boolean): Date {
+  if (ultimo) {
+    const fin = new Date(Date.UTC(anio, mes, 0)); // last day of that month
+    const delta = (fin.getUTCDay() + 6) % 7;
+    fin.setUTCDate(fin.getUTCDate() - delta);
+    return fin;
+  }
+  const ini = new Date(Date.UTC(anio, mes - 1, 1));
+  const delta = (8 - ini.getUTCDay()) % 7;
+  ini.setUTCDate(1 + delta);
+  return ini;
+}
+
+/**
+ * Holidays of other Spanish comunidades and of the countries most guests come from, plus Barcelona's own
+ * "Segunda Pascua" (the only "local" one generated). Sorted by date. Pure.
+ *
+ * The countries/regions are part of each nombre: two rows may not share fecha AND nombre (see
+ * FESTIVOS_CONFLICT), and several of these dates and names ("La Asunción", "Todos los Santos",
+ * "La Inmaculada") also exist as "nacional" rows, which a plain nombre would silently overwrite.
+ */
+export function festivosComunidadesEInternacionales(
+  anio: number,
+): { fecha: string; nombre: string; tipo: "comunidad_otras" | "internacional" | "local" }[] {
+  type Tipo = "comunidad_otras" | "internacional" | "local";
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const fijo = (mes: number, dia: number, nombre: string, tipo: Tipo) => ({ fecha: `${anio}-${pad(mes)}-${pad(dia)}`, nombre, tipo });
+  const iso = (d: Date) => d.toISOString().slice(0, 10);
+
+  const lista: { fecha: string; nombre: string; tipo: Tipo }[] = [
+    // Other Spanish comunidades
+    fijo(2, 28, "Día de Andalucía", "comunidad_otras"),
+    fijo(3, 19, "San José (Comunidad Valenciana, Madrid, Murcia, Navarra, País Vasco)", "comunidad_otras"),
+    fijo(5, 2, "Día de la Comunidad de Madrid", "comunidad_otras"),
+    fijo(5, 15, "San Isidro (Madrid)", "comunidad_otras"),
+    fijo(7, 25, "Santiago Apóstol (Madrid, Castilla y León, Galicia, Navarra, País Vasco)", "comunidad_otras"),
+    fijo(11, 9, "La Almudena (Madrid)", "comunidad_otras"),
+    // International, fixed dates
+    fijo(5, 8, "Victory Day (Francia)", "internacional"),
+    fijo(7, 14, "Bastille Day (Francia)", "internacional"),
+    fijo(8, 15, "La Asunción (Francia, Italia)", "internacional"),
+    fijo(10, 3, "Día de la Unidad Alemana (Alemania)", "internacional"),
+    fijo(11, 1, "Todos los Santos (Francia, Italia)", "internacional"),
+    fijo(11, 11, "Armistice Day (Francia)", "internacional"),
+    fijo(12, 8, "La Inmaculada (Italia)", "internacional"),
+    fijo(12, 26, "Boxing Day (Reino Unido, Alemania, Italia)", "internacional"),
+  ];
+
+  // International, from Easter Sunday
+  const pascua = iso(domingoResurreccion(anio));
+  lista.push(
+    { fecha: addDaysISO(pascua, 39), nombre: "Ascensión (Alemania, Francia)", tipo: "internacional" },
+    // Not Francia: Whit Monday stopped being an official holiday there in 2004.
+    { fecha: addDaysISO(pascua, 50), nombre: "Pfingstmontag / Lunes de Pentecostés (Alemania)", tipo: "internacional" },
+  );
+
+  // International, UK bank holidays (nth Monday of the month)
+  lista.push(
+    { fecha: iso(lunesDelMes(anio, 5, false)), nombre: "Early May Bank Holiday (Reino Unido)", tipo: "internacional" },
+    { fecha: iso(lunesDelMes(anio, 5, true)), nombre: "Spring Bank Holiday (Reino Unido)", tipo: "internacional" },
+    { fecha: iso(lunesDelMes(anio, 8, true)), nombre: "Summer Bank Holiday (Reino Unido)", tipo: "internacional" },
+  );
+
+  // Barcelona's own choice: same date as the German Pfingstmontag, but a separate row with its own
+  // nombre and tipo "local" (a municipal holiday, not a German national one).
+  lista.push({ fecha: addDaysISO(pascua, 50), nombre: "Segunda Pascua (Lunes de Pentecostés)", tipo: "local" });
+
+  return lista.sort((x, y) => x.fecha.localeCompare(y.fecha) || x.nombre.localeCompare(y.nombre));
+}
+
+/**
+ * Upserts the comunidades/internacionales holidays of `anio` (and Barcelona's Segunda Pascua) in one call,
+ * onConflict on (id_negocio, fecha, nombre), so re-running it updates rather than duplicates.
+ * Two of the rows share a date (Pfingstmontag and Segunda Pascua) but not a nombre, so they coexist.
+ * Returns rows upserted.
+ */
+export async function generarFestivosComunidadesEInternacionales(anio: number): Promise<number> {
+  const rows = festivosComunidadesEInternacionales(anio);
+  const { error } = await pricingDb().from("festivos").upsert(rows, { onConflict: FESTIVOS_CONFLICT });
   if (error) throw error;
   return rows.length;
 }
