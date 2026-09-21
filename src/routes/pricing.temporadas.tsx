@@ -100,7 +100,7 @@ function TemporadasTab({ anio, aplicaA, temporadas: all, loading, error, onSaved
   return (
     <>
       <div className="flex justify-end gap-2 mb-4">
-        <Button size="sm" variant="outline" onClick={() => setGaps(findCoverageGaps(temporadas, anio))}>
+        <Button size="sm" variant="outline" onClick={() => setGaps(findCoverageGaps(temporadas.flatMap((t) => t.temporada_periodos), anio))}>
           <CalendarCheck className="h-4 w-4 mr-1" /> Comprobar cobertura
         </Button>
         {canEditTemporadas && (

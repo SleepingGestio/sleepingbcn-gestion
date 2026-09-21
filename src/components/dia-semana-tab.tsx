@@ -4,14 +4,17 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
+  Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
+} from "@/components/ui/dialog";
+import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Pencil, Plus, Trash2 } from "lucide-react";
+import { CalendarCheck, Pencil, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { usePermissions } from "@/hooks/use-permissions";
 import {
-  fetchDiaSemanaPeriodos, deleteDiaSemanaPeriodo,
+  fetchDiaSemanaPeriodos, deleteDiaSemanaPeriodo, findCoverageGaps,
   type DiaSemanaPeriodo, type TemporadaAplicaA,
 } from "@/lib/pricing";
 import { addDaysISO, fmtDate } from "@/lib/format";
@@ -28,6 +31,7 @@ export function DiaSemanaTab({ anio, aplicaA }: { anio: number; aplicaA: Tempora
 
   const [dialog, setDialog] = useState<{ id: string | null } | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<DiaSemanaPeriodo | null>(null);
+  const [gaps, setGaps] = useState<{ desde: string; hasta: string }[] | null>(null);
   const [sortKey, setSortKey] = useState<SortKey>("fechas");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const colSpan = canEditTarifas ? 4 : 3;
@@ -74,13 +78,16 @@ export function DiaSemanaTab({ anio, aplicaA }: { anio: number; aplicaA: Tempora
 
   return (
     <>
-      {canEditTarifas && (
-        <div className="flex justify-end mb-4">
+      <div className="flex justify-end gap-2 mb-4">
+        <Button size="sm" variant="outline" onClick={() => setGaps(findCoverageGaps(periodos, anio))}>
+          <CalendarCheck className="h-4 w-4 mr-1" /> Comprobar cobertura
+        </Button>
+        {canEditTarifas && (
           <Button size="sm" onClick={() => setDialog({ id: null })}>
             <Plus className="h-4 w-4 mr-1" /> Nuevo periodo
           </Button>
-        </div>
-      )}
+        )}
+      </div>
       <Card className="overflow-hidden bg-white">
         <Table>
           <TableHeader>
@@ -147,6 +154,27 @@ export function DiaSemanaTab({ anio, aplicaA }: { anio: number; aplicaA: Tempora
           onSaved={() => q.refetch()}
         />
       )}
+
+      <Dialog open={gaps !== null} onOpenChange={(o) => !o && setGaps(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Cobertura {anio} · {aplicaA === "city" ? "City" : "Rural"}</DialogTitle>
+            <DialogDescription className="sr-only">Resultado de la comprobación de cobertura del año</DialogDescription>
+          </DialogHeader>
+          {gaps?.length === 0 ? (
+            <p className="text-sm">Todo el año está cubierto por algún período</p>
+          ) : (
+            <ul className="text-sm space-y-1">
+              {gaps?.map((g) => (
+                <li key={g.desde}>Sin período asignado: {fmtDate(g.desde)} – {fmtDate(g.hasta)}</li>
+              ))}
+            </ul>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setGaps(null)}>Cerrar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <AlertDialog open={!!deleteTarget} onOpenChange={(o) => !o && setDeleteTarget(null)}>
         <AlertDialogContent>

@@ -358,16 +358,17 @@ export function findPeriodoOverlap(
   return null;
 }
 
-/** Stretches of `anio` (Jan 1 – Dec 31) not covered by any period of the given temporadas. */
-export function findCoverageGaps(temporadas: Temporada[], anio: number): { desde: string; hasta: string }[] {
+/** Any date range (inclusive on both ends); temporada periods and dia_semana periods both fit. */
+export type PeriodoRango = { fecha_inicio: string; fecha_fin: string };
+
+/** Stretches of `anio` (Jan 1 – Dec 31) not covered by any of the given date ranges. */
+export function findCoverageGaps(periodos: PeriodoRango[], anio: number): { desde: string; hasta: string }[] {
   const yearStart = `${anio}-01-01`;
   const yearEnd = `${anio}-12-31`;
-  const periodos = temporadas
-    .flatMap((t) => t.temporada_periodos)
-    .sort((a, b) => a.fecha_inicio.localeCompare(b.fecha_inicio));
+  const sorted = [...periodos].sort((a, b) => a.fecha_inicio.localeCompare(b.fecha_inicio));
   const gaps: { desde: string; hasta: string }[] = [];
   let cursor = yearStart; // first day not yet known to be covered
-  for (const p of periodos) {
+  for (const p of sorted) {
     if (cursor > yearEnd) break;
     if (p.fecha_fin < cursor) continue;
     if (p.fecha_inicio > cursor) gaps.push({ desde: cursor, hasta: addDaysISO(p.fecha_inicio, -1) });
