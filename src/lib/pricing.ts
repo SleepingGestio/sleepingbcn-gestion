@@ -376,3 +376,52 @@ export function findCoverageGaps(temporadas: Temporada[], anio: number): { desde
   if (cursor <= yearEnd) gaps.push({ desde: cursor, hasta: yearEnd });
   return gaps;
 }
+
+export type DiaSemanaPeriodo = {
+  id: string;
+  id_negocio: string;
+  aplica_a: TemporadaAplicaA;
+  anio: number;
+  fecha_inicio: string;
+  fecha_fin: string;
+  /** Coefficient for weekdays. */
+  coef_entresemana: number;
+  /** Coefficient for Friday-Saturday-Sunday. */
+  coef_finsemana: number;
+  created_at: string;
+  updated_at: string;
+};
+
+export async function fetchDiaSemanaPeriodos(): Promise<DiaSemanaPeriodo[]> {
+  const { data, error } = await pricingDb()
+    .from("dia_semana_periodos")
+    .select("*")
+    .order("aplica_a", { ascending: true })
+    .order("fecha_inicio", { ascending: true });
+  if (error) throw error;
+  return (data ?? []) as DiaSemanaPeriodo[];
+}
+
+export type NuevoDiaSemanaPeriodoInput = Pick<
+  DiaSemanaPeriodo,
+  "aplica_a" | "anio" | "fecha_inicio" | "fecha_fin" | "coef_entresemana" | "coef_finsemana"
+>;
+
+export async function insertDiaSemanaPeriodo(input: NuevoDiaSemanaPeriodoInput): Promise<void> {
+  const { error } = await pricingDb().from("dia_semana_periodos").insert(input);
+  if (error) throw error;
+}
+
+// aplica_a and anio stay fixed once created, same as temporadas.
+export async function updateDiaSemanaPeriodo(
+  id: string,
+  changes: Partial<Omit<NuevoDiaSemanaPeriodoInput, "aplica_a" | "anio">>,
+): Promise<void> {
+  const { error } = await pricingDb().from("dia_semana_periodos").update(changes).eq("id", id);
+  if (error) throw error;
+}
+
+export async function deleteDiaSemanaPeriodo(id: string): Promise<void> {
+  const { error } = await pricingDb().from("dia_semana_periodos").delete().eq("id", id);
+  if (error) throw error;
+}

@@ -22,6 +22,7 @@ import { fetchTemporadas, copyTemporadasToYear, deleteTemporada, deleteTemporada
 import { fmtDate } from "@/lib/format";
 import { SortHeader } from "@/components/sort-header";
 import { TemporadaDialog } from "@/components/temporada-dialog";
+import { DiaSemanaTab } from "@/components/dia-semana-tab";
 
 const firstInicio = (t: Temporada) =>
   t.temporada_periodos.map((p) => p.fecha_inicio).sort()[0] ?? "";
@@ -218,6 +219,7 @@ function TemporadasTab({ anio, aplicaA, temporadas: all, loading, error, onSaved
 
 const TABS: { label: string; component: ComponentType<TabProps> }[] = [
   { label: "Temporadas", component: TemporadasTab },
+  { label: "Días de la semana", component: DiaSemanaTab },
 ];
 
 function ConfiguracionTarifasPage() {
