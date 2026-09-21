@@ -451,3 +451,51 @@ export async function deleteDiaSemanaPeriodosByYear(anio: number): Promise<void>
   const { error } = await pricingDb().from("dia_semana_periodos").delete().eq("anio", anio);
   if (error) throw error;
 }
+
+export type PrecioBase = {
+  id: string;
+  id_negocio: string;
+  aplica_a: TemporadaAplicaA;
+  anio: number;
+  precio: number;
+  created_at: string;
+  updated_at: string;
+};
+
+export async function fetchPrecioBase(): Promise<PrecioBase[]> {
+  const { data, error } = await pricingDb()
+    .from("precio_base")
+    .select("*")
+    .order("anio", { ascending: true })
+    .order("aplica_a", { ascending: true });
+  if (error) throw error;
+  return (data ?? []) as PrecioBase[];
+}
+
+// At most one row per (id_negocio, aplica_a, anio); id_negocio comes from the column default.
+const PRECIO_BASE_CONFLICT = "id_negocio,aplica_a,anio";
+
+/** Sets the base price for a year + group, creating the row if there isn't one yet. */
+export async function upsertPrecioBase(aplicaA: TemporadaAplicaA, anio: number, precio: number): Promise<void> {
+  const { error } = await pricingDb()
+    .from("precio_base")
+    .upsert({ aplica_a: aplicaA, anio, precio }, { onConflict: PRECIO_BASE_CONFLICT });
+  if (error) throw error;
+}
+
+/** Copies the base price of `fromYear` (both groups, whichever exist) into `toYear`. Returns rows copied. */
+export async function copyPrecioBaseToYear(fromYear: number, toYear: number): Promise<number> {
+  const { data, error } = await pricingDb().from("precio_base").select("*").eq("anio", fromYear);
+  if (error) throw error;
+  const rows = ((data ?? []) as PrecioBase[]).map((p) => ({ aplica_a: p.aplica_a, anio: toYear, precio: p.precio }));
+  if (rows.length === 0) return 0;
+  const { error: upErr } = await pricingDb().from("precio_base").upsert(rows, { onConflict: PRECIO_BASE_CONFLICT });
+  if (upErr) throw upErr;
+  return rows.length;
+}
+
+/** Deletes the base price rows of the year, both groups. */
+export async function deletePrecioBaseByYear(anio: number): Promise<void> {
+  const { error } = await pricingDb().from("precio_base").delete().eq("anio", anio);
+  if (error) throw error;
+}

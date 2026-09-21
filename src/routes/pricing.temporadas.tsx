@@ -21,12 +21,14 @@ import { usePermissions } from "@/hooks/use-permissions";
 import {
   fetchTemporadas, copyTemporadasToYear, deleteTemporada, deleteTemporadasByYear, findCoverageGaps,
   fetchDiaSemanaPeriodos, copyDiaSemanaPeriodosToYear, deleteDiaSemanaPeriodosByYear,
+  fetchPrecioBase, copyPrecioBaseToYear, deletePrecioBaseByYear, type PrecioBase,
   type Temporada, type TemporadaAplicaA,
 } from "@/lib/pricing";
-import { fmtDate } from "@/lib/format";
+import { fmtDate, fmtEUR } from "@/lib/format";
 import { SortHeader } from "@/components/sort-header";
 import { TemporadaDialog } from "@/components/temporada-dialog";
 import { DiaSemanaTab } from "@/components/dia-semana-tab";
+import { PrecioBaseTab } from "@/components/precio-base-tab";
 
 const firstInicio = (t: Temporada) =>
   t.temporada_periodos.map((p) => p.fecha_inicio).sort()[0] ?? "";
@@ -224,12 +226,22 @@ function TemporadasTab({ anio, aplicaA, temporadas: all, loading, error, onSaved
 const TABS: { label: string; component: ComponentType<TabProps> }[] = [
   { label: "Temporadas", component: TemporadasTab },
   { label: "Días de la semana", component: DiaSemanaTab },
+  { label: "Precio base", component: PrecioBaseTab },
 ];
 
 const countByGroup = (rows: { aplica_a: TemporadaAplicaA }[]) => ({
   city: rows.filter((r) => r.aplica_a === "city").length,
   rural: rows.filter((r) => r.aplica_a === "rural").length,
 });
+
+// "City: 120,00 €, Rural: sin definir" for the given year.
+const precioBaseLabel = (rows: PrecioBase[], year: number) => {
+  const of = (g: TemporadaAplicaA) => {
+    const p = rows.find((r) => r.anio === year && r.aplica_a === g);
+    return p ? fmtEUR(p.precio) : "sin definir";
+  };
+  return `City: ${of("city")}, Rural: ${of("rural")}`;
+};
 
 function ConfiguracionTarifasPage() {
   const { canEdit } = usePermissions();
@@ -239,6 +251,9 @@ function ConfiguracionTarifasPage() {
   // Same key as DiaSemanaTab, so react-query shares one fetch between them.
   const dq = useQuery({ queryKey: ["pricing-dia-semana-periodos"], queryFn: fetchDiaSemanaPeriodos });
   const allDia = useMemo(() => dq.data ?? [], [dq.data]);
+  // Same key as PrecioBaseTab.
+  const pq = useQuery({ queryKey: ["pricing-precio-base"], queryFn: fetchPrecioBase });
+  const allPrecio = useMemo(() => pq.data ?? [], [pq.data]);
   const [anioSel, setAnioSel] = useState<number | null>(null);
   const [aplicaA, setAplicaA] = useState<TemporadaAplicaA>("city");
   const [tab, setTab] = useState(0);
@@ -250,10 +265,11 @@ function ConfiguracionTarifasPage() {
   const [copying, setCopying] = useState(false);
   const [copyTemporadas, setCopyTemporadas] = useState(true);
   const [copyDia, setCopyDia] = useState(true);
+  const [copyPrecio, setCopyPrecio] = useState(true);
 
   const dataYears = useMemo(
-    () => [...new Set([...all.map((t) => t.anio), ...allDia.map((p) => p.anio)])],
-    [all, allDia],
+    () => [...new Set([...all.map((t) => t.anio), ...allDia.map((p) => p.anio), ...allPrecio.map((p) => p.anio)])],
+    [all, allDia, allPrecio],
   );
   const thisYear = new Date().getFullYear();
   const anio = anioSel ?? (dataYears.includes(thisYear) ? thisYear : dataYears.length ? Math.max(...dataYears) : thisYear);
@@ -284,6 +300,7 @@ function ConfiguracionTarifasPage() {
     if (dataYears.includes(y - 1)) {
       setCopyTemporadas(true);
       setCopyDia(true);
+      setCopyPrecio(true);
       setCopyPrompt(y);
     } else {
       setAnioSel(y);
@@ -302,12 +319,13 @@ function ConfiguracionTarifasPage() {
     try {
       await deleteTemporadasByYear(deleteYear);
       await deleteDiaSemanaPeriodosByYear(deleteYear);
+      await deletePrecioBaseByYear(deleteYear);
       toast.success(`Año ${deleteYear} eliminado`);
-      await Promise.all([q.refetch(), dq.refetch()]);
+      await Promise.all([q.refetch(), dq.refetch(), pq.refetch()]);
       setAnioSel(null);
     } catch (e) {
       toast.error("Error al eliminar: " + (e as Error).message);
-      await Promise.all([q.refetch(), dq.refetch()]);
+      await Promise.all([q.refetch(), dq.refetch(), pq.refetch()]);
     } finally {
       setDeletingYear(false);
       setDeleteYear(null);
@@ -328,11 +346,15 @@ function ConfiguracionTarifasPage() {
         const n = await copyDiaSemanaPeriodosToYear(y - 1, y);
         toast.success(`${n} períodos de días de la semana copiados de ${y - 1} a ${y}`);
       }
-      await Promise.all([q.refetch(), dq.refetch()]);
+      if (copyPrecio) {
+        const n = await copyPrecioBaseToYear(y - 1, y);
+        toast.success(`${n} precios base copiados de ${y - 1} a ${y}`);
+      }
+      await Promise.all([q.refetch(), dq.refetch(), pq.refetch()]);
       setAnioSel(y);
     } catch (e) {
       toast.error("Error al copiar: " + (e as Error).message);
-      await Promise.all([q.refetch(), dq.refetch()]);
+      await Promise.all([q.refetch(), dq.refetch(), pq.refetch()]);
     } finally {
       setCopying(false);
       setCopyPrompt(null);
@@ -422,10 +444,14 @@ function ConfiguracionTarifasPage() {
               <Checkbox checked={copyDia} onCheckedChange={(c) => setCopyDia(c === true)} className="mt-0.5" />
               <span>Días de la semana ({copyCounts.dia.city} de City, {copyCounts.dia.rural} de Rural)</span>
             </label>
+            <label className="flex items-start gap-2">
+              <Checkbox checked={copyPrecio} onCheckedChange={(c) => setCopyPrecio(c === true)} className="mt-0.5" />
+              <span>Precio base ({precioBaseLabel(allPrecio, (copyPrompt ?? 0) - 1)})</span>
+            </label>
           </div>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={copying}>No copiar</AlertDialogCancel>
-            <AlertDialogAction disabled={copying || (!copyTemporadas && !copyDia)} onClick={(e) => { e.preventDefault(); void confirmCopy(); }}>
+            <AlertDialogAction disabled={copying || (!copyTemporadas && !copyDia && !copyPrecio)} onClick={(e) => { e.preventDefault(); void confirmCopy(); }}>
               Copiar
             </AlertDialogAction>
           </AlertDialogFooter>
@@ -437,14 +463,15 @@ function ConfiguracionTarifasPage() {
           <AlertDialogHeader>
             <AlertDialogTitle>¿Eliminar todo el año {deleteYear}?</AlertDialogTitle>
             <AlertDialogDescription>
-              Se borrarán todas las temporadas y todos los períodos de días de la semana de {deleteYear} en City y Rural. Esta acción no se puede deshacer.
+              Se borrarán todas las temporadas, todos los períodos de días de la semana y el precio base de {deleteYear} en City y Rural. Esta acción no se puede deshacer.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <label className="flex items-start gap-2 text-sm">
             <Checkbox checked={deleteAck} onCheckedChange={(c) => setDeleteAck(c === true)} className="mt-0.5" />
             <span>
-              Entiendo que se borrarán todas las temporadas de {deleteYear} ({deleteCounts.temporadas.city} de City, {deleteCounts.temporadas.rural} de Rural)
-              y todos los períodos de días de la semana ({deleteCounts.dia.city} de City, {deleteCounts.dia.rural} de Rural)
+              Entiendo que se borrarán todas las temporadas de {deleteYear} ({deleteCounts.temporadas.city} de City, {deleteCounts.temporadas.rural} de Rural),
+              todos los períodos de días de la semana ({deleteCounts.dia.city} de City, {deleteCounts.dia.rural} de Rural)
+              y el precio base ({deleteYear != null ? precioBaseLabel(allPrecio, deleteYear) : ""})
             </span>
           </label>
           <AlertDialogFooter>
