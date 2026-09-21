@@ -21,7 +21,8 @@ export type MenuKey =
   | "config_tarifas"
   | "pricing_eventos"
   | "pricing_plantillas"
-  | "pricing_temporadas";
+  | "pricing_temporadas"
+  | "pricing_calendario";
 
 export const ALL_MENUS: { key: MenuKey; label: string }[] = [
   { key: "reservas", label: "Reservas" },
@@ -43,6 +44,7 @@ export const ALL_MENUS: { key: MenuKey; label: string }[] = [
   { key: "pricing_eventos", label: "Gestión de precios · Eventos-calendario" },
   { key: "pricing_plantillas", label: "Gestión de precios · Eventos-plantillas" },
   { key: "pricing_temporadas", label: "Gestión de precios · Configuración Tarifas" },
+  { key: "pricing_calendario", label: "Gestión de precios · Vista Calendario" },
 ];
 
 // Single source of truth for which top-level route maps to which menu
@@ -63,6 +65,7 @@ export const ROUTE_TO_MENU: { route: string; menu: MenuKey }[] = [
   { route: "/pricing/eventos", menu: "pricing_eventos" },
   { route: "/pricing/plantillas", menu: "pricing_plantillas" },
   { route: "/pricing/temporadas", menu: "pricing_temporadas" },
+  { route: "/pricing/calendario", menu: "pricing_calendario" },
 ];
 
 type PermMap = Record<string, { v: boolean; e: boolean }>;

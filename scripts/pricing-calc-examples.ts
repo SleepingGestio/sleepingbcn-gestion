@@ -5,7 +5,7 @@
 // Rule under test: subtotal = precioBase × coeficiente temporada efectiva × coeficiente del día;
 // then every active event with a valor adds its own delta (each against the same subtotal).
 
-import { calcularPrecioDia, type CalcData } from "../src/lib/pricing-calc.ts";
+import { calcularAnio, calcularPrecioDia, type CalcData } from "../src/lib/pricing-calc.ts";
 import type { DiaSemanaPeriodo, Evento, PrecioBase, Temporada } from "../src/lib/pricing.ts";
 
 const meta = { id_negocio: "n1", created_at: "2027-01-01", updated_at: "2027-01-01" };
@@ -146,6 +146,15 @@ check("F rural has no data → null", calcularPrecioDia("2027-07-06", "rural", d
   const r = calcularPrecioDia("2027-07-06", "city", simple)!;
   check("I base 100, temporada 1.2, día 1.1 → 132", r.precioFinal === 132 && close(r.subtotal, 132), r);
   check("I no estancia mínima and no efectos", r.estanciaMinima === null && r.efectos.length === 0, r);
+}
+
+// J. Whole-year calculation (what the calendar view uses): every day of 2027, min/max of the prices.
+{
+  const a = calcularAnio(2027, "city", data);
+  check("J 365 days calculated, all covered", a.dias.size === 365 && [...a.dias.values()].every((d) => d !== null), a.dias.size);
+  check("J range: min 90 (BAJA weekday), max 212 (11 July, MEGA + both efectos)", a.rango?.min === 90 && a.rango?.max === 212, a.rango);
+  const rural = calcularAnio(2027, "rural", data);
+  check("J rural has no data: 365 null days and no range", rural.dias.size === 365 && rural.rango === null, rural.rango);
 }
 
 if (failures > 0) throw new Error(`${failures} check(s) failed`);

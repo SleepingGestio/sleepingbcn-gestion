@@ -1,13 +1,7 @@
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import type { EventoAplicaA, EventoCategoria, EventoEstado } from "@/lib/pricing";
-
-const CATEGORIA_STYLES: Record<EventoCategoria, string> = {
-  feria: "bg-blue-600 text-white hover:bg-blue-600",
-  deporte: "bg-emerald-600 text-white hover:bg-emerald-600",
-  cultura: "bg-violet-600 text-white hover:bg-violet-600",
-  otro: "bg-slate-500 text-white hover:bg-slate-500",
-};
+import { CATEGORIA_STYLES } from "@/lib/pricing-styles";
 
 const CATEGORIA_LABEL: Record<EventoCategoria, string> = {
   feria: "Feria",

@@ -96,6 +96,13 @@ function diaDeLaSemana(fecha: string): number {
 const cubre = (p: { fecha_inicio: string; fecha_fin: string }, fecha: string) =>
   p.fecha_inicio <= fecha && fecha <= p.fecha_fin;
 
+/** Events active on a date: confirmed, covering it, for this grupo or "ambos". Shared with the calendar view. */
+export function eventosActivosDia(eventos: Evento[], fecha: string, aplicaA: TemporadaAplicaA): Evento[] {
+  return eventos.filter(
+    (e) => e.estado === "confirmado" && cubre(e, fecha) && (e.aplica_a === "ambos" || e.aplica_a === aplicaA),
+  );
+}
+
 /**
  * Full price breakdown for one day, or null when it can't be calculated: no temporada
  * period, no día-de-la-semana period, or no precio base covers that date / año / grupo.
@@ -133,9 +140,7 @@ export function calcularPrecioDia(
   const precioBase = base.precio;
 
   // 3. Active events: confirmed, covering the date, for this grupo or "ambos".
-  const activos = data.eventos.filter(
-    (e) => e.estado === "confirmado" && cubre(e, fecha) && (e.aplica_a === "ambos" || e.aplica_a === aplicaA),
-  );
+  const activos = eventosActivosDia(data.eventos, fecha, aplicaA);
 
   // 4. Events that override the temporada: the highest coeficiente wins. Ties are broken by
   //    earliest fecha_inicio, then nombre, so the outcome is deterministic.
@@ -235,4 +240,28 @@ export function calcularPrecioDia(
     estanciaMinima,
     estanciaMinimaFuentes,
   };
+}
+
+export type AnioCalculado = {
+  /** Every day of the año, "YYYY-MM-DD" → breakdown, or null when it can't be calculated. */
+  dias: Map<string, DiaCalculado | null>;
+  /** Lowest / highest precioFinal among the calculable days; null when none is calculable. */
+  rango: { min: number; max: number } | null;
+};
+
+/** Calculates every day of `anio` once, so a calendar can page between months without recomputing. */
+export function calcularAnio(anio: number, aplicaA: TemporadaAplicaA, data: CalcData): AnioCalculado {
+  const dias = new Map<string, DiaCalculado | null>();
+  let min = Infinity;
+  let max = -Infinity;
+  for (let t = Date.UTC(anio, 0, 1); new Date(t).getUTCFullYear() === anio; t += 86_400_000) {
+    const fecha = new Date(t).toISOString().slice(0, 10);
+    const r = calcularPrecioDia(fecha, aplicaA, data);
+    dias.set(fecha, r);
+    if (r) {
+      if (r.precioFinal < min) min = r.precioFinal;
+      if (r.precioFinal > max) max = r.precioFinal;
+    }
+  }
+  return { dias, rango: min <= max ? { min, max } : null };
 }
