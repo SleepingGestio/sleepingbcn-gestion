@@ -499,3 +499,92 @@ export async function deletePrecioBaseByYear(anio: number): Promise<void> {
   const { error } = await pricingDb().from("precio_base").delete().eq("anio", anio);
   if (error) throw error;
 }
+
+export type FestivoTipo = "nacional_catalan" | "local";
+
+/** Calendar fact, not a pricing one: no aplica_a, and no effect on the price calculation for now. */
+export type Festivo = {
+  id: string;
+  id_negocio: string;
+  fecha: string;
+  nombre: string;
+  tipo: FestivoTipo;
+  created_at: string;
+  updated_at: string;
+};
+
+export async function fetchFestivos(): Promise<Festivo[]> {
+  const { data, error } = await pricingDb().from("festivos").select("*").order("fecha", { ascending: true });
+  if (error) throw error;
+  return (data ?? []) as Festivo[];
+}
+
+/** Manual entries are always "local". */
+export async function insertFestivo(fecha: string, nombre: string): Promise<void> {
+  const { error } = await pricingDb().from("festivos").insert({ fecha, nombre, tipo: "local" });
+  if (error) throw error;
+}
+
+export async function deleteFestivo(id: string): Promise<void> {
+  const { error } = await pricingDb().from("festivos").delete().eq("id", id);
+  if (error) throw error;
+}
+
+// Anonymous Gregorian algorithm (Meeus/Jones/Butcher): Easter Sunday of the given year, in UTC.
+function domingoResurreccion(anio: number): Date {
+  const a = anio % 19;
+  const b = Math.floor(anio / 100);
+  const c = anio % 100;
+  const d = Math.floor(b / 4);
+  const e = b % 4;
+  const f = Math.floor((b + 8) / 25);
+  const g = Math.floor((b - f + 1) / 3);
+  const h = (19 * a + b - d - g + 15) % 30;
+  const i = Math.floor(c / 4);
+  const k = c % 4;
+  const l = (32 + 2 * e + 2 * i - h - k) % 7;
+  const m = Math.floor((a + 11 * h + 22 * l) / 451);
+  const mes = Math.floor((h + l - 7 * m + 114) / 31); // 3 = marzo, 4 = abril
+  const dia = ((h + l - 7 * m + 114) % 31) + 1;
+  return new Date(Date.UTC(anio, mes - 1, dia));
+}
+
+/** The national + Catalan holidays of a year as { fecha, nombre }, sorted by date. Pure. */
+export function festivosNacionalesCatalanes(anio: number): { fecha: string; nombre: string }[] {
+  const fixed: [number, number, string][] = [
+    [1, 1, "Año Nuevo"],
+    [1, 6, "Reyes"],
+    [5, 1, "Fiesta del Trabajo"],
+    [6, 24, "San Juan"],
+    [8, 15, "La Asunción"],
+    [9, 11, "Diada Nacional de Cataluña"],
+    [10, 12, "Fiesta Nacional de España"],
+    [11, 1, "Todos los Santos"],
+    [12, 6, "Día de la Constitución"],
+    [12, 8, "La Inmaculada"],
+    [12, 25, "Navidad"],
+    [12, 26, "San Esteban"],
+  ];
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const lista = fixed.map(([mes, dia, nombre]) => ({ fecha: `${anio}-${pad(mes)}-${pad(dia)}`, nombre }));
+
+  const pascua = domingoResurreccion(anio).toISOString().slice(0, 10);
+  lista.push(
+    { fecha: addDaysISO(pascua, -3), nombre: "Jueves Santo" },
+    { fecha: addDaysISO(pascua, -2), nombre: "Viernes Santo" },
+    { fecha: addDaysISO(pascua, 1), nombre: "Lunes de Pascua Florida" },
+  );
+  return lista.sort((x, y) => x.fecha.localeCompare(y.fecha));
+}
+
+/**
+ * Upserts the national/Catalan holidays of `anio` (onConflict on the unique (id_negocio, fecha)), so
+ * running it again for the same year updates the rows instead of duplicating them. A date that is
+ * already stored — even as a "local" holiday — is overwritten as nacional_catalan. Returns rows upserted.
+ */
+export async function generarFestivosNacionalesCatalanes(anio: number): Promise<number> {
+  const rows = festivosNacionalesCatalanes(anio).map((f) => ({ ...f, tipo: "nacional_catalan" as const }));
+  const { error } = await pricingDb().from("festivos").upsert(rows, { onConflict: "id_negocio,fecha" });
+  if (error) throw error;
+  return rows.length;
+}

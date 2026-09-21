@@ -29,6 +29,7 @@ import { SortHeader } from "@/components/sort-header";
 import { TemporadaDialog } from "@/components/temporada-dialog";
 import { DiaSemanaTab } from "@/components/dia-semana-tab";
 import { PrecioBaseTab } from "@/components/precio-base-tab";
+import { FestivosTab } from "@/components/festivos-tab";
 
 const firstInicio = (t: Temporada) =>
   t.temporada_periodos.map((p) => p.fecha_inicio).sort()[0] ?? "";
@@ -227,6 +228,7 @@ const TABS: { label: string; component: ComponentType<TabProps> }[] = [
   { label: "Temporadas", component: TemporadasTab },
   { label: "Días de la semana", component: DiaSemanaTab },
   { label: "Precio base", component: PrecioBaseTab },
+  { label: "Festivos", component: FestivosTab },
 ];
 
 const countByGroup = (rows: { aplica_a: TemporadaAplicaA }[]) => ({
