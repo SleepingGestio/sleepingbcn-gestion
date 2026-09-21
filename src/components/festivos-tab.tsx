@@ -16,23 +16,9 @@ import {
   type Festivo, type FestivoTipo,
 } from "@/lib/pricing";
 import { fmtDate } from "@/lib/format";
+import { TIPO_LABEL, TIPO_STYLES } from "@/lib/pricing-styles";
 import { cn } from "@/lib/utils";
 import { FestivoDialog } from "@/components/festivo-dialog";
-
-const TIPO_LABEL: Record<FestivoTipo, string> = {
-  nacional: "Nacional",
-  catalan: "Catalán",
-  comunidad_otras: "Otra comunidad",
-  internacional: "Internacional",
-  local: "Local",
-};
-const TIPO_STYLES: Record<FestivoTipo, string> = {
-  nacional: "bg-rose-600 text-white hover:bg-rose-600",
-  catalan: "bg-amber-600 text-white hover:bg-amber-600",
-  comunidad_otras: "bg-violet-600 text-white hover:bg-violet-600",
-  internacional: "bg-teal-600 text-white hover:bg-teal-600",
-  local: "bg-sky-600 text-white hover:bg-sky-600",
-};
 
 /** Tipos that a "Generar" button creates (and would re-create if deleted). "local" ones are added by hand,
  * apart from Barcelona's Segunda Pascua, so they keep the normal delete button. */

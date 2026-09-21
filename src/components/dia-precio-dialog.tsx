@@ -2,8 +2,12 @@ import type { ReactNode } from "react";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
 } from "@/components/ui/dialog";
+import { Badge } from "@/components/ui/badge";
 import { fmtNum2 } from "@/lib/format";
+import { cn } from "@/lib/utils";
+import type { Festivo } from "@/lib/pricing";
 import type { DiaCalculado } from "@/lib/pricing-calc";
+import { TIPO_LABEL, TIPO_STYLES } from "@/lib/pricing-styles";
 
 const MESES = [
   "enero", "febrero", "marzo", "abril", "mayo", "junio",
@@ -32,14 +36,16 @@ function Linea({ label, delta }: { label: ReactNode; delta: number }) {
 /**
  * Price breakdown of one day (read-only for now). `extra` is rendered between the table and the
  * minimum stay, so a follow-up (e.g. a manual price adjustment block) can be added without
- * touching the rest of this dialog.
+ * touching the rest of this dialog. `festivos` are the ones falling on that day, passed in by the
+ * caller; they are informational only and never affect the price.
  */
 export function DiaPrecioDialog({
-  dia, onClose, extra,
+  dia, onClose, extra, festivos,
 }: {
   dia: DiaCalculado;
   onClose: () => void;
   extra?: ReactNode;
+  festivos?: Festivo[];
 }) {
   // precioBase × coefTemporada × coefDía, shown as two increments that add up to the subtotal.
   const tempDelta = dia.precioTrasTemporada - dia.precioBase;
@@ -53,6 +59,19 @@ export function DiaPrecioDialog({
           <DialogTitle className="text-sm">{tituloDia(dia.fecha)}</DialogTitle>
           <DialogDescription className="sr-only">Desglose del cálculo del precio del día</DialogDescription>
         </DialogHeader>
+
+        {festivos && festivos.length > 0 && (
+          <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs">
+            {festivos.map((f) => (
+              <span key={f.id} className="inline-flex items-center gap-1.5">
+                {f.nombre}
+                <Badge className={cn("border-transparent px-1.5 py-0 text-[10px]", TIPO_STYLES[f.tipo])}>
+                  {TIPO_LABEL[f.tipo]}
+                </Badge>
+              </span>
+            ))}
+          </div>
+        )}
 
         {dia.notaTemporada && (
           <p className="text-xs text-muted-foreground">{dia.notaTemporada}</p>

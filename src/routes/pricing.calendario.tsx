@@ -6,10 +6,10 @@ import { AppShell } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DiaPrecioDialog } from "@/components/dia-precio-dialog";
-import { CATEGORIA_STYLES } from "@/lib/pricing-styles";
+import { CATEGORIA_STYLES, FESTIVO_TIPOS, TIPO_LABEL, TIPO_STYLES } from "@/lib/pricing-styles";
 import {
-  fetchTemporadas, fetchDiaSemanaPeriodos, fetchPrecioBase, fetchEventos,
-  type Evento, type TemporadaAplicaA,
+  fetchTemporadas, fetchDiaSemanaPeriodos, fetchPrecioBase, fetchEventos, fetchFestivos,
+  type Evento, type Festivo, type TemporadaAplicaA,
 } from "@/lib/pricing";
 import { calcularAnio, eventosActivosDia, type DiaCalculado } from "@/lib/pricing-calc";
 import { cn } from "@/lib/utils";
@@ -40,6 +40,23 @@ const HATCHED = "repeating-linear-gradient(45deg, #f1f5f9, #f1f5f9 6px, #e2e8f0 
 
 type Celda = { iso: string; dia: number; enMes: boolean };
 
+/** One small dot per distinct tipo present that day (two "nacional" festivos still give one dot). */
+function PuntosFestivos({ festivos }: { festivos: Festivo[] }) {
+  const tipos = FESTIVO_TIPOS.filter((t) => festivos.some((f) => f.tipo === t));
+  if (tipos.length === 0) return null;
+  return (
+    <span className="flex items-center gap-[3px]">
+      {tipos.map((t) => (
+        <span key={t} className={cn("h-[5px] w-[5px] rounded-full", TIPO_STYLES[t])} />
+      ))}
+    </span>
+  );
+}
+
+/** Festivo names for a cell's native tooltip, one per line; undefined when there are none. */
+const tooltipFestivos = (festivos: Festivo[]) =>
+  festivos.length > 0 ? festivos.map((f) => `${f.nombre} (${TIPO_LABEL[f.tipo]})`).join("\n") : undefined;
+
 /** Monday-first grid covering the month, padded with the neighbouring months' days. */
 function celdasDelMes(y: number, m: number): Celda[] {
   const primero = new Date(Date.UTC(y, m, 1));
@@ -57,11 +74,12 @@ function celdasDelMes(y: number, m: number): Celda[] {
 const FUERA_DE_MES = "pointer-events-none opacity-50 grayscale";
 
 function DiaCelda({
-  celda, calc, eventos, rango, onOpen,
+  celda, calc, eventos, festivos, rango, onOpen,
 }: {
   celda: Celda;
   calc: DiaCalculado | null;
   eventos: Evento[];
+  festivos: Festivo[];
   rango: { min: number; max: number } | null;
   onOpen: () => void;
 }) {
@@ -74,11 +92,16 @@ function DiaCelda({
         )}
         style={{ background: HATCHED }}
         aria-hidden={!celda.enMes}
-        title="Sin cobertura: falta período de temporada, de días de la semana o precio base"
+        title={["Sin cobertura: falta período de temporada, de días de la semana o precio base", tooltipFestivos(festivos)]
+          .filter(Boolean)
+          .join("\n")}
       >
         <div className="flex items-start justify-between gap-1">
-          <span className="flex h-5 items-center rounded-[5px] bg-white px-[5px] text-[13px] font-bold text-slate-900 shadow-[0_0_0_0.5px_#e2e8f0]">
-            {celda.dia}
+          <span className="flex items-center gap-1">
+            <span className="flex h-5 items-center rounded-[5px] bg-white px-[5px] text-[13px] font-bold text-slate-900 shadow-[0_0_0_0.5px_#e2e8f0]">
+              {celda.dia}
+            </span>
+            <PuntosFestivos festivos={festivos} />
           </span>
           <span className="text-[10px] font-medium">Sin datos</span>
         </div>
@@ -95,17 +118,21 @@ function DiaCelda({
         celda.enMes ? "hover:outline-slate-900 focus-visible:outline-slate-900" : FUERA_DE_MES,
       )}
       style={{ background: heatColor(calc.precioFinal, rango.min, rango.max) }}
+      title={tooltipFestivos(festivos)}
     >
       <div className="flex items-start justify-between gap-1">
-        <span className="flex h-5 shrink-0 items-center justify-center gap-[3px] rounded-[5px] bg-white px-[5px] text-[13px] font-bold shadow-[0_0_0_0.5px_#e2e8f0]">
-          {celda.dia}
-          <span
-            className="inline-flex h-[13px] min-w-[13px] items-center justify-center rounded-[4px] px-[2px] text-[8.5px] font-bold text-white"
-            style={{ background: tempColor(calc.temporada.codigo) }}
-            title={calc.temporada.nombre}
-          >
-            {calc.temporada.codigo}
+        <span className="flex items-center gap-1">
+          <span className="flex h-5 shrink-0 items-center justify-center gap-[3px] rounded-[5px] bg-white px-[5px] text-[13px] font-bold shadow-[0_0_0_0.5px_#e2e8f0]">
+            {celda.dia}
+            <span
+              className="inline-flex h-[13px] min-w-[13px] items-center justify-center rounded-[4px] px-[2px] text-[8.5px] font-bold text-white"
+              style={{ background: tempColor(calc.temporada.codigo) }}
+              title={calc.temporada.nombre}
+            >
+              {calc.temporada.codigo}
+            </span>
           </span>
+          <PuntosFestivos festivos={festivos} />
         </span>
         <span className="text-right">
           <span className="block text-[15px] font-semibold leading-[1.1]">{calc.precioFinal}€</span>
@@ -136,11 +163,18 @@ function CalendarioPage() {
   const diaQ = useQuery({ queryKey: ["pricing-dia-semana-periodos"], queryFn: fetchDiaSemanaPeriodos });
   const precioQ = useQuery({ queryKey: ["pricing-precio-base"], queryFn: fetchPrecioBase });
   const eventosQ = useQuery({ queryKey: ["pricing-eventos"], queryFn: fetchEventos });
+  const festivosQ = useQuery({ queryKey: ["pricing-festivos"], queryFn: fetchFestivos });
 
   const temporadas = useMemo(() => temporadasQ.data ?? [], [temporadasQ.data]);
   const diaSemanaPeriodos = useMemo(() => diaQ.data ?? [], [diaQ.data]);
   const precioBase = useMemo(() => precioQ.data ?? [], [precioQ.data]);
   const eventos = useMemo(() => eventosQ.data ?? [], [eventosQ.data]);
+  // fetchFestivos returns every festivo: index them by date, several can share one.
+  const festivosPorFecha = useMemo(() => {
+    const m = new Map<string, Festivo[]>();
+    for (const f of festivosQ.data ?? []) m.set(f.fecha, [...(m.get(f.fecha) ?? []), f]);
+    return m;
+  }, [festivosQ.data]);
 
   const [aplicaA, setAplicaA] = useState<TemporadaAplicaA>("city");
   // null until the person navigates: then the year/month default from the data that exists.
@@ -173,8 +207,8 @@ function CalendarioPage() {
     });
   }
 
-  const cargando = temporadasQ.isLoading || diaQ.isLoading || precioQ.isLoading || eventosQ.isLoading;
-  const error = (temporadasQ.error ?? diaQ.error ?? precioQ.error ?? eventosQ.error) as Error | null;
+  const cargando = temporadasQ.isLoading || diaQ.isLoading || precioQ.isLoading || eventosQ.isLoading || festivosQ.isLoading;
+  const error = (temporadasQ.error ?? diaQ.error ?? precioQ.error ?? eventosQ.error ?? festivosQ.error) as Error | null;
   const seleccionado = seleccion ? calculo.dias.get(seleccion) ?? null : null;
 
   return (
@@ -265,6 +299,7 @@ function CalendarioPage() {
               celda={c}
               calc={calculo.dias.get(c.iso) ?? null}
               eventos={eventosActivosDia(eventos, c.iso, aplicaA)}
+              festivos={festivosPorFecha.get(c.iso) ?? []}
               rango={calculo.rango}
               onOpen={() => setSeleccion(c.iso)}
             />
@@ -272,7 +307,13 @@ function CalendarioPage() {
         </div>
       </div>
 
-      {seleccionado && <DiaPrecioDialog dia={seleccionado} onClose={() => setSeleccion(null)} />}
+      {seleccionado && (
+        <DiaPrecioDialog
+          dia={seleccionado}
+          festivos={festivosPorFecha.get(seleccionado.fecha) ?? []}
+          onClose={() => setSeleccion(null)}
+        />
+      )}
     </AppShell>
   );
 }
