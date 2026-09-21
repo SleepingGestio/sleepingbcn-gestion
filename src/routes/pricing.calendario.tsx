@@ -52,6 +52,10 @@ function celdasDelMes(y: number, m: number): Celda[] {
   });
 }
 
+// Days of the neighbouring months (padding at the grid edges) look like in-month days but muted,
+// and are not clickable.
+const FUERA_DE_MES = "pointer-events-none opacity-50 grayscale";
+
 function DiaCelda({
   celda, calc, eventos, rango, onOpen,
 }: {
@@ -61,20 +65,15 @@ function DiaCelda({
   rango: { min: number; max: number } | null;
   onOpen: () => void;
 }) {
-  if (!celda.enMes) {
-    // Neighbouring month: greyed, number only, not clickable.
-    return (
-      <div className="min-h-[118px] rounded-lg border border-slate-200/70 bg-slate-50 p-1.5 text-[13px] font-bold text-slate-300">
-        {celda.dia}
-      </div>
-    );
-  }
-
   if (!calc || !rango) {
     return (
       <div
-        className="min-h-[118px] rounded-lg border border-slate-200 p-1.5 text-slate-500"
+        className={cn(
+          "min-h-[118px] rounded-lg border border-slate-200 p-1.5 text-slate-500",
+          !celda.enMes && FUERA_DE_MES,
+        )}
         style={{ background: HATCHED }}
+        aria-hidden={!celda.enMes}
         title="Sin cobertura: falta período de temporada, de días de la semana o precio base"
       >
         <div className="flex items-start justify-between gap-1">
@@ -87,11 +86,14 @@ function DiaCelda({
     );
   }
 
+  const Contenedor = celda.enMes ? "button" : "div";
   return (
-    <button
-      type="button"
-      onClick={onOpen}
-      className="flex min-h-[118px] flex-col rounded-lg border border-slate-200 px-1.5 pb-2 pt-1.5 text-left text-slate-900 outline-2 -outline-offset-2 outline-transparent transition-[outline-color] hover:outline-slate-900 focus-visible:outline-slate-900"
+    <Contenedor
+      {...(celda.enMes ? { type: "button" as const, onClick: onOpen } : { "aria-hidden": true })}
+      className={cn(
+        "flex min-h-[118px] flex-col rounded-lg border border-slate-200 px-1.5 pb-2 pt-1.5 text-left text-slate-900 outline-2 -outline-offset-2 outline-transparent transition-[outline-color]",
+        celda.enMes ? "hover:outline-slate-900 focus-visible:outline-slate-900" : FUERA_DE_MES,
+      )}
       style={{ background: heatColor(calc.precioFinal, rango.min, rango.max) }}
     >
       <div className="flex items-start justify-between gap-1">
@@ -125,7 +127,7 @@ function DiaCelda({
           ))}
         </div>
       )}
-    </button>
+    </Contenedor>
   );
 }
 
@@ -184,6 +186,21 @@ function CalendarioPage() {
             <SelectTrigger className="w-28"><SelectValue /></SelectTrigger>
             <SelectContent>
               {years.map((y) => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="grid gap-1">
+          <span className="text-xs text-muted-foreground">Mes</span>
+          <Select
+            value={String(mes)}
+            onValueChange={(v) => {
+              setDir(Number(v) >= mes ? 1 : -1);
+              setCursor({ y: anio, m: Number(v) });
+            }}
+          >
+            <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {MESES.map((nombre, i) => <SelectItem key={nombre} value={String(i)}>{nombre}</SelectItem>)}
             </SelectContent>
           </Select>
         </div>
@@ -247,7 +264,7 @@ function CalendarioPage() {
               key={c.iso}
               celda={c}
               calc={calculo.dias.get(c.iso) ?? null}
-              eventos={c.enMes ? eventosActivosDia(eventos, c.iso, aplicaA) : []}
+              eventos={eventosActivosDia(eventos, c.iso, aplicaA)}
               rango={calculo.rango}
               onOpen={() => setSeleccion(c.iso)}
             />
