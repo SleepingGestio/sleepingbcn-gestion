@@ -18,7 +18,11 @@ import {
 import { CalendarCheck, Pencil, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { usePermissions } from "@/hooks/use-permissions";
-import { fetchTemporadas, copyTemporadasToYear, deleteTemporada, deleteTemporadasByYear, findCoverageGaps, type Temporada, type TemporadaAplicaA } from "@/lib/pricing";
+import {
+  fetchTemporadas, copyTemporadasToYear, deleteTemporada, deleteTemporadasByYear, findCoverageGaps,
+  fetchDiaSemanaPeriodos, copyDiaSemanaPeriodosToYear, deleteDiaSemanaPeriodosByYear,
+  type Temporada, type TemporadaAplicaA,
+} from "@/lib/pricing";
 import { fmtDate } from "@/lib/format";
 import { SortHeader } from "@/components/sort-header";
 import { TemporadaDialog } from "@/components/temporada-dialog";
@@ -222,11 +226,19 @@ const TABS: { label: string; component: ComponentType<TabProps> }[] = [
   { label: "Días de la semana", component: DiaSemanaTab },
 ];
 
+const countByGroup = (rows: { aplica_a: TemporadaAplicaA }[]) => ({
+  city: rows.filter((r) => r.aplica_a === "city").length,
+  rural: rows.filter((r) => r.aplica_a === "rural").length,
+});
+
 function ConfiguracionTarifasPage() {
   const { canEdit } = usePermissions();
   const canEditTemporadas = canEdit("pricing_temporadas");
   const q = useQuery({ queryKey: ["pricing-temporadas"], queryFn: fetchTemporadas });
   const all = useMemo(() => q.data ?? [], [q.data]);
+  // Same key as DiaSemanaTab, so react-query shares one fetch between them.
+  const dq = useQuery({ queryKey: ["pricing-dia-semana-periodos"], queryFn: fetchDiaSemanaPeriodos });
+  const allDia = useMemo(() => dq.data ?? [], [dq.data]);
   const [anioSel, setAnioSel] = useState<number | null>(null);
   const [aplicaA, setAplicaA] = useState<TemporadaAplicaA>("city");
   const [tab, setTab] = useState(0);
@@ -236,26 +248,46 @@ function ConfiguracionTarifasPage() {
   const [deletingYear, setDeletingYear] = useState(false);
   const [copyPrompt, setCopyPrompt] = useState<number | null>(null);
   const [copying, setCopying] = useState(false);
+  const [copyTemporadas, setCopyTemporadas] = useState(true);
+  const [copyDia, setCopyDia] = useState(true);
 
-  const dataYears = useMemo(() => [...new Set(all.map((t) => t.anio))], [all]);
+  const dataYears = useMemo(
+    () => [...new Set([...all.map((t) => t.anio), ...allDia.map((p) => p.anio)])],
+    [all, allDia],
+  );
   const thisYear = new Date().getFullYear();
   const anio = anioSel ?? (dataYears.includes(thisYear) ? thisYear : dataYears.length ? Math.max(...dataYears) : thisYear);
   const years = useMemo(() => [...new Set([...dataYears, anio])].sort((a, b) => b - a), [dataYears, anio]);
   const ActiveTab = TABS[tab].component;
   const suggestedYear = String((dataYears.length ? Math.max(...dataYears) : thisYear) + 1);
   const nuevoAnio = nuevoAnioInput || suggestedYear;
-  const deleteCounts = useMemo(() => {
-    const rows = all.filter((t) => t.anio === deleteYear);
-    return { city: rows.filter((t) => t.aplica_a === "city").length, rural: rows.filter((t) => t.aplica_a === "rural").length };
-  }, [all, deleteYear]);
+  const deleteCounts = useMemo(
+    () => ({
+      temporadas: countByGroup(all.filter((t) => t.anio === deleteYear)),
+      dia: countByGroup(allDia.filter((p) => p.anio === deleteYear)),
+    }),
+    [all, allDia, deleteYear],
+  );
+  const copyCounts = useMemo(
+    () => ({
+      temporadas: countByGroup(all.filter((t) => t.anio === (copyPrompt ?? 0) - 1)),
+      dia: countByGroup(allDia.filter((p) => p.anio === (copyPrompt ?? 0) - 1)),
+    }),
+    [all, allDia, copyPrompt],
+  );
 
   function addYear() {
     const y = Number(nuevoAnio);
     if (!Number.isInteger(y) || y < 2000 || y > 2100) { toast.error("Año no válido"); return; }
     setNuevoAnioInput(null);
     if (dataYears.includes(y)) { setAnioSel(y); return; }
-    if (dataYears.includes(y - 1)) setCopyPrompt(y);
-    else setAnioSel(y);
+    if (dataYears.includes(y - 1)) {
+      setCopyTemporadas(true);
+      setCopyDia(true);
+      setCopyPrompt(y);
+    } else {
+      setAnioSel(y);
+    }
   }
 
   function declineCopy() {
@@ -269,11 +301,13 @@ function ConfiguracionTarifasPage() {
     setDeletingYear(true);
     try {
       await deleteTemporadasByYear(deleteYear);
+      await deleteDiaSemanaPeriodosByYear(deleteYear);
       toast.success(`Año ${deleteYear} eliminado`);
-      await q.refetch();
+      await Promise.all([q.refetch(), dq.refetch()]);
       setAnioSel(null);
     } catch (e) {
       toast.error("Error al eliminar: " + (e as Error).message);
+      await Promise.all([q.refetch(), dq.refetch()]);
     } finally {
       setDeletingYear(false);
       setDeleteYear(null);
@@ -286,12 +320,19 @@ function ConfiguracionTarifasPage() {
     const y = copyPrompt;
     setCopying(true);
     try {
-      const n = await copyTemporadasToYear(y - 1, y);
-      toast.success(`${n} temporadas copiadas de ${y - 1} a ${y}`);
-      await q.refetch();
+      if (copyTemporadas) {
+        const n = await copyTemporadasToYear(y - 1, y);
+        toast.success(`${n} temporadas copiadas de ${y - 1} a ${y}`);
+      }
+      if (copyDia) {
+        const n = await copyDiaSemanaPeriodosToYear(y - 1, y);
+        toast.success(`${n} períodos de días de la semana copiados de ${y - 1} a ${y}`);
+      }
+      await Promise.all([q.refetch(), dq.refetch()]);
       setAnioSel(y);
     } catch (e) {
       toast.error("Error al copiar: " + (e as Error).message);
+      await Promise.all([q.refetch(), dq.refetch()]);
     } finally {
       setCopying(false);
       setCopyPrompt(null);
@@ -369,12 +410,22 @@ function ConfiguracionTarifasPage() {
           <AlertDialogHeader>
             <AlertDialogTitle>¿Copiar los datos del año anterior?</AlertDialogTitle>
             <AlertDialogDescription>
-              Se copiarán las temporadas de {copyPrompt != null ? copyPrompt - 1 : ""} (City y Rural) a {copyPrompt}, desplazando las fechas un año.
+              Elige qué copiar de {copyPrompt != null ? copyPrompt - 1 : ""} a {copyPrompt}, desplazando las fechas un año.
             </AlertDialogDescription>
           </AlertDialogHeader>
+          <div className="space-y-2 text-sm">
+            <label className="flex items-start gap-2">
+              <Checkbox checked={copyTemporadas} onCheckedChange={(c) => setCopyTemporadas(c === true)} className="mt-0.5" />
+              <span>Temporadas ({copyCounts.temporadas.city} de City, {copyCounts.temporadas.rural} de Rural)</span>
+            </label>
+            <label className="flex items-start gap-2">
+              <Checkbox checked={copyDia} onCheckedChange={(c) => setCopyDia(c === true)} className="mt-0.5" />
+              <span>Días de la semana ({copyCounts.dia.city} de City, {copyCounts.dia.rural} de Rural)</span>
+            </label>
+          </div>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={copying}>No copiar</AlertDialogCancel>
-            <AlertDialogAction disabled={copying} onClick={(e) => { e.preventDefault(); void confirmCopy(); }}>
+            <AlertDialogAction disabled={copying || (!copyTemporadas && !copyDia)} onClick={(e) => { e.preventDefault(); void confirmCopy(); }}>
               Copiar
             </AlertDialogAction>
           </AlertDialogFooter>
@@ -386,13 +437,14 @@ function ConfiguracionTarifasPage() {
           <AlertDialogHeader>
             <AlertDialogTitle>¿Eliminar todo el año {deleteYear}?</AlertDialogTitle>
             <AlertDialogDescription>
-              Se borrarán todas las temporadas de {deleteYear} en City y Rural. Esta acción no se puede deshacer.
+              Se borrarán todas las temporadas y todos los períodos de días de la semana de {deleteYear} en City y Rural. Esta acción no se puede deshacer.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <label className="flex items-start gap-2 text-sm">
             <Checkbox checked={deleteAck} onCheckedChange={(c) => setDeleteAck(c === true)} className="mt-0.5" />
             <span>
-              Entiendo que se borrarán todas las temporadas de {deleteYear} ({deleteCounts.city} de City, {deleteCounts.rural} de Rural)
+              Entiendo que se borrarán todas las temporadas de {deleteYear} ({deleteCounts.temporadas.city} de City, {deleteCounts.temporadas.rural} de Rural)
+              y todos los períodos de días de la semana ({deleteCounts.dia.city} de City, {deleteCounts.dia.rural} de Rural)
             </span>
           </label>
           <AlertDialogFooter>

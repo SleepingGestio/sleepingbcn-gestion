@@ -426,3 +426,28 @@ export async function deleteDiaSemanaPeriodo(id: string): Promise<void> {
   const { error } = await pricingDb().from("dia_semana_periodos").delete().eq("id", id);
   if (error) throw error;
 }
+
+/** Copies every dia_semana period of `fromYear` (both groups) into `toYear`, dates shifted by the year gap, in one insert. Returns rows copied. */
+export async function copyDiaSemanaPeriodosToYear(fromYear: number, toYear: number): Promise<number> {
+  const { data, error } = await pricingDb().from("dia_semana_periodos").select("*").eq("anio", fromYear);
+  if (error) throw error;
+  const gap = toYear - fromYear;
+  const rows = ((data ?? []) as DiaSemanaPeriodo[]).map((p) => ({
+    aplica_a: p.aplica_a,
+    anio: toYear,
+    fecha_inicio: addYearsISO(p.fecha_inicio, gap),
+    fecha_fin: addYearsISO(p.fecha_fin, gap),
+    coef_entresemana: p.coef_entresemana,
+    coef_finsemana: p.coef_finsemana,
+  }));
+  if (rows.length === 0) return 0;
+  const { error: insErr } = await pricingDb().from("dia_semana_periodos").insert(rows);
+  if (insErr) throw insErr;
+  return rows.length;
+}
+
+/** Deletes every dia_semana period of the year, both groups. */
+export async function deleteDiaSemanaPeriodosByYear(anio: number): Promise<void> {
+  const { error } = await pricingDb().from("dia_semana_periodos").delete().eq("anio", anio);
+  if (error) throw error;
+}
