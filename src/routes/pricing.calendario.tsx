@@ -1,11 +1,12 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { Check, CheckSquare, ChevronLeft, ChevronRight } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DiaPrecioDialog } from "@/components/dia-precio-dialog";
+import { DiasEdicionMasivaDialog } from "@/components/dias-edicion-masiva-dialog";
 import { CATEGORIA_STYLES, AMBITO_LIST, AMBITO_LABEL, AMBITO_COLOR } from "@/lib/pricing-styles";
 import {
   fetchTemporadas, fetchDiaSemanaPeriodos, fetchPrecioBase, fetchEventos, fetchFestivos, fetchAjustesDia,
@@ -88,13 +89,16 @@ function celdasDelMes(y: number, m: number): Celda[] {
 const FUERA_DE_MES = "pointer-events-none opacity-50 grayscale";
 
 function DiaCelda({
-  celda, calc, eventos, festivos, rango, onOpen,
+  celda, calc, eventos, festivos, rango, modoSeleccion, seleccionado, onOpen,
 }: {
   celda: Celda;
   calc: DiaCalculado | null;
   eventos: Evento[];
   festivos: Festivo[];
   rango: { min: number; max: number } | null;
+  /** Selection mode repurposes `onOpen` as "toggle this day" instead of "open its dialog". */
+  modoSeleccion: boolean;
+  seleccionado: boolean;
   onOpen: () => void;
 }) {
   if (!calc || !rango) {
@@ -121,17 +125,24 @@ function DiaCelda({
     );
   }
 
+  const marcado = modoSeleccion && seleccionado;
   const Contenedor = celda.enMes ? "button" : "div";
   return (
     <Contenedor
       {...(celda.enMes ? { type: "button" as const, onClick: onOpen } : { "aria-hidden": true })}
       className={cn(
-        "flex min-h-[118px] flex-col overflow-hidden rounded-lg border border-slate-200 text-left text-slate-900 outline-2 -outline-offset-2 outline-transparent transition-[outline-color]",
+        "relative flex min-h-[118px] flex-col overflow-hidden rounded-lg border text-left text-slate-900 outline-2 -outline-offset-2 outline-transparent transition-[outline-color]",
         celda.enMes ? "hover:outline-slate-900 focus-visible:outline-slate-900" : FUERA_DE_MES,
+        marcado ? "border-primary ring-2 ring-primary" : "border-slate-200",
       )}
       style={{ background: heatColor(calc.precioFinal, rango.min, rango.max) }}
       title={tooltipFestivos(festivos)}
     >
+      {marcado && (
+        <span className="absolute right-1.5 top-1.5 z-10 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-primary-foreground">
+          <Check className="h-3 w-3" />
+        </span>
+      )}
       <BarraFestivos festivos={festivos} />
       <div className="flex flex-1 flex-col px-1.5 pb-2 pt-1.5">
         <div className="flex items-start justify-between gap-1">
@@ -195,6 +206,9 @@ function CalendarioPage() {
   const [cursor, setCursor] = useState<{ y: number; m: number } | null>(null);
   const [dir, setDir] = useState<1 | -1>(1);
   const [seleccion, setSeleccion] = useState<string | null>(null);
+  const [modoSeleccion, setModoSeleccion] = useState(false);
+  const [seleccionMasiva, setSeleccionMasiva] = useState<Set<string>>(new Set());
+  const [edicionMasivaAbierta, setEdicionMasivaAbierta] = useState(false);
 
   const dataYears = useMemo(
     () => [...new Set([...temporadas.map((t) => t.anio), ...diaSemanaPeriodos.map((p) => p.anio), ...precioBase.map((p) => p.anio)])],
@@ -213,11 +227,26 @@ function CalendarioPage() {
   );
   const celdas = useMemo(() => celdasDelMes(anio, mes), [anio, mes]);
 
+  // The selection doesn't need to carry across months: simplest is to drop it whenever the
+  // displayed month changes, whichever control (prev/next, Año, Mes) triggered it.
+  useEffect(() => {
+    setSeleccionMasiva(new Set());
+  }, [anio, mes]);
+
   function moverMes(delta: 1 | -1) {
     setDir(delta);
     setCursor({
       y: mes + delta < 0 ? anio - 1 : mes + delta > 11 ? anio + 1 : anio,
       m: (mes + delta + 12) % 12,
+    });
+  }
+
+  function toggleSeleccionDia(iso: string) {
+    setSeleccionMasiva((prev) => {
+      const next = new Set(prev);
+      if (next.has(iso)) next.delete(iso);
+      else next.add(iso);
+      return next;
     });
   }
 
@@ -290,6 +319,31 @@ function CalendarioPage() {
           </Button>
         </div>
 
+        <div className="mb-3 flex items-center justify-between">
+          {modoSeleccion ? (
+            <>
+              <span className="text-sm text-muted-foreground">
+                {seleccionMasiva.size} día{seleccionMasiva.size === 1 ? "" : "s"} seleccionado{seleccionMasiva.size === 1 ? "" : "s"}
+              </span>
+              <div className="flex gap-2">
+                <Button
+                  size="sm" variant="outline"
+                  onClick={() => { setModoSeleccion(false); setSeleccionMasiva(new Set()); }}
+                >
+                  Cancelar selección
+                </Button>
+                <Button size="sm" disabled={seleccionMasiva.size === 0} onClick={() => setEdicionMasivaAbierta(true)}>
+                  Editar {seleccionMasiva.size} días
+                </Button>
+              </div>
+            </>
+          ) : (
+            <Button size="sm" variant="outline" onClick={() => setModoSeleccion(true)}>
+              <CheckSquare className="h-4 w-4 mr-1" /> Seleccionar días
+            </Button>
+          )}
+        </div>
+
         <div className="mb-1.5 grid grid-cols-7 gap-1.5">
           {DIAS.map((d) => (
             <div
@@ -316,7 +370,9 @@ function CalendarioPage() {
               eventos={eventosActivosDia(eventos, c.iso, aplicaA)}
               festivos={festivosPorFecha.get(c.iso) ?? []}
               rango={calculo.rango}
-              onOpen={() => setSeleccion(c.iso)}
+              modoSeleccion={modoSeleccion}
+              seleccionado={seleccionMasiva.has(c.iso)}
+              onOpen={() => (modoSeleccion ? toggleSeleccionDia(c.iso) : setSeleccion(c.iso))}
             />
           ))}
         </div>
@@ -330,6 +386,21 @@ function CalendarioPage() {
           temporadas={temporadas}
           onAjusteGuardado={async () => { await ajustesQ.refetch(); }}
           onClose={() => setSeleccion(null)}
+        />
+      )}
+
+      {edicionMasivaAbierta && (
+        <DiasEdicionMasivaDialog
+          fechas={[...seleccionMasiva].sort()}
+          aplicaA={aplicaA}
+          temporadas={temporadas}
+          dias={calculo.dias}
+          onClose={() => setEdicionMasivaAbierta(false)}
+          onGuardado={async () => {
+            await ajustesQ.refetch();
+            setSeleccionMasiva(new Set());
+            setModoSeleccion(false);
+          }}
         />
       )}
     </AppShell>

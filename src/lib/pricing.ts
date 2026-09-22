@@ -712,3 +712,39 @@ export async function upsertAjusteDia(
   const { error } = await pricingDb().from("ajustes_dia").upsert(payload, { onConflict: AJUSTES_DIA_CONFLICT });
   if (error) throw error;
 }
+
+/**
+ * Bulk version of upsertAjusteDia, for applying overrides to many days at once (the multi-day
+ * selection on Vista Calendario). Same partial-column semantics per row: a field absent from a row's
+ * `changes` leaves that row's existing value alone; `null` clears it.
+ *
+ * PostgREST's bulk upsert takes one shared column list for the whole call, built from the keys
+ * present in the payload — so rows are grouped by which fields they're changing, and each group goes
+ * out in its own upsert call, to avoid a field absent on one row but present on another silently
+ * being nulled out to match the other row's column list. In practice the bulk-edit dialog always
+ * changes the same fields on every selected day, so this is one call, same as a single mixed one
+ * would have been if it were safe.
+ */
+export async function upsertAjustesDiaBulk(
+  rows: {
+    fecha: string;
+    aplicaA: TemporadaAplicaA;
+    changes: Partial<{ temporadaId: string | null; estanciaMinima: number | null; precioManual: number | null }>;
+  }[],
+): Promise<void> {
+  const grupos = new Map<string, Record<string, unknown>[]>();
+  for (const { fecha, aplicaA, changes } of rows) {
+    const keys = (["temporadaId", "estanciaMinima", "precioManual"] as const).filter((k) => k in changes);
+    const firma = keys.join(",");
+    const payload: Record<string, unknown> = { fecha, aplica_a: aplicaA };
+    if (keys.includes("temporadaId")) payload.temporada_id = changes.temporadaId;
+    if (keys.includes("estanciaMinima")) payload.estancia_minima = changes.estanciaMinima;
+    if (keys.includes("precioManual")) payload.precio_manual = changes.precioManual;
+    if (!grupos.has(firma)) grupos.set(firma, []);
+    grupos.get(firma)!.push(payload);
+  }
+  for (const payloads of grupos.values()) {
+    const { error } = await pricingDb().from("ajustes_dia").upsert(payloads, { onConflict: AJUSTES_DIA_CONFLICT });
+    if (error) throw error;
+  }
+}
