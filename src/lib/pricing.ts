@@ -581,7 +581,7 @@ const FESTIVOS_CONFLICT = "id_negocio,fecha,nombre";
  */
 export function festivosNacionalYCatalan(anio: number): { fecha: string; nombre: string; tipo: "nacional" | "catalan" }[] {
   const fixed: [number, number, string, "nacional" | "catalan"][] = [
-    [1, 1, "Año Nuevo", "nacional"],
+    [1, 1, "Año Nuevo (Francia, Alemania, Italia, Reino Unido)", "nacional"],
     [1, 6, "Reyes", "nacional"],
     [5, 1, "Fiesta del Trabajo", "nacional"],
     [6, 24, "San Juan", "catalan"],
@@ -591,7 +591,7 @@ export function festivosNacionalYCatalan(anio: number): { fecha: string; nombre:
     [11, 1, "Todos los Santos", "nacional"],
     [12, 6, "Día de la Constitución", "nacional"],
     [12, 8, "La Inmaculada", "nacional"],
-    [12, 25, "Navidad", "nacional"],
+    [12, 25, "Navidad (Francia, Alemania, Italia, Reino Unido)", "nacional"],
     [12, 26, "San Esteban", "catalan"],
   ];
   const pad = (n: number) => String(n).padStart(2, "0");
