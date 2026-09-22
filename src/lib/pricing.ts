@@ -276,6 +276,13 @@ export async function insertPeriodo(
   if (error) throw error;
 }
 
+export type PeriodoEditable = Pick<TemporadaPeriodo, "fecha_inicio" | "fecha_fin" | "estancia_minima">;
+
+export async function updatePeriodo(id: string, changes: PeriodoEditable): Promise<void> {
+  const { error } = await pricingDb().from("temporada_periodos").update(changes).eq("id", id);
+  if (error) throw error;
+}
+
 export async function deletePeriodo(id: string): Promise<void> {
   const { error } = await pricingDb().from("temporada_periodos").delete().eq("id", id);
   if (error) throw error;
