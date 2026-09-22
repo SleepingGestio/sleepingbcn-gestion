@@ -20,19 +20,20 @@ import {
   fetchEventos, descartarEvento, confirmarEvento, fetchTemporadas,
   type Evento, type EventoAplicaA, type EventoCategoria, type EventoFase,
 } from "@/lib/pricing";
-import { CategoriaBadge, AplicaABadge, EventoEstadoBadge } from "@/components/pricing-badges";
+import { CategoriaBadge, EventoEstadoBadge } from "@/components/pricing-badges";
 import { EventoFormDialog } from "@/components/evento-form-dialog";
 import { SortHeader } from "@/components/sort-header";
 import { FilterField } from "@/components/filter-field";
 
-type SortKey = "nombre" | "categoria" | "fechas" | "aplica_a" | "efecto" | "min_noches" | "estado";
+type SortKey = "nombre" | "categoria" | "fechas" | "afluencia" | "ubicacion" | "efecto" | "min_noches" | "estado";
 
 function sortValue(e: Evento, k: SortKey): string | number | null {
   switch (k) {
     case "nombre": return e.nombre;
     case "categoria": return e.categoria;
     case "fechas": return e.fecha_inicio;
-    case "aplica_a": return e.aplica_a;
+    case "afluencia": return e.afluencia_estimada;
+    case "ubicacion": return e.ubicacion;
     case "efecto": return e.valor;
     case "min_noches": return e.estancia_minima;
     case "estado": return e.estado;
@@ -117,7 +118,10 @@ function EventosPage() {
     }
     function passesFilters(e: Evento): boolean {
       if (!incluirDescartados && e.estado === "descartado") return false;
-      if (grupoFilter !== "todos" && e.aplica_a !== grupoFilter) return false;
+      // City/Rural also include "ambos" events; the "Ambos" option stays an exact match.
+      if (grupoFilter !== "todos" && e.aplica_a !== grupoFilter) {
+        if (grupoFilter === "ambos" || e.aplica_a !== "ambos") return false;
+      }
       if (categoriaFilter !== "todas" && e.categoria !== categoriaFilter) return false;
       if (!passesRango(e)) return false;
       return true;
@@ -141,13 +145,21 @@ function EventosPage() {
       list.push(e);
       childrenByParent.set(e.evento_relacionado_id, list);
     }
-    const out: { evento: Evento; isChild: boolean }[] = [];
+    // inGroup: the principal has visible previo/post rows, so the whole block
+    // gets a left bracket; lastInGroup marks where the block's stronger divider goes.
+    const out: { evento: Evento; isChild: boolean; inGroup: boolean; lastInGroup: boolean }[] = [];
     for (const p of principales) {
       if (!passesFilters(p)) continue;
       const children = (childrenByParent.get(p.id) ?? []).filter(passesFilters);
-      for (const c of children) if (c.fase === "previo") out.push({ evento: c, isChild: true });
-      out.push({ evento: p, isChild: false });
-      for (const c of children) if (c.fase === "post") out.push({ evento: c, isChild: true });
+      const group: Evento[] = [
+        ...children.filter((c) => c.fase === "previo"),
+        p,
+        ...children.filter((c) => c.fase === "post"),
+      ];
+      const inGroup = group.length > 1;
+      group.forEach((e, i) =>
+        out.push({ evento: e, isChild: e !== p, inGroup, lastInGroup: i === group.length - 1 }),
+      );
     }
     return out;
   }, [q.data, grupoFilter, categoriaFilter, rangoFilter, incluirDescartados, sortKey, sortDir]);
@@ -233,7 +245,8 @@ function EventosPage() {
               <TableHead><SortHeader label="Evento" active={sortKey === "nombre"} dir={sortDir} onClick={() => toggleSort("nombre")} /></TableHead>
               <TableHead><SortHeader label="Categoría" active={sortKey === "categoria"} dir={sortDir} onClick={() => toggleSort("categoria")} /></TableHead>
               <TableHead><SortHeader label="Fechas" active={sortKey === "fechas"} dir={sortDir} onClick={() => toggleSort("fechas")} /></TableHead>
-              <TableHead><SortHeader label="Aplica a" active={sortKey === "aplica_a"} dir={sortDir} onClick={() => toggleSort("aplica_a")} /></TableHead>
+              <TableHead><SortHeader label="Afluencia" active={sortKey === "afluencia"} dir={sortDir} onClick={() => toggleSort("afluencia")} /></TableHead>
+              <TableHead><SortHeader label="Ubicación" active={sortKey === "ubicacion"} dir={sortDir} onClick={() => toggleSort("ubicacion")} /></TableHead>
               <TableHead><SortHeader label="Efecto" active={sortKey === "efecto"} dir={sortDir} onClick={() => toggleSort("efecto")} /></TableHead>
               <TableHead><SortHeader label="Mín. noches" active={sortKey === "min_noches"} dir={sortDir} onClick={() => toggleSort("min_noches")} /></TableHead>
               <TableHead><SortHeader label="Estado" active={sortKey === "estado"} dir={sortDir} onClick={() => toggleSort("estado")} /></TableHead>
@@ -243,36 +256,50 @@ function EventosPage() {
           <TableBody>
             {q.isLoading && (
               <TableRow>
-                <TableCell colSpan={canEditEventos ? 8 : 7} className="text-center py-8 text-muted-foreground">
+                <TableCell colSpan={canEditEventos ? 9 : 8} className="text-center py-8 text-muted-foreground">
                   Cargando…
                 </TableCell>
               </TableRow>
             )}
             {q.error && (
               <TableRow>
-                <TableCell colSpan={canEditEventos ? 8 : 7} className="text-center py-8 text-destructive">
+                <TableCell colSpan={canEditEventos ? 9 : 8} className="text-center py-8 text-destructive">
                   {(q.error as Error).message}
                 </TableCell>
               </TableRow>
             )}
             {!q.isLoading && rows.length === 0 && (
               <TableRow>
-                <TableCell colSpan={canEditEventos ? 8 : 7} className="text-center py-8 text-muted-foreground">
+                <TableCell colSpan={canEditEventos ? 9 : 8} className="text-center py-8 text-muted-foreground">
                   Sin eventos
                 </TableCell>
               </TableRow>
             )}
-            {rows.map(({ evento: e, isChild }) => {
+            {rows.map(({ evento: e, isChild, inGroup, lastInGroup }) => {
               const efecto = formatEfecto(e.valor, e.tipo_valor);
               const temporada = e.temporada_override_id ? temporadaById.get(e.temporada_override_id) : undefined;
               return (
-                <TableRow key={e.id} className={cn(isChild && "bg-muted/30")}>
-                  <TableCell className={cn("font-medium", isChild && "pl-8 font-normal text-muted-foreground")}>
+                <TableRow
+                  key={e.id}
+                  className={cn(isChild && "bg-muted/30", inGroup && !lastInGroup && "border-b-border/40")}
+                >
+                  <TableCell
+                    className={cn(
+                      "font-medium",
+                      inGroup && "border-l-[3px] border-l-primary/60",
+                      isChild && "pl-8 font-normal text-muted-foreground",
+                    )}
+                  >
                     {isChild ? `↳ ${e.fase === "previo" ? "Previo" : "Post"}` : e.nombre}
                   </TableCell>
                   <TableCell><CategoriaBadge categoria={e.categoria} /></TableCell>
                   <TableCell className="whitespace-nowrap">{fmtDate(e.fecha_inicio)} – {fmtDate(e.fecha_fin)}</TableCell>
-                  <TableCell><AplicaABadge aplicaA={e.aplica_a} /></TableCell>
+                  <TableCell>
+                    {e.afluencia_estimada != null ? e.afluencia_estimada : <span className="text-muted-foreground">—</span>}
+                  </TableCell>
+                  <TableCell className="max-w-[200px] truncate" title={e.ubicacion ?? undefined}>
+                    {e.ubicacion ?? <span className="text-muted-foreground">—</span>}
+                  </TableCell>
                   <TableCell>
                     {efecto ? efecto
                       : temporada ? `→ ${temporada.codigo} (${temporada.nombre})`
