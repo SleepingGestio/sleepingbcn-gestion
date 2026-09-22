@@ -5,6 +5,7 @@ import { Check, ChevronLeft, ChevronRight } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { DiaPrecioDialog } from "@/components/dia-precio-dialog";
 import { DiasEdicionMasivaDialog } from "@/components/dias-edicion-masiva-dialog";
 import { CATEGORIA_STYLES, AMBITO_LIST, AMBITO_LABEL, AMBITO_COLOR } from "@/lib/pricing-styles";
@@ -89,13 +90,15 @@ function celdasDelMes(y: number, m: number): Celda[] {
 const FUERA_DE_MES = "pointer-events-none opacity-50 grayscale";
 
 function DiaCelda({
-  celda, calc, eventos, festivos, rango, seleccionado, onOpen, onToggleSeleccion,
+  celda, calc, eventos, festivos, rango, mapaCalor, seleccionado, onOpen, onToggleSeleccion,
 }: {
   celda: Celda;
   calc: DiaCalculado | null;
   eventos: Evento[];
   festivos: Festivo[];
   rango: { min: number; max: number } | null;
+  /** Off: cells get a plain card background instead of heatColor(); everything else is unchanged. */
+  mapaCalor: boolean;
   seleccionado: boolean;
   /** Opens DiaPrecioDialog — always what a click on the cell itself does, mode or no mode. */
   onOpen: () => void;
@@ -134,8 +137,9 @@ function DiaCelda({
         "relative flex min-h-[118px] flex-col overflow-hidden rounded-lg border text-left text-slate-900 outline-2 -outline-offset-2 outline-transparent transition-[outline-color]",
         celda.enMes ? "hover:outline-slate-900 focus-visible:outline-slate-900" : FUERA_DE_MES,
         seleccionado ? "border-primary ring-2 ring-primary" : "border-slate-200",
+        !mapaCalor && "bg-card",
       )}
-      style={{ background: heatColor(calc.precioFinal, rango.min, rango.max) }}
+      style={mapaCalor ? { background: heatColor(calc.precioFinal, rango.min, rango.max) } : undefined}
       title={tooltipFestivos(festivos)}
     >
       {celda.enMes && (
@@ -219,6 +223,7 @@ function CalendarioPage() {
   const [cursor, setCursor] = useState<{ y: number; m: number } | null>(null);
   const [dir, setDir] = useState<1 | -1>(1);
   const [seleccion, setSeleccion] = useState<string | null>(null);
+  const [mapaCalor, setMapaCalor] = useState(true);
   const [seleccionMasiva, setSeleccionMasiva] = useState<Set<string>>(new Set());
   const [edicionMasivaAbierta, setEdicionMasivaAbierta] = useState(false);
 
@@ -304,7 +309,13 @@ function CalendarioPage() {
             </SelectContent>
           </Select>
         </div>
-        {calculo.rango && (
+        <div className="grid gap-1">
+          <span className="text-xs text-muted-foreground">Mapa de calor</span>
+          <div className="flex h-9 items-center">
+            <Switch checked={mapaCalor} onCheckedChange={setMapaCalor} />
+          </div>
+        </div>
+        {mapaCalor && calculo.rango && (
           <div className="flex items-center gap-2 pb-2 text-xs text-muted-foreground">
             <span>{calculo.rango.min}€</span>
             <span
@@ -373,6 +384,7 @@ function CalendarioPage() {
               eventos={eventosActivosDia(eventos, c.iso, aplicaA)}
               festivos={festivosPorFecha.get(c.iso) ?? []}
               rango={calculo.rango}
+              mapaCalor={mapaCalor}
               seleccionado={seleccionMasiva.has(c.iso)}
               onOpen={() => setSeleccion(c.iso)}
               onToggleSeleccion={() => toggleSeleccionDia(c.iso)}
