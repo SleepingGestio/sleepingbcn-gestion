@@ -42,12 +42,19 @@ function PlantillasPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [incluirInactivas, setIncluirInactivas] = useState(false);
+  const [soloMarcadas, setSoloMarcadas] = useState(false);
   const [categoriaFilter, setCategoriaFilter] = useState<"todas" | EventoCategoria>("todas");
   const [sortKey, setSortKey] = useState<SortKey>("nombre");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const q = useQuery({ queryKey: ["pricing-plantillas"], queryFn: fetchPlantillas });
   const editing = (q.data ?? []).find((p) => p.id === editingId) ?? null;
   const colSpan = canEditPlantillas ? 7 : 6;
+
+  // Independent of the other filters, so the queue is always visible regardless of what's shown below.
+  const totalFuentesMarcadas = useMemo(
+    () => (q.data ?? []).reduce((sum, p) => sum + p.plantillas_fuentes.filter((f) => f.revision_forzada).length, 0),
+    [q.data],
+  );
 
   const plantillas = useMemo(() => {
     const pick = (p: Plantilla) => {
@@ -63,12 +70,13 @@ function PlantillasPage() {
     return (q.data ?? [])
       .filter((p) => incluirInactivas || p.activo)
       .filter((p) => categoriaFilter === "todas" || p.categoria === categoriaFilter)
+      .filter((p) => !soloMarcadas || p.plantillas_fuentes.some((f) => f.revision_forzada))
       .sort((a, b) => {
       const av = pick(a), bv = pick(b);
       const c = typeof av === "number" && typeof bv === "number" ? av - bv : String(av).localeCompare(String(bv));
       return sortDir === "asc" ? c : -c;
     });
-  }, [q.data, sortKey, sortDir, incluirInactivas, categoriaFilter]);
+  }, [q.data, sortKey, sortDir, incluirInactivas, categoriaFilter, soloMarcadas]);
 
   const toggleSort = (k: SortKey) => {
     if (sortKey === k) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
@@ -99,6 +107,19 @@ function PlantillasPage() {
               Mostrar inactivas
             </Label>
           </div>
+          <div className="flex items-center gap-2 h-9">
+            <Checkbox
+              id="solo-marcadas"
+              checked={soloMarcadas}
+              onCheckedChange={(v) => setSoloMarcadas(!!v)}
+            />
+            <Label htmlFor="solo-marcadas" className="text-sm font-normal cursor-pointer">
+              Ver solo marcadas
+            </Label>
+          </div>
+          <span className="text-sm text-muted-foreground">
+            {totalFuentesMarcadas} fuente{totalFuentesMarcadas === 1 ? "" : "s"} marcada{totalFuentesMarcadas === 1 ? "" : "s"} para revisar
+          </span>
         </div>
         {canEditPlantillas && (
           <Button size="sm" onClick={() => setCreating(true)}>

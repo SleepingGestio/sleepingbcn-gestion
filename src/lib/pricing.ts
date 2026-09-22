@@ -119,12 +119,19 @@ export async function confirmarEvento(id: string): Promise<void> {
   if (error) throw error;
 }
 
+export type FuenteEstadoVerificacion = "ok" | "roto";
+
 export type PlantillaFuente = {
   id: string;
   plantilla_id: string;
   url: string;
   descripcion: string | null;
   created_at: string;
+  /** Verification is manual: Claude opens the URL and sets these two via direct SQL when asked. */
+  ultima_verificacion: string | null;
+  estado_verificacion: FuenteEstadoVerificacion | null;
+  /** Ramon flags a fuente for an out-of-cycle check, independent of how stale ultima_verificacion is. */
+  revision_forzada: boolean;
 };
 
 export type Plantilla = {
@@ -165,6 +172,16 @@ export async function addFuente(plantillaId: string, url: string, descripcion: s
 
 export async function deleteFuente(id: string): Promise<void> {
   const { error } = await pricingDb().from("plantillas_fuentes").delete().eq("id", id);
+  if (error) throw error;
+}
+
+/**
+ * Toggles a fuente's revision_forzada flag from the UI. ultima_verificacion and estado_verificacion
+ * are not settable here: those are only ever written by Claude via direct SQL, after actually opening
+ * the URL.
+ */
+export async function updateFuenteRevisionForzada(id: string, revisionForzada: boolean): Promise<void> {
+  const { error } = await pricingDb().from("plantillas_fuentes").update({ revision_forzada: revisionForzada }).eq("id", id);
   if (error) throw error;
 }
 

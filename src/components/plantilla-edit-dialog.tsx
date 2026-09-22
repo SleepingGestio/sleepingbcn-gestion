@@ -2,17 +2,20 @@ import { useState } from "react";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from "@/components/ui/dialog";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Trash2 } from "lucide-react";
+import { Flag, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import {
-  updatePlantilla, addFuente, deleteFuente,
-  type Plantilla, type EventoAplicaA, type EventoCategoria, type EventoPeriodicidad,
+  updatePlantilla, addFuente, deleteFuente, updateFuenteRevisionForzada,
+  type Plantilla, type PlantillaFuente, type EventoAplicaA, type EventoCategoria, type EventoPeriodicidad,
 } from "@/lib/pricing";
+import { fmtDate } from "@/lib/format";
+import { cn } from "@/lib/utils";
 
 export function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -51,6 +54,26 @@ export function isHttpUrl(s: string): boolean {
   }
 }
 
+type EstadoBadge = "ok" | "roto" | "sin_verificar";
+
+const ESTADO_VERIFICACION_LABEL: Record<EstadoBadge, string> = {
+  ok: "Ok", roto: "Roto", sin_verificar: "Sin verificar",
+};
+
+const ESTADO_VERIFICACION_STYLES: Record<EstadoBadge, string> = {
+  ok: "border-transparent bg-emerald-600 text-white hover:bg-emerald-600",
+  roto: "border-transparent bg-red-600 text-white hover:bg-red-600",
+  sin_verificar: "border-transparent bg-slate-400 text-white hover:bg-slate-400",
+};
+
+/** Due for the annual September review: never verified, or verified more than 11 months ago. */
+function esFuenteDesactualizada(f: PlantillaFuente): boolean {
+  if (!f.ultima_verificacion) return true;
+  const limite = new Date();
+  limite.setMonth(limite.getMonth() - 11);
+  return new Date(f.ultima_verificacion) < limite;
+}
+
 /**
  * Combined edit dialog for a plantilla: core fields save with the button in
  * the footer; fuentes are added/removed immediately and the dialog stays open
@@ -74,6 +97,7 @@ export function PlantillaEditDialog({
   const [newUrl, setNewUrl] = useState("");
   const [newDesc, setNewDesc] = useState("");
   const [addingFuente, setAddingFuente] = useState(false);
+  const [togglingFuenteId, setTogglingFuenteId] = useState<string | null>(null);
 
   async function handleSave() {
     if (!nombre.trim()) { toast.error("El nombre es obligatorio"); return; }
@@ -119,6 +143,18 @@ export function PlantillaEditDialog({
       onChanged();
     } catch (e) {
       toast.error("Error: " + (e as Error).message);
+    }
+  }
+
+  async function handleToggleRevisionForzada(f: PlantillaFuente) {
+    setTogglingFuenteId(f.id);
+    try {
+      await updateFuenteRevisionForzada(f.id, !f.revision_forzada);
+      onChanged();
+    } catch (e) {
+      toast.error("Error: " + (e as Error).message);
+    } finally {
+      setTogglingFuenteId(null);
     }
   }
 
@@ -176,29 +212,55 @@ export function PlantillaEditDialog({
           {plantilla.plantillas_fuentes.length === 0 && (
             <p className="text-xs text-muted-foreground">Sin fuentes</p>
           )}
-          {plantilla.plantillas_fuentes.map((f) => (
-            <div key={f.id} className="flex items-center justify-between gap-2">
-              <div className="min-w-0">
-                <a
-                  href={f.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-blue-600 hover:underline break-all"
-                >
-                  {f.url}
-                </a>
-                {f.descripcion && <div className="text-xs text-muted-foreground">{f.descripcion}</div>}
+          {plantilla.plantillas_fuentes.map((f) => {
+            const desactualizada = esFuenteDesactualizada(f);
+            const estado: EstadoBadge = f.estado_verificacion ?? "sin_verificar";
+            return (
+              <div key={f.id} className={cn("flex flex-col gap-1.5 rounded-md p-2", desactualizada && "bg-amber-50")}>
+                <div className="flex items-center justify-between gap-2">
+                  <div className="min-w-0">
+                    <a
+                      href={f.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-blue-600 hover:underline break-all"
+                    >
+                      {f.url}
+                    </a>
+                    {f.descripcion && <div className="text-xs text-muted-foreground">{f.descripcion}</div>}
+                  </div>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    title="Eliminar fuente"
+                    onClick={() => handleDeleteFuente(f.id)}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
+                <div className="flex flex-wrap items-center gap-2 text-xs">
+                  <Badge className={ESTADO_VERIFICACION_STYLES[estado]}>{ESTADO_VERIFICACION_LABEL[estado]}</Badge>
+                  <span className={cn("text-muted-foreground", desactualizada && "font-medium text-amber-700")}>
+                    {f.ultima_verificacion ? fmtDate(f.ultima_verificacion) : "Nunca"}
+                  </span>
+                  {f.revision_forzada && (
+                    <span className="inline-flex items-center gap-1 font-medium text-amber-700">
+                      <Flag className="h-3 w-3" /> Marcada
+                    </span>
+                  )}
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="ml-auto h-6 px-2"
+                    disabled={togglingFuenteId === f.id}
+                    onClick={() => handleToggleRevisionForzada(f)}
+                  >
+                    {f.revision_forzada ? "Quitar marca" : "Marcar para revisar"}
+                  </Button>
+                </div>
               </div>
-              <Button
-                size="icon"
-                variant="ghost"
-                title="Eliminar fuente"
-                onClick={() => handleDeleteFuente(f.id)}
-              >
-                <Trash2 className="h-4 w-4" />
-              </Button>
-            </div>
-          ))}
+            );
+          })}
           <div className="flex items-end gap-2 pt-1">
             <div className="flex-1">
               <Field label="URL">
