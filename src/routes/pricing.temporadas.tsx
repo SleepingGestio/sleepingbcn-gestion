@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState, type ComponentType } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AppShell } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -22,7 +22,7 @@ import {
   fetchTemporadas, copyTemporadasToYear, deleteTemporada, deleteTemporadasByYear, findCoverageGaps,
   fetchDiaSemanaPeriodos, copyDiaSemanaPeriodosToYear, deleteDiaSemanaPeriodosByYear,
   fetchPrecioBase, copyPrecioBaseToYear, deletePrecioBaseByYear, ordenarPeriodos, type PrecioBase,
-  type Temporada, type TemporadaAplicaA,
+  festivosDelAnio, generarFestivosDelAnio, type Temporada, type TemporadaAplicaA,
 } from "@/lib/pricing";
 import { fmtDate, fmtEUR } from "@/lib/format";
 import { SortHeader } from "@/components/sort-header";
@@ -245,6 +245,7 @@ const precioBaseLabel = (rows: PrecioBase[], year: number) => {
 function ConfiguracionTarifasPage() {
   const { canEdit } = usePermissions();
   const canEditTemporadas = canEdit("pricing_temporadas");
+  const queryClient = useQueryClient();
   const q = useQuery({ queryKey: ["pricing-temporadas"], queryFn: fetchTemporadas });
   const all = useMemo(() => q.data ?? [], [q.data]);
   // Same key as DiaSemanaTab, so react-query shares one fetch between them.
@@ -265,6 +266,7 @@ function ConfiguracionTarifasPage() {
   const [copyTemporadas, setCopyTemporadas] = useState(true);
   const [copyDia, setCopyDia] = useState(true);
   const [copyPrecio, setCopyPrecio] = useState(true);
+  const [copyFestivos, setCopyFestivos] = useState(true);
 
   const dataYears = useMemo(
     () => [...new Set([...all.map((t) => t.anio), ...allDia.map((p) => p.anio), ...allPrecio.map((p) => p.anio)])],
@@ -290,6 +292,11 @@ function ConfiguracionTarifasPage() {
     }),
     [all, allDia, copyPrompt],
   );
+  // Pure, so this is a cheap preview of what "Generar" would produce — same count every año.
+  const festivosPreviewCount = useMemo(
+    () => (copyPrompt != null ? festivosDelAnio(copyPrompt).length : 0),
+    [copyPrompt],
+  );
 
   function addYear() {
     const y = Number(nuevoAnio);
@@ -300,6 +307,7 @@ function ConfiguracionTarifasPage() {
       setCopyTemporadas(true);
       setCopyDia(true);
       setCopyPrecio(true);
+      setCopyFestivos(true);
       setCopyPrompt(y);
     } else {
       setAnioSel(y);
@@ -348,6 +356,13 @@ function ConfiguracionTarifasPage() {
       if (copyPrecio) {
         const n = await copyPrecioBaseToYear(y - 1, y);
         toast.success(`${n} precios base copiados de ${y - 1} a ${y}`);
+      }
+      if (copyFestivos) {
+        // Not a copy: festivos are mostly date-formula-driven (Pascua, bank holidays), so they're
+        // regenerated for the new año rather than shifted a year like the other three.
+        const n = await generarFestivosDelAnio(y);
+        toast.success(`${n} festivos generados para ${y}`);
+        await queryClient.invalidateQueries({ queryKey: ["pricing-festivos"] });
       }
       await Promise.all([q.refetch(), dq.refetch(), pq.refetch()]);
       setAnioSel(y);
@@ -447,10 +462,18 @@ function ConfiguracionTarifasPage() {
               <Checkbox checked={copyPrecio} onCheckedChange={(c) => setCopyPrecio(c === true)} className="mt-0.5" />
               <span>Precio base ({precioBaseLabel(allPrecio, (copyPrompt ?? 0) - 1)})</span>
             </label>
+            <label className="flex items-start gap-2">
+              <Checkbox checked={copyFestivos} onCheckedChange={(c) => setCopyFestivos(c === true)} className="mt-0.5" />
+              <span>
+                Festivos (se generarán {festivosPreviewCount} festivos nacionales/catalanes/comunidades/internacionales
+                para {copyPrompt} — no se copian del año anterior, se generan de cero; los festivos locales que hayas
+                añadido a mano no se copian y hay que añadirlos aparte)
+              </span>
+            </label>
           </div>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={copying}>No copiar</AlertDialogCancel>
-            <AlertDialogAction disabled={copying || (!copyTemporadas && !copyDia && !copyPrecio)} onClick={(e) => { e.preventDefault(); void confirmCopy(); }}>
+            <AlertDialogAction disabled={copying || (!copyTemporadas && !copyDia && !copyPrecio && !copyFestivos)} onClick={(e) => { e.preventDefault(); void confirmCopy(); }}>
               Copiar
             </AlertDialogAction>
           </AlertDialogFooter>
