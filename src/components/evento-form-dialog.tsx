@@ -10,7 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 import {
-  insertEvento, updateEvento, fetchTemporadas,
+  insertEvento, updateEvento, deleteEvento, fetchTemporadas,
   type Evento, type EventoEstado, type EventoFase,
   type EventoTipoValor,
 } from "@/lib/pricing";
@@ -184,6 +184,26 @@ export function EventoFormDialog({
     }
   }
 
+  // Only previo/post editions can be deleted from here; principals keep the
+  // soft "Descartar" flow.
+  const canDelete = !!evento && evento.fase !== "principal";
+
+  async function handleDelete() {
+    if (!evento) return;
+    if (!window.confirm(`¿Eliminar definitivamente este ${fase === "previo" ? "previo" : "post"}? Esta acción no se puede deshacer.`)) return;
+    setSaving(true);
+    try {
+      await deleteEvento(evento.id);
+      toast.success("Evento eliminado");
+      onSaved();
+      onClose();
+    } catch (e) {
+      toast.error("Error: " + (e as Error).message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
   const valorTipoFields = (
     <div className="grid grid-cols-2 gap-3">
       <Field label="Valor">
@@ -310,6 +330,11 @@ export function EventoFormDialog({
           </Field>
         </div>
         <DialogFooter>
+          {canDelete && (
+            <Button variant="destructive" className="sm:mr-auto" onClick={handleDelete} disabled={saving}>
+              Eliminar
+            </Button>
+          )}
           <Button variant="outline" onClick={onClose} disabled={saving}>Cancelar</Button>
           <Button onClick={handleSubmit} disabled={saving}>Guardar</Button>
         </DialogFooter>

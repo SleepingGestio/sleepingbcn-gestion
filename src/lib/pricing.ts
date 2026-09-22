@@ -114,6 +114,14 @@ export async function descartarEvento(id: string): Promise<void> {
   if (error) throw error;
 }
 
+// Hard delete (unlike descartarEvento). Selects the deleted row back so an
+// RLS-blocked delete, which PostgREST reports as success with 0 rows, surfaces as an error.
+export async function deleteEvento(id: string): Promise<void> {
+  const { data, error } = await pricingDb().from("eventos").delete().eq("id", id).select("id");
+  if (error) throw error;
+  if (!data || data.length === 0) throw new Error("No se ha podido eliminar el evento (sin permiso o ya no existe)");
+}
+
 export async function confirmarEvento(id: string): Promise<void> {
   const { error } = await pricingDb().from("eventos").update({ estado: "confirmado" }).eq("id", id);
   if (error) throw error;
