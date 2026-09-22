@@ -6,7 +6,7 @@ import { AppShell } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DiaPrecioDialog } from "@/components/dia-precio-dialog";
-import { CATEGORIA_STYLES, FESTIVO_TIPOS, TIPO_LABEL, TIPO_STYLES } from "@/lib/pricing-styles";
+import { CATEGORIA_STYLES, AMBITO_LIST, AMBITO_LABEL, AMBITO_COLOR } from "@/lib/pricing-styles";
 import {
   fetchTemporadas, fetchDiaSemanaPeriodos, fetchPrecioBase, fetchEventos, fetchFestivos,
   type Evento, type Festivo, type TemporadaAplicaA,
@@ -41,26 +41,35 @@ const HATCHED = "repeating-linear-gradient(45deg, #f1f5f9, #f1f5f9 6px, #e2e8f0 
 type Celda = { iso: string; dia: number; enMes: boolean };
 
 /**
- * Colored strip across the cell's top edge: one full-width bar for a single tipo present that day,
- * or equal-width segments (one per distinct tipo, in FESTIVO_TIPOS order) when there are several.
- * Sits as the cell's first child, outside its padding; the cell's own overflow-hidden + rounded-lg
- * clips it to the top corners, so it needs no rounding of its own. Renders nothing on a day with no festivo.
+ * Colored strip across the cell's top edge: one equal-width segment per distinct ámbito present that
+ * day, in AMBITO_LIST order, counting the ámbitos of every festivo that day combined (so a single
+ * festivo with several ámbitos, like Año Nuevo, already produces several segments). Sits as the cell's
+ * first child, outside its padding; the cell's own overflow-hidden + rounded-lg clips it to the top
+ * corners, so it needs no rounding of its own. Renders nothing on a day with no festivo.
  */
 function BarraFestivos({ festivos }: { festivos: Festivo[] }) {
-  const tipos = FESTIVO_TIPOS.filter((t) => festivos.some((f) => f.tipo === t));
-  if (tipos.length === 0) return null;
+  const ambitos = AMBITO_LIST.filter((a) => festivos.some((f) => f.ambitos.includes(a)));
+  if (ambitos.length === 0) return null;
   return (
-    <div className="flex h-1 w-full shrink-0">
-      {tipos.map((t) => (
-        <span key={t} className={cn("h-full flex-1", TIPO_STYLES[t])} />
+    <div className="flex h-2.5 w-full shrink-0">
+      {ambitos.map((a) => (
+        <span key={a} className="h-full flex-1" style={{ background: AMBITO_COLOR[a] }} />
       ))}
     </div>
   );
 }
 
-/** Festivo names for a cell's native tooltip, one per line; undefined when there are none. */
-const tooltipFestivos = (festivos: Festivo[]) =>
-  festivos.length > 0 ? festivos.map((f) => `${f.nombre} (${TIPO_LABEL[f.tipo]})`).join("\n") : undefined;
+/** One line per (festivo, ámbito) for a cell's native tooltip, detalle appended for comunidad_otras;
+ * undefined when there are none. */
+const tooltipFestivos = (festivos: Festivo[]) => {
+  const lineas = festivos.flatMap((f) =>
+    f.ambitos.map((a) => {
+      const detalle = a === "comunidad_otras" && f.detalle ? ` (${f.detalle})` : "";
+      return `${f.nombre} — ${AMBITO_LABEL[a]}${detalle}`;
+    }),
+  );
+  return lineas.length > 0 ? lineas.join("\n") : undefined;
+};
 
 /** Monday-first grid covering the month, padded with the neighbouring months' days. */
 function celdasDelMes(y: number, m: number): Celda[] {

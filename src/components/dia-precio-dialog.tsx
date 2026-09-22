@@ -2,12 +2,10 @@ import type { ReactNode } from "react";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
 } from "@/components/ui/dialog";
-import { Badge } from "@/components/ui/badge";
 import { fmtNum2 } from "@/lib/format";
-import { cn } from "@/lib/utils";
 import type { Festivo } from "@/lib/pricing";
 import type { DiaCalculado } from "@/lib/pricing-calc";
-import { TIPO_LABEL, TIPO_STYLES } from "@/lib/pricing-styles";
+import { AMBITO_LIST, AMBITO_LABEL, AMBITO_COLOR } from "@/lib/pricing-styles";
 
 const MESES = [
   "enero", "febrero", "marzo", "abril", "mayo", "junio",
@@ -61,15 +59,21 @@ export function DiaPrecioDialog({
         </DialogHeader>
 
         {festivos && festivos.length > 0 && (
-          <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs">
-            {festivos.map((f) => (
-              <span key={f.id} className="inline-flex items-center gap-1.5">
-                {f.nombre}
-                <Badge className={cn("border-transparent px-1.5 py-0 text-[10px]", TIPO_STYLES[f.tipo])}>
-                  {TIPO_LABEL[f.tipo]}
-                </Badge>
-              </span>
-            ))}
+          <div className="flex flex-col gap-1 text-xs">
+            {festivos.flatMap((f) =>
+              AMBITO_LIST.filter((a) => f.ambitos.includes(a)).map((a) => (
+                <span key={`${f.id}-${a}`} className="inline-flex items-center gap-1.5">
+                  <span
+                    className="inline-block h-2 w-2 shrink-0 rounded-full"
+                    style={{ background: AMBITO_COLOR[a] }}
+                  />
+                  {f.nombre} — {AMBITO_LABEL[a]}
+                  {a === "comunidad_otras" && f.detalle && (
+                    <span className="text-muted-foreground">({f.detalle})</span>
+                  )}
+                </span>
+              )),
+            )}
           </div>
         )}
 

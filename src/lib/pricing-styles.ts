@@ -1,4 +1,4 @@
-import type { EventoCategoria, FestivoTipo } from "@/lib/pricing";
+import type { EventoCategoria, FestivoAmbito } from "@/lib/pricing";
 
 /** Tailwind classes per event category; shared by CategoriaBadge and the calendar's event pills. */
 export const CATEGORIA_STYLES: Record<EventoCategoria, string> = {
@@ -8,21 +8,30 @@ export const CATEGORIA_STYLES: Record<EventoCategoria, string> = {
   otro: "bg-slate-500 text-white hover:bg-slate-500",
 };
 
-/** Display order of the festivo tipos (also the order of the dots in the calendar cells). */
-export const FESTIVO_TIPOS: FestivoTipo[] = ["nacional", "catalan", "comunidad_otras", "internacional", "local"];
+/** Display order of the festivo ámbitos: the grid columns, the calendar strip segments, the dialog lines. */
+export const AMBITO_LIST: FestivoAmbito[] = [
+  "nacional", "catalan", "comunidad_otras", "local", "francia", "alemania", "italia", "reino_unido",
+];
 
-export const TIPO_LABEL: Record<FestivoTipo, string> = {
+export const AMBITO_LABEL: Record<FestivoAmbito, string> = {
   nacional: "Nacional",
   catalan: "Catalán",
   comunidad_otras: "Otra comunidad",
-  internacional: "Internacional",
   local: "Local",
+  francia: "Francia",
+  alemania: "Alemania",
+  italia: "Italia",
+  reino_unido: "Reino Unido",
 };
 
-export const TIPO_STYLES: Record<FestivoTipo, string> = {
-  nacional: "bg-rose-600 text-white hover:bg-rose-600",
-  catalan: "bg-amber-600 text-white hover:bg-amber-600",
-  comunidad_otras: "bg-violet-600 text-white hover:bg-violet-600",
-  internacional: "bg-teal-600 text-white hover:bg-teal-600",
-  local: "bg-sky-600 text-white hover:bg-sky-600",
+/** One color per ámbito, shared by the Festivos grid's dots, the calendar strip and the day-detail dialog. */
+export const AMBITO_COLOR: Record<FestivoAmbito, string> = {
+  nacional: "#e11d48",
+  catalan: "#d97706",
+  comunidad_otras: "#7c3aed",
+  local: "#0ea5e9",
+  francia: "#4f46e5",
+  alemania: "#52525b",
+  italia: "#0891b2",
+  reino_unido: "#c026d3",
 };
