@@ -212,6 +212,11 @@ export type TemporadaPeriodo = {
   created_at: string;
 };
 
+/** A temporada's periods, earliest fecha_inicio first. Shared by the edit dialog and the list's "Períodos" column. */
+export function ordenarPeriodos(periodos: TemporadaPeriodo[]): TemporadaPeriodo[] {
+  return [...periodos].sort((a, b) => a.fecha_inicio.localeCompare(b.fecha_inicio));
+}
+
 export type Temporada = {
   id: string;
   id_negocio: string;

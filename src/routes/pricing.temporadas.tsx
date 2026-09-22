@@ -21,7 +21,7 @@ import { usePermissions } from "@/hooks/use-permissions";
 import {
   fetchTemporadas, copyTemporadasToYear, deleteTemporada, deleteTemporadasByYear, findCoverageGaps,
   fetchDiaSemanaPeriodos, copyDiaSemanaPeriodosToYear, deleteDiaSemanaPeriodosByYear,
-  fetchPrecioBase, copyPrecioBaseToYear, deletePrecioBaseByYear, type PrecioBase,
+  fetchPrecioBase, copyPrecioBaseToYear, deletePrecioBaseByYear, ordenarPeriodos, type PrecioBase,
   type Temporada, type TemporadaAplicaA,
 } from "@/lib/pricing";
 import { fmtDate, fmtEUR } from "@/lib/format";
@@ -34,19 +34,16 @@ import { FestivosTab } from "@/components/festivos-tab";
 const firstInicio = (t: Temporada) =>
   t.temporada_periodos.map((p) => p.fecha_inicio).sort()[0] ?? "";
 
-const MAX_CHIPS = 2;
-
 function PeriodosSummary({ temporada }: { temporada: Temporada }) {
-  const ps = [...temporada.temporada_periodos].sort((a, b) => a.fecha_inicio.localeCompare(b.fecha_inicio));
+  const ps = ordenarPeriodos(temporada.temporada_periodos);
   if (ps.length === 0) return <span className="text-muted-foreground">—</span>;
   const label = (p: (typeof ps)[number]) =>
     `${fmtDate(p.fecha_inicio)} – ${fmtDate(p.fecha_fin)}${p.estancia_minima != null ? ` · mín. ${p.estancia_minima}` : ""}`;
   return (
-    <div className="flex items-center gap-1 whitespace-nowrap" title={ps.map(label).join(", ")}>
-      {ps.slice(0, MAX_CHIPS).map((p) => (
-        <span key={p.id} className="rounded bg-muted px-1.5 py-0.5 text-xs">{label(p)}</span>
+    <div className="flex flex-wrap items-center gap-1">
+      {ps.map((p) => (
+        <span key={p.id} className="whitespace-nowrap rounded bg-muted px-1.5 py-0.5 text-xs">{label(p)}</span>
       ))}
-      {ps.length > MAX_CHIPS && <span className="text-xs text-muted-foreground">+{ps.length - MAX_CHIPS}</span>}
     </div>
   );
 }

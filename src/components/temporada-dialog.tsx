@@ -8,6 +8,7 @@ import { Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import {
   insertTemporadaConPrimerPeriodo, updateTemporada, insertPeriodo, updatePeriodo, deletePeriodo, findPeriodoOverlap,
+  ordenarPeriodos,
   type Temporada, type TemporadaAplicaA, type TemporadaPeriodo,
 } from "@/lib/pricing";
 import { addDaysISO, fmtDate } from "@/lib/format";
@@ -126,9 +127,7 @@ export function TemporadaDialog({
   // Id of the period currently loaded into the form for editing, or null when the form is in
   // "add a new period" mode. Only one period can be edited at a time.
   const [editingPeriodoId, setEditingPeriodoId] = useState<string | null>(null);
-  const periodos = [...(temporada?.temporada_periodos ?? [])].sort((a, b) =>
-    a.fecha_inicio.localeCompare(b.fecha_inicio),
-  );
+  const periodos = ordenarPeriodos(temporada?.temporada_periodos ?? []);
   const latestFin = periodos.reduce((max, p) => (p.fecha_fin > max ? p.fecha_fin : max), "");
   // First period in create mode; the add-period mini-form in edit mode. Starts
   // the day after the latest existing period, or Jan 1 when there is none.
