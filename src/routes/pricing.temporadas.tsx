@@ -120,7 +120,11 @@ function TemporadasTab({ anio, aplicaA, temporadas: all, loading, error, onSaved
               <TableHead><SortHeader label="Código" active={sortKey === "codigo"} dir={sortDir} onClick={() => toggleSort("codigo")} /></TableHead>
               <TableHead><SortHeader label="Nombre" active={sortKey === "nombre"} dir={sortDir} onClick={() => toggleSort("nombre")} /></TableHead>
               <TableHead><SortHeader label="Coeficiente" active={sortKey === "coeficiente"} dir={sortDir} onClick={() => toggleSort("coeficiente")} /></TableHead>
-              <TableHead><SortHeader label="Períodos" active={sortKey === "fechas"} dir={sortDir} onClick={() => toggleSort("fechas")} /></TableHead>
+              <TableHead>
+                <span className="inline-flex items-center text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Períodos
+                </span>
+              </TableHead>
               {canEditTemporadas && <TableHead className="text-right">Acciones</TableHead>}
             </TableRow>
           </TableHeader>
