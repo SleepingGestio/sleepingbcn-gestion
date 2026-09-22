@@ -1,9 +1,13 @@
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
 } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { toast } from "sonner";
 import { fmtNum2 } from "@/lib/format";
-import type { Festivo } from "@/lib/pricing";
+import { upsertAjusteDia, type Festivo, type Temporada } from "@/lib/pricing";
 import type { DiaCalculado } from "@/lib/pricing-calc";
 import { AMBITO_LIST, AMBITO_LABEL, AMBITO_COLOR } from "@/lib/pricing-styles";
 
@@ -31,24 +35,180 @@ function Linea({ label, delta }: { label: ReactNode; delta: number }) {
   );
 }
 
+function ManualTag() {
+  return (
+    <span className="rounded bg-primary/10 px-1 py-px text-[9px] font-semibold text-primary">Manual</span>
+  );
+}
+
+/** Number field of the "Ajustes manuales" section: shows the effective value, editable inline,
+ * with a "Quitar" to clear it back to automatic when a manual value is currently active. */
+function AjusteNumero({
+  label, valorActual, manual, saving, sufijo, onGuardar, onQuitar,
+}: {
+  label: string;
+  valorActual: number | null;
+  manual: boolean;
+  saving: boolean;
+  sufijo?: string;
+  onGuardar: (valor: number) => void;
+  onQuitar: () => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState("");
+
+  if (!editing) {
+    return (
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-muted-foreground">{label}</span>
+        <div className="flex items-center gap-1.5">
+          <span className={manual ? "font-medium" : ""}>
+            {valorActual != null ? `${valorActual}${sufijo ?? ""}` : "—"}
+          </span>
+          {manual && <ManualTag />}
+          <Button
+            size="sm" variant="ghost" className="h-6 px-2 text-xs"
+            onClick={() => { setValue(valorActual != null ? String(valorActual) : ""); setEditing(true); }}
+          >
+            Editar
+          </Button>
+          {manual && (
+            <Button size="sm" variant="ghost" className="h-6 px-2 text-xs" onClick={onQuitar} disabled={saving}>
+              Quitar
+            </Button>
+          )}
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div className="flex items-center justify-between gap-2">
+      <span className="text-muted-foreground">{label}</span>
+      <div className="flex items-center gap-1.5">
+        <Input
+          type="number"
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          className="h-7 w-20 text-xs"
+          autoFocus
+        />
+        <Button size="sm" variant="ghost" className="h-6 px-2 text-xs" onClick={() => setEditing(false)} disabled={saving}>
+          Cancelar
+        </Button>
+        <Button
+          size="sm" className="h-6 px-2 text-xs"
+          disabled={saving || value.trim() === "" || Number.isNaN(Number(value))}
+          onClick={() => { onGuardar(Number(value)); setEditing(false); }}
+        >
+          Guardar
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+/** Temporada field of the "Ajustes manuales" section: a select over that año/aplicaA's temporadas. */
+function AjusteTemporada({
+  dia, temporadasDelAnio, saving, onGuardar, onQuitar,
+}: {
+  dia: DiaCalculado;
+  temporadasDelAnio: Temporada[];
+  saving: boolean;
+  onGuardar: (temporadaId: string) => void;
+  onQuitar: () => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState(dia.temporada.temporadaId);
+  const manual = dia.temporada.origen === "manual";
+
+  if (!editing) {
+    return (
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-muted-foreground">Temporada</span>
+        <div className="flex items-center gap-1.5">
+          <span className={manual ? "font-medium" : ""}>{dia.temporada.codigo} · {dia.temporada.nombre}</span>
+          {manual && <ManualTag />}
+          <Button
+            size="sm" variant="ghost" className="h-6 px-2 text-xs"
+            onClick={() => { setValue(dia.temporada.temporadaId); setEditing(true); }}
+          >
+            Editar
+          </Button>
+          {manual && (
+            <Button size="sm" variant="ghost" className="h-6 px-2 text-xs" onClick={onQuitar} disabled={saving}>
+              Quitar
+            </Button>
+          )}
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div className="flex items-center justify-between gap-2">
+      <span className="text-muted-foreground">Temporada</span>
+      <div className="flex items-center gap-1.5">
+        <Select value={value} onValueChange={setValue}>
+          <SelectTrigger className="h-7 w-40 text-xs"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            {temporadasDelAnio.map((t) => (
+              <SelectItem key={t.id} value={t.id}>{t.codigo} · {t.nombre}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Button size="sm" variant="ghost" className="h-6 px-2 text-xs" onClick={() => setEditing(false)} disabled={saving}>
+          Cancelar
+        </Button>
+        <Button size="sm" className="h-6 px-2 text-xs" disabled={saving} onClick={() => { onGuardar(value); setEditing(false); }}>
+          Guardar
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 /**
- * Price breakdown of one day (read-only for now). `extra` is rendered between the table and the
- * minimum stay, so a follow-up (e.g. a manual price adjustment block) can be added without
- * touching the rest of this dialog. `festivos` are the ones falling on that day, passed in by the
- * caller; they are informational only and never affect the price.
+ * Price breakdown of one day. `festivos` are the ones falling on that day, passed in by the caller;
+ * they are informational only and never affect the price. The "Ajustes manuales del día" section lets
+ * the temporada, estancia mínima and precio each be overridden independently for this one day, via
+ * `pricing.ajustes_dia`; `onAjusteGuardado` is called after each save so the caller can refetch and
+ * recalculate.
  */
 export function DiaPrecioDialog({
-  dia, onClose, extra, festivos,
+  dia, onClose, festivos, temporadas, onAjusteGuardado,
 }: {
   dia: DiaCalculado;
   onClose: () => void;
-  extra?: ReactNode;
   festivos?: Festivo[];
+  temporadas: Temporada[];
+  onAjusteGuardado: () => void | Promise<void>;
 }) {
   // precioBase × coefTemporada × coefDía, shown as two increments that add up to the subtotal.
   const tempDelta = dia.precioTrasTemporada - dia.precioBase;
   const diaDelta = dia.subtotal - dia.precioTrasTemporada;
   const fuentesMin = dia.estanciaMinimaFuentes.filter((f) => f.aplicada).map((f) => f.nombre);
+  const estanciaManual = dia.estanciaMinimaFuentes.some((f) => f.origen === "manual");
+  const anioDia = Number(dia.fecha.slice(0, 4));
+  const temporadasDelAnio = temporadas
+    .filter((t) => t.anio === anioDia && t.aplica_a === dia.aplicaA)
+    .sort((a, b) => a.codigo.localeCompare(b.codigo));
+
+  const [saving, setSaving] = useState(false);
+
+  async function guardarAjuste(
+    changes: Partial<{ temporadaId: string | null; estanciaMinima: number | null; precioManual: number | null }>,
+    successMsg: string,
+  ) {
+    setSaving(true);
+    try {
+      await upsertAjusteDia(dia.fecha, dia.aplicaA, changes);
+      toast.success(successMsg);
+      await onAjusteGuardado();
+    } catch (e) {
+      toast.error("Error: " + (e as Error).message);
+    } finally {
+      setSaving(false);
+    }
+  }
 
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
@@ -89,7 +249,12 @@ export function DiaPrecioDialog({
               <td className="py-0.5 text-right tabular-nums whitespace-nowrap">{eur(dia.precioBase)}</td>
             </tr>
             <Linea
-              label={`Temporada — ${dia.temporada.nombre} (${fmtNum2(dia.temporada.coeficiente)})`}
+              label={
+                <>
+                  Temporada — {dia.temporada.nombre} ({fmtNum2(dia.temporada.coeficiente)})
+                  {dia.temporada.origen === "manual" && <span className="ml-1 align-middle"><ManualTag /></span>}
+                </>
+              }
               delta={tempDelta}
             />
             <Linea
@@ -104,15 +269,51 @@ export function DiaPrecioDialog({
             {dia.efectos.map((ef) => (
               <Linea key={ef.eventoId} label={ef.nombre} delta={ef.delta} />
             ))}
-            <tr className="font-bold">
+            <tr className={dia.precioManual == null ? "font-bold" : undefined}>
               <td className="w-3.5 border-t pt-1" />
               <td className="border-t pt-1">Precio del día</td>
-              <td className="border-t pt-1 text-right tabular-nums whitespace-nowrap">{dia.precioFinal} €</td>
+              <td className="border-t pt-1 text-right tabular-nums whitespace-nowrap">{dia.precioCalculado} €</td>
             </tr>
+            {dia.precioManual != null && (
+              <tr className="font-bold">
+                <td className="w-3.5" />
+                <td className="pt-0.5">
+                  Precio del día ajustado <ManualTag />
+                </td>
+                <td className="pt-0.5 text-right tabular-nums whitespace-nowrap">{dia.precioManual} €</td>
+              </tr>
+            )}
           </tbody>
         </table>
 
-        {extra}
+        <div className="rounded-md border p-2 text-xs space-y-1.5">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Ajustes manuales del día</p>
+          <AjusteTemporada
+            dia={dia}
+            temporadasDelAnio={temporadasDelAnio}
+            saving={saving}
+            onGuardar={(temporadaId) => guardarAjuste({ temporadaId }, "Temporada manual guardada")}
+            onQuitar={() => guardarAjuste({ temporadaId: null }, "Temporada vuelve a ser automática")}
+          />
+          <AjusteNumero
+            label="Estancia mínima"
+            valorActual={dia.estanciaMinima}
+            manual={estanciaManual}
+            saving={saving}
+            sufijo=" nits"
+            onGuardar={(valor) => guardarAjuste({ estanciaMinima: valor }, "Estancia mínima manual guardada")}
+            onQuitar={() => guardarAjuste({ estanciaMinima: null }, "Estancia mínima vuelve a ser automática")}
+          />
+          <AjusteNumero
+            label="Precio"
+            valorActual={dia.precioManual ?? dia.precioCalculado}
+            manual={dia.precioManual != null}
+            saving={saving}
+            sufijo=" €"
+            onGuardar={(valor) => guardarAjuste({ precioManual: valor }, "Precio manual guardado")}
+            onQuitar={() => guardarAjuste({ precioManual: null }, "Precio vuelve a ser el calculado")}
+          />
+        </div>
 
         <div className="text-xs">
           Estancia mínima:{" "}

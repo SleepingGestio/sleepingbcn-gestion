@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { DiaPrecioDialog } from "@/components/dia-precio-dialog";
 import { CATEGORIA_STYLES, AMBITO_LIST, AMBITO_LABEL, AMBITO_COLOR } from "@/lib/pricing-styles";
 import {
-  fetchTemporadas, fetchDiaSemanaPeriodos, fetchPrecioBase, fetchEventos, fetchFestivos,
+  fetchTemporadas, fetchDiaSemanaPeriodos, fetchPrecioBase, fetchEventos, fetchFestivos, fetchAjustesDia,
   type Evento, type Festivo, type TemporadaAplicaA,
 } from "@/lib/pricing";
 import { calcularAnio, eventosActivosDia, type DiaCalculado } from "@/lib/pricing-calc";
@@ -176,11 +176,13 @@ function CalendarioPage() {
   const precioQ = useQuery({ queryKey: ["pricing-precio-base"], queryFn: fetchPrecioBase });
   const eventosQ = useQuery({ queryKey: ["pricing-eventos"], queryFn: fetchEventos });
   const festivosQ = useQuery({ queryKey: ["pricing-festivos"], queryFn: fetchFestivos });
+  const ajustesQ = useQuery({ queryKey: ["pricing-ajustes-dia"], queryFn: fetchAjustesDia });
 
   const temporadas = useMemo(() => temporadasQ.data ?? [], [temporadasQ.data]);
   const diaSemanaPeriodos = useMemo(() => diaQ.data ?? [], [diaQ.data]);
   const precioBase = useMemo(() => precioQ.data ?? [], [precioQ.data]);
   const eventos = useMemo(() => eventosQ.data ?? [], [eventosQ.data]);
+  const ajustesDia = useMemo(() => ajustesQ.data ?? [], [ajustesQ.data]);
   // fetchFestivos returns every festivo: index them by date, several can share one.
   const festivosPorFecha = useMemo(() => {
     const m = new Map<string, Festivo[]>();
@@ -206,8 +208,8 @@ function CalendarioPage() {
 
   // Every day of the año is calculated once; paging between months only reads from this.
   const calculo = useMemo(
-    () => calcularAnio(anio, aplicaA, { temporadas, diaSemanaPeriodos, precioBase, eventos }),
-    [anio, aplicaA, temporadas, diaSemanaPeriodos, precioBase, eventos],
+    () => calcularAnio(anio, aplicaA, { temporadas, diaSemanaPeriodos, precioBase, eventos }, ajustesDia),
+    [anio, aplicaA, temporadas, diaSemanaPeriodos, precioBase, eventos, ajustesDia],
   );
   const celdas = useMemo(() => celdasDelMes(anio, mes), [anio, mes]);
 
@@ -219,8 +221,9 @@ function CalendarioPage() {
     });
   }
 
-  const cargando = temporadasQ.isLoading || diaQ.isLoading || precioQ.isLoading || eventosQ.isLoading || festivosQ.isLoading;
-  const error = (temporadasQ.error ?? diaQ.error ?? precioQ.error ?? eventosQ.error ?? festivosQ.error) as Error | null;
+  const cargando =
+    temporadasQ.isLoading || diaQ.isLoading || precioQ.isLoading || eventosQ.isLoading || festivosQ.isLoading || ajustesQ.isLoading;
+  const error = (temporadasQ.error ?? diaQ.error ?? precioQ.error ?? eventosQ.error ?? festivosQ.error ?? ajustesQ.error) as Error | null;
   const seleccionado = seleccion ? calculo.dias.get(seleccion) ?? null : null;
 
   return (
@@ -321,8 +324,11 @@ function CalendarioPage() {
 
       {seleccionado && (
         <DiaPrecioDialog
+          key={seleccionado.fecha}
           dia={seleccionado}
           festivos={festivosPorFecha.get(seleccionado.fecha) ?? []}
+          temporadas={temporadas}
+          onAjusteGuardado={async () => { await ajustesQ.refetch(); }}
           onClose={() => setSeleccion(null)}
         />
       )}

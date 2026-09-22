@@ -6,7 +6,7 @@
 // then every active event with a valor adds its own delta (each against the same subtotal).
 
 import { calcularAnio, calcularPrecioDia, type CalcData } from "../src/lib/pricing-calc.ts";
-import type { DiaSemanaPeriodo, Evento, PrecioBase, Temporada } from "../src/lib/pricing.ts";
+import type { AjusteDia, DiaSemanaPeriodo, Evento, PrecioBase, Temporada } from "../src/lib/pricing.ts";
 
 const meta = { id_negocio: "n1", created_at: "2027-01-01", updated_at: "2027-01-01" };
 
@@ -146,6 +146,22 @@ check("F rural has no data → null", calcularPrecioDia("2027-07-06", "rural", d
   const r = calcularPrecioDia("2027-07-06", "city", simple)!;
   check("I base 100, temporada 1.2, día 1.1 → 132", r.precioFinal === 132 && close(r.subtotal, 132), r);
   check("I no estancia mínima and no efectos", r.estanciaMinima === null && r.efectos.length === 0, r);
+}
+
+// K. Manual ajuste on a day that would otherwise be a plain período day (same date as A): temporada,
+//    estancia mínima and precio are all overridden at once, and the underlying calculated price is
+//    still available separately from the displayed (manual) one.
+{
+  const ajuste: AjusteDia = {
+    ...meta, id: "aj1", fecha: "2027-07-06", aplica_a: "city",
+    temporada_id: "t-baja", estancia_minima: 1, precio_manual: 55,
+  };
+  const r = calcularPrecioDia("2027-07-06", "city", data, ajuste)!;
+  check("K temporada is the manual one (BAJA), not the period's ALTA", r.temporada.origen === "manual" && r.temporada.codigo === "BAJA", r.temporada);
+  check("K estancia mínima is exactly the manual value (1), not maxed with the period's 3", r.estanciaMinima === 1, r.estanciaMinimaFuentes);
+  check("K precioCalculado still reflects the manual temporada: 100 × 0.9 × 1.0 = 90", close(r.precioCalculado, 90), r);
+  check("K precioFinal is the manual price (55), not the calculated one (90)", r.precioFinal === 55 && r.precioManual === 55, r);
+  check("K no conflict note (a manual override makes it moot)", r.notaTemporada === null, r.notaTemporada);
 }
 
 // J. Whole-year calculation (what the calendar view uses): every day of 2027, min/max of the prices.

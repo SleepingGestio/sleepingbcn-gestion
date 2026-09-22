@@ -1,5 +1,5 @@
 import type {
-  DiaSemanaPeriodo, Evento, EventoTipoValor, PrecioBase, Temporada, TemporadaAplicaA,
+  AjusteDia, DiaSemanaPeriodo, Evento, EventoTipoValor, PrecioBase, Temporada, TemporadaAplicaA,
 } from "@/lib/pricing";
 
 // Pure price calculation for one day. No I/O, no UI: everything comes in through `data`.
@@ -18,7 +18,7 @@ export type TemporadaEfectiva = {
   codigo: string;
   nombre: string;
   coeficiente: number;
-  origen: "periodo" | "evento";
+  origen: "periodo" | "evento" | "manual";
   /** Set when origen is "evento": the event that rectified the temporada. */
   eventoId: string | null;
   eventoNombre: string | null;
@@ -46,8 +46,8 @@ export type EfectoDia = {
 };
 
 export type FuenteEstanciaMinima = {
-  origen: "periodo" | "evento";
-  /** Temporada label for the period, event name for an event. */
+  origen: "periodo" | "evento" | "manual";
+  /** Temporada label for the period, event name for an event, "Ajuste manual" for a manual override. */
   nombre: string;
   valor: number;
   /** True when this source's value is the one that sets the final minimum stay. */
@@ -80,7 +80,11 @@ export type DiaCalculado = {
   efectos: EfectoDia[];
   efectosTotal: number;
 
-  /** Rounded to whole euros. */
+  /** subtotal + efectos, rounded to whole euros — the underlying calculation, regardless of any manual override. */
+  precioCalculado: number;
+  /** Set when an ajuste manual overrides the day's price; null when the day uses the calculated one. */
+  precioManual: number | null;
+  /** precioManual when set, precioCalculado otherwise — the price to actually display/use (e.g. for the heatmap). */
   precioFinal: number;
 
   estanciaMinima: number | null;
@@ -106,11 +110,14 @@ export function eventosActivosDia(eventos: Evento[], fecha: string, aplicaA: Tem
 /**
  * Full price breakdown for one day, or null when it can't be calculated: no temporada
  * period, no día-de-la-semana period, or no precio base covers that date / año / grupo.
+ * `ajusteDia`, when given, carries that day's manual overrides: each field it sets wins
+ * outright over the normal período/evento calculation for that piece of the breakdown.
  */
 export function calcularPrecioDia(
   fecha: string,
   aplicaA: TemporadaAplicaA,
   data: CalcData,
+  ajusteDia?: AjusteDia,
 ): DiaCalculado | null {
   const anio = Number(fecha.slice(0, 4));
 
@@ -171,20 +178,36 @@ export function calcularPrecioDia(
     nombre: temporadaBase.nombre,
     coeficiente: temporadaBase.coeficiente,
   };
-  const temporada: TemporadaEfectiva = ganador
-    ? {
-        temporadaId: ganador.target.id,
-        codigo: ganador.target.codigo,
-        nombre: ganador.target.nombre,
-        coeficiente: ganador.target.coeficiente,
-        origen: "evento",
-        eventoId: ganador.e.id,
-        eventoNombre: ganador.e.nombre,
-      }
-    : { ...temporadaPeriodo, origen: "periodo", eventoId: null, eventoNombre: null };
 
+  // A manual temporada override wins outright: no comparison against períodos or eventos at all.
+  const temporadaManual =
+    ajusteDia?.temporada_id != null ? data.temporadas.find((t) => t.id === ajusteDia.temporada_id) ?? null : null;
+
+  const temporada: TemporadaEfectiva = temporadaManual
+    ? {
+        temporadaId: temporadaManual.id,
+        codigo: temporadaManual.codigo,
+        nombre: temporadaManual.nombre,
+        coeficiente: temporadaManual.coeficiente,
+        origen: "manual",
+        eventoId: null,
+        eventoNombre: null,
+      }
+    : ganador
+      ? {
+          temporadaId: ganador.target.id,
+          codigo: ganador.target.codigo,
+          nombre: ganador.target.nombre,
+          coeficiente: ganador.target.coeficiente,
+          origen: "evento",
+          eventoId: ganador.e.id,
+          eventoNombre: ganador.e.nombre,
+        }
+      : { ...temporadaPeriodo, origen: "periodo", eventoId: null, eventoNombre: null };
+
+  // Moot once a manual override decides the day outright, so the conflict note is suppressed then.
   const notaTemporada =
-    candidatosTemporada.length > 1
+    !temporadaManual && candidatosTemporada.length > 1
       ? `Varios eventos proponen cambiar la temporada: ${candidatosTemporada
           .map((c) => `${c.eventoNombre} → ${c.codigo} (${c.coeficiente})`)
           .join("; ")}. Se aplica ${candidatosTemporada[0].codigo} (${candidatosTemporada[0].coeficiente}), la de mayor coeficiente.`
@@ -207,20 +230,30 @@ export function calcularPrecioDia(
     }));
   const efectosTotal = efectos.reduce((sum, ef) => sum + ef.delta, 0);
 
-  // 7. Final price.
-  const precioFinal = Math.round(subtotal + efectosTotal);
+  // 7. Final price: the calculated one, unless a manual precio overrides it outright.
+  const precioCalculado = Math.round(subtotal + efectosTotal);
+  const precioManual = ajusteDia?.precio_manual ?? null;
+  const precioFinal = precioManual ?? precioCalculado;
 
-  // 8. Minimum stay: the maximum of the period's and every active event's, including
-  //     temporada-override events that lost the conflict.
-  const fuentesRaw: Omit<FuenteEstanciaMinima, "aplicada">[] = [];
-  if (periodo.estancia_minima != null) {
-    fuentesRaw.push({ origen: "periodo", nombre: `${temporadaBase.codigo} · ${temporadaBase.nombre}`, valor: periodo.estancia_minima });
+  // 8. Minimum stay: the maximum of the period's and every active event's (including temporada-
+  //    override events that lost the conflict) — UNLESS a manual value replaces that whole
+  //    calculation outright, rather than joining it as another candidate.
+  let estanciaMinima: number | null;
+  let estanciaMinimaFuentes: FuenteEstanciaMinima[];
+  if (ajusteDia?.estancia_minima != null) {
+    estanciaMinima = ajusteDia.estancia_minima;
+    estanciaMinimaFuentes = [{ origen: "manual", nombre: "Ajuste manual", valor: estanciaMinima, aplicada: true }];
+  } else {
+    const fuentesRaw: Omit<FuenteEstanciaMinima, "aplicada">[] = [];
+    if (periodo.estancia_minima != null) {
+      fuentesRaw.push({ origen: "periodo", nombre: `${temporadaBase.codigo} · ${temporadaBase.nombre}`, valor: periodo.estancia_minima });
+    }
+    for (const e of activos) {
+      if (e.estancia_minima != null) fuentesRaw.push({ origen: "evento", nombre: e.nombre, valor: e.estancia_minima });
+    }
+    estanciaMinima = fuentesRaw.length ? Math.max(...fuentesRaw.map((f) => f.valor)) : null;
+    estanciaMinimaFuentes = fuentesRaw.map((f) => ({ ...f, aplicada: f.valor === estanciaMinima }));
   }
-  for (const e of activos) {
-    if (e.estancia_minima != null) fuentesRaw.push({ origen: "evento", nombre: e.nombre, valor: e.estancia_minima });
-  }
-  const estanciaMinima = fuentesRaw.length ? Math.max(...fuentesRaw.map((f) => f.valor)) : null;
-  const estanciaMinimaFuentes = fuentesRaw.map((f) => ({ ...f, aplicada: f.valor === estanciaMinima }));
 
   return {
     fecha,
@@ -236,6 +269,8 @@ export function calcularPrecioDia(
     subtotal,
     efectos,
     efectosTotal,
+    precioCalculado,
+    precioManual,
     precioFinal,
     estanciaMinima,
     estanciaMinimaFuentes,
@@ -249,14 +284,25 @@ export type AnioCalculado = {
   rango: { min: number; max: number } | null;
 };
 
-/** Calculates every day of `anio` once, so a calendar can page between months without recomputing. */
-export function calcularAnio(anio: number, aplicaA: TemporadaAplicaA, data: CalcData): AnioCalculado {
+/**
+ * Calculates every day of `anio` once, so a calendar can page between months without recomputing.
+ * `ajustesDia` is the year's full list of manual overrides (any aplica_a); only the ones matching
+ * this `aplicaA` are used, each passed to its own day's `calcularPrecioDia` call. The heatmap range
+ * is driven by each day's precioFinal, so a manual precio (not just the calculated one) shapes it too.
+ */
+export function calcularAnio(
+  anio: number,
+  aplicaA: TemporadaAplicaA,
+  data: CalcData,
+  ajustesDia: AjusteDia[] = [],
+): AnioCalculado {
+  const ajustesPorFecha = new Map(ajustesDia.filter((a) => a.aplica_a === aplicaA).map((a) => [a.fecha, a]));
   const dias = new Map<string, DiaCalculado | null>();
   let min = Infinity;
   let max = -Infinity;
   for (let t = Date.UTC(anio, 0, 1); new Date(t).getUTCFullYear() === anio; t += 86_400_000) {
     const fecha = new Date(t).toISOString().slice(0, 10);
-    const r = calcularPrecioDia(fecha, aplicaA, data);
+    const r = calcularPrecioDia(fecha, aplicaA, data, ajustesPorFecha.get(fecha));
     dias.set(fecha, r);
     if (r) {
       if (r.precioFinal < min) min = r.precioFinal;

@@ -668,3 +668,47 @@ export async function generarFestivosDelAnio(anio: number): Promise<number> {
   if (error) throw error;
   return rows.length;
 }
+
+/**
+ * A day's manual overrides, one row per (fecha, aplica_a). Every field is independent and optional:
+ * when set, it ALWAYS wins for that day, unconditionally — it doesn't go through the "highest
+ * coeficiente wins" rule used between competing eventos.
+ */
+export type AjusteDia = {
+  id: string;
+  id_negocio: string;
+  fecha: string;
+  aplica_a: TemporadaAplicaA;
+  temporada_id: string | null;
+  estancia_minima: number | null;
+  precio_manual: number | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export async function fetchAjustesDia(): Promise<AjusteDia[]> {
+  const { data, error } = await pricingDb().from("ajustes_dia").select("*");
+  if (error) throw error;
+  return (data ?? []) as AjusteDia[];
+}
+
+const AJUSTES_DIA_CONFLICT = "id_negocio,fecha,aplica_a";
+
+/**
+ * Sets one or more override fields for a day, leaving any other field of that day's row untouched
+ * (a partial upsert: PostgREST only SETs the columns present in the payload on conflict, so a field
+ * left out of `changes` keeps whatever value — or absence — it already had). Pass a field as `null`
+ * to clear just that override back to "no manual value" without affecting the other two.
+ */
+export async function upsertAjusteDia(
+  fecha: string,
+  aplicaA: TemporadaAplicaA,
+  changes: Partial<{ temporadaId: string | null; estanciaMinima: number | null; precioManual: number | null }>,
+): Promise<void> {
+  const payload: Record<string, unknown> = { fecha, aplica_a: aplicaA };
+  if ("temporadaId" in changes) payload.temporada_id = changes.temporadaId;
+  if ("estanciaMinima" in changes) payload.estancia_minima = changes.estanciaMinima;
+  if ("precioManual" in changes) payload.precio_manual = changes.precioManual;
+  const { error } = await pricingDb().from("ajustes_dia").upsert(payload, { onConflict: AJUSTES_DIA_CONFLICT });
+  if (error) throw error;
+}
