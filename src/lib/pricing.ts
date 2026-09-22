@@ -594,8 +594,8 @@ type FestivoGenerado = { fecha: string; nombre: string; ambitos: FestivoAmbito[]
 
 /**
  * All the year's holidays in one list, sorted by fecha (then nombre for same-date ties). Pure.
- * Two rows may share a date without sharing a nombre (Pfingstmontag / Segunda Pascua, San Esteban /
- * Boxing Day): the unique constraint is (id_negocio, fecha, nombre), so they coexist as separate rows.
+ * Two rows may share a date without sharing a nombre (Pfingstmontag / Segunda Pascua): the unique
+ * constraint is (id_negocio, fecha, nombre), so they coexist as separate rows.
  */
 export function festivosDelAnio(anio: number): FestivoGenerado[] {
   const pad = (n: number) => String(n).padStart(2, "0");
@@ -608,8 +608,8 @@ export function festivosDelAnio(anio: number): FestivoGenerado[] {
 
   const lista: FestivoGenerado[] = [
     fijo(1, 1, "Año Nuevo", ["nacional", "francia", "alemania", "italia", "reino_unido"]),
-    fijo(1, 6, "Reyes", ["nacional"]),
-    fijo(5, 1, "Fiesta del Trabajo", ["nacional"]),
+    fijo(1, 6, "Reyes", ["nacional", "italia"]),
+    fijo(5, 1, "Fiesta del Trabajo", ["nacional", "francia", "alemania", "italia"]),
     fijo(10, 12, "Fiesta Nacional de España", ["nacional"]),
     fijo(12, 6, "Día de la Constitución", ["nacional"]),
     fijo(8, 15, "La Asunción", ["nacional", "francia", "italia"]),
@@ -618,7 +618,7 @@ export function festivosDelAnio(anio: number): FestivoGenerado[] {
     fijo(12, 25, "Navidad", ["nacional", "francia", "alemania", "italia", "reino_unido"]),
     fijo(6, 24, "San Juan", ["catalan"]),
     fijo(9, 11, "Diada Nacional de Cataluña", ["catalan"]),
-    fijo(12, 26, "San Esteban", ["catalan"]),
+    fijo(12, 26, "San Esteban", ["catalan", "reino_unido", "alemania", "italia"]),
     fijo(2, 28, "Día de Andalucía", ["comunidad_otras"], "Andalucía"),
     fijo(3, 19, "San José", ["comunidad_otras"], "Comunidad Valenciana, Madrid, Murcia, Navarra, País Vasco"),
     fijo(5, 2, "Día de la Comunidad de Madrid", ["comunidad_otras"], "Madrid"),
@@ -629,14 +629,17 @@ export function festivosDelAnio(anio: number): FestivoGenerado[] {
     fijo(7, 14, "Bastille Day", ["francia"]),
     fijo(10, 3, "Día de la Unidad Alemana", ["alemania"]),
     fijo(11, 11, "Armistice Day", ["francia"]),
-    fijo(12, 26, "Boxing Day", ["reino_unido", "alemania", "italia"]),
   ];
 
   const pascua = domingoResurreccion(anio).toISOString().slice(0, 10);
   lista.push(
     { fecha: addDaysISO(pascua, -3), nombre: "Jueves Santo", ambitos: ["catalan"] },
-    { fecha: addDaysISO(pascua, -2), nombre: "Viernes Santo", ambitos: ["nacional"] },
-    { fecha: addDaysISO(pascua, 1), nombre: "Lunes de Pascua Florida", ambitos: ["catalan"] },
+    { fecha: addDaysISO(pascua, -2), nombre: "Viernes Santo", ambitos: ["nacional", "alemania", "reino_unido"] },
+    {
+      fecha: addDaysISO(pascua, 1),
+      nombre: "Lunes de Pascua Florida",
+      ambitos: ["catalan", "francia", "alemania", "italia", "reino_unido"],
+    },
     // Not Francia: Whit Monday stopped being an official holiday there in 2004.
     { fecha: addDaysISO(pascua, 39), nombre: "Ascensión", ambitos: ["alemania", "francia"] },
     { fecha: addDaysISO(pascua, 50), nombre: "Pfingstmontag / Lunes de Pentecostés", ambitos: ["alemania"] },
