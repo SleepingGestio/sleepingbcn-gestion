@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Check, CheckSquare, ChevronLeft, ChevronRight } from "lucide-react";
+import { Check, ChevronLeft, ChevronRight } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -89,17 +89,18 @@ function celdasDelMes(y: number, m: number): Celda[] {
 const FUERA_DE_MES = "pointer-events-none opacity-50 grayscale";
 
 function DiaCelda({
-  celda, calc, eventos, festivos, rango, modoSeleccion, seleccionado, onOpen,
+  celda, calc, eventos, festivos, rango, seleccionado, onOpen, onToggleSeleccion,
 }: {
   celda: Celda;
   calc: DiaCalculado | null;
   eventos: Evento[];
   festivos: Festivo[];
   rango: { min: number; max: number } | null;
-  /** Selection mode repurposes `onOpen` as "toggle this day" instead of "open its dialog". */
-  modoSeleccion: boolean;
   seleccionado: boolean;
+  /** Opens DiaPrecioDialog — always what a click on the cell itself does, mode or no mode. */
   onOpen: () => void;
+  /** Toggles this day in the multi-day selection; only the corner checkbox calls this. */
+  onToggleSeleccion: () => void;
 }) {
   if (!calc || !rango) {
     return (
@@ -125,7 +126,6 @@ function DiaCelda({
     );
   }
 
-  const marcado = modoSeleccion && seleccionado;
   const Contenedor = celda.enMes ? "button" : "div";
   return (
     <Contenedor
@@ -133,12 +133,30 @@ function DiaCelda({
       className={cn(
         "relative flex min-h-[118px] flex-col overflow-hidden rounded-lg border text-left text-slate-900 outline-2 -outline-offset-2 outline-transparent transition-[outline-color]",
         celda.enMes ? "hover:outline-slate-900 focus-visible:outline-slate-900" : FUERA_DE_MES,
-        marcado ? "border-primary ring-2 ring-primary" : "border-slate-200",
+        seleccionado ? "border-primary ring-2 ring-primary" : "border-slate-200",
       )}
       style={{ background: heatColor(calc.precioFinal, rango.min, rango.max) }}
       title={tooltipFestivos(festivos)}
     >
-      {marcado && (
+      {celda.enMes && (
+        <span
+          role="checkbox"
+          aria-checked={seleccionado}
+          aria-label="Seleccionar este día"
+          tabIndex={0}
+          onClick={(e) => { e.stopPropagation(); onToggleSeleccion(); }}
+          onKeyDown={(e) => {
+            if (e.key === " " || e.key === "Enter") { e.preventDefault(); e.stopPropagation(); onToggleSeleccion(); }
+          }}
+          className={cn(
+            "absolute left-1.5 top-1.5 z-10 flex h-4 w-4 cursor-pointer items-center justify-center rounded border",
+            seleccionado ? "border-primary bg-primary text-primary-foreground" : "border-slate-300 bg-white/90",
+          )}
+        >
+          {seleccionado && <Check className="h-3 w-3" />}
+        </span>
+      )}
+      {seleccionado && (
         <span className="absolute right-1.5 top-1.5 z-10 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-primary-foreground">
           <Check className="h-3 w-3" />
         </span>
@@ -206,7 +224,6 @@ function CalendarioPage() {
   const [cursor, setCursor] = useState<{ y: number; m: number } | null>(null);
   const [dir, setDir] = useState<1 | -1>(1);
   const [seleccion, setSeleccion] = useState<string | null>(null);
-  const [modoSeleccion, setModoSeleccion] = useState(false);
   const [seleccionMasiva, setSeleccionMasiva] = useState<Set<string>>(new Set());
   const [edicionMasivaAbierta, setEdicionMasivaAbierta] = useState(false);
 
@@ -319,30 +336,21 @@ function CalendarioPage() {
           </Button>
         </div>
 
-        <div className="mb-3 flex items-center justify-between">
-          {modoSeleccion ? (
-            <>
-              <span className="text-sm text-muted-foreground">
-                {seleccionMasiva.size} día{seleccionMasiva.size === 1 ? "" : "s"} seleccionado{seleccionMasiva.size === 1 ? "" : "s"}
-              </span>
-              <div className="flex gap-2">
-                <Button
-                  size="sm" variant="outline"
-                  onClick={() => { setModoSeleccion(false); setSeleccionMasiva(new Set()); }}
-                >
-                  Cancelar selección
-                </Button>
-                <Button size="sm" disabled={seleccionMasiva.size === 0} onClick={() => setEdicionMasivaAbierta(true)}>
-                  Editar {seleccionMasiva.size} días
-                </Button>
-              </div>
-            </>
-          ) : (
-            <Button size="sm" variant="outline" onClick={() => setModoSeleccion(true)}>
-              <CheckSquare className="h-4 w-4 mr-1" /> Seleccionar días
-            </Button>
-          )}
-        </div>
+        {seleccionMasiva.size > 0 && (
+          <div className="mb-3 flex items-center justify-between">
+            <span className="text-sm text-muted-foreground">
+              {seleccionMasiva.size} día{seleccionMasiva.size === 1 ? "" : "s"} seleccionado{seleccionMasiva.size === 1 ? "" : "s"}
+            </span>
+            <div className="flex gap-2">
+              <Button size="sm" variant="outline" onClick={() => setSeleccionMasiva(new Set())}>
+                Cancelar selección
+              </Button>
+              <Button size="sm" onClick={() => setEdicionMasivaAbierta(true)}>
+                Editar {seleccionMasiva.size} días
+              </Button>
+            </div>
+          </div>
+        )}
 
         <div className="mb-1.5 grid grid-cols-7 gap-1.5">
           {DIAS.map((d) => (
@@ -370,9 +378,9 @@ function CalendarioPage() {
               eventos={eventosActivosDia(eventos, c.iso, aplicaA)}
               festivos={festivosPorFecha.get(c.iso) ?? []}
               rango={calculo.rango}
-              modoSeleccion={modoSeleccion}
               seleccionado={seleccionMasiva.has(c.iso)}
-              onOpen={() => (modoSeleccion ? toggleSeleccionDia(c.iso) : setSeleccion(c.iso))}
+              onOpen={() => setSeleccion(c.iso)}
+              onToggleSeleccion={() => toggleSeleccionDia(c.iso)}
             />
           ))}
         </div>
@@ -399,7 +407,6 @@ function CalendarioPage() {
           onGuardado={async () => {
             await ajustesQ.refetch();
             setSeleccionMasiva(new Set());
-            setModoSeleccion(false);
           }}
         />
       )}
