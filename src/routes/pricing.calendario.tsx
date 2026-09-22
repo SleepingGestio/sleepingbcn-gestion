@@ -40,16 +40,21 @@ const HATCHED = "repeating-linear-gradient(45deg, #f1f5f9, #f1f5f9 6px, #e2e8f0 
 
 type Celda = { iso: string; dia: number; enMes: boolean };
 
-/** One small dot per distinct tipo present that day (two "nacional" festivos still give one dot). */
-function PuntosFestivos({ festivos }: { festivos: Festivo[] }) {
+/**
+ * Colored strip across the cell's top edge: one full-width bar for a single tipo present that day,
+ * or equal-width segments (one per distinct tipo, in FESTIVO_TIPOS order) when there are several.
+ * Sits as the cell's first child, outside its padding; the cell's own overflow-hidden + rounded-lg
+ * clips it to the top corners, so it needs no rounding of its own. Renders nothing on a day with no festivo.
+ */
+function BarraFestivos({ festivos }: { festivos: Festivo[] }) {
   const tipos = FESTIVO_TIPOS.filter((t) => festivos.some((f) => f.tipo === t));
   if (tipos.length === 0) return null;
   return (
-    <span className="flex items-center gap-[3px]">
+    <div className="flex h-1 w-full shrink-0">
       {tipos.map((t) => (
-        <span key={t} className={cn("h-[5px] w-[5px] rounded-full", TIPO_STYLES[t])} />
+        <span key={t} className={cn("h-full flex-1", TIPO_STYLES[t])} />
       ))}
-    </span>
+    </div>
   );
 }
 
@@ -87,7 +92,7 @@ function DiaCelda({
     return (
       <div
         className={cn(
-          "min-h-[118px] rounded-lg border border-slate-200 p-1.5 text-slate-500",
+          "flex min-h-[118px] flex-col overflow-hidden rounded-lg border border-slate-200 text-slate-500",
           !celda.enMes && FUERA_DE_MES,
         )}
         style={{ background: HATCHED }}
@@ -96,12 +101,10 @@ function DiaCelda({
           .filter(Boolean)
           .join("\n")}
       >
-        <div className="flex items-start justify-between gap-1">
-          <span className="flex items-center gap-1">
-            <span className="flex h-5 items-center rounded-[5px] bg-white px-[5px] text-[13px] font-bold text-slate-900 shadow-[0_0_0_0.5px_#e2e8f0]">
-              {celda.dia}
-            </span>
-            <PuntosFestivos festivos={festivos} />
+        <BarraFestivos festivos={festivos} />
+        <div className="flex flex-1 items-start justify-between gap-1 p-1.5">
+          <span className="flex h-5 items-center rounded-[5px] bg-white px-[5px] text-[13px] font-bold text-slate-900 shadow-[0_0_0_0.5px_#e2e8f0]">
+            {celda.dia}
           </span>
           <span className="text-[10px] font-medium">Sin datos</span>
         </div>
@@ -114,14 +117,15 @@ function DiaCelda({
     <Contenedor
       {...(celda.enMes ? { type: "button" as const, onClick: onOpen } : { "aria-hidden": true })}
       className={cn(
-        "flex min-h-[118px] flex-col rounded-lg border border-slate-200 px-1.5 pb-2 pt-1.5 text-left text-slate-900 outline-2 -outline-offset-2 outline-transparent transition-[outline-color]",
+        "flex min-h-[118px] flex-col overflow-hidden rounded-lg border border-slate-200 text-left text-slate-900 outline-2 -outline-offset-2 outline-transparent transition-[outline-color]",
         celda.enMes ? "hover:outline-slate-900 focus-visible:outline-slate-900" : FUERA_DE_MES,
       )}
       style={{ background: heatColor(calc.precioFinal, rango.min, rango.max) }}
       title={tooltipFestivos(festivos)}
     >
-      <div className="flex items-start justify-between gap-1">
-        <span className="flex items-center gap-1">
+      <BarraFestivos festivos={festivos} />
+      <div className="flex flex-1 flex-col px-1.5 pb-2 pt-1.5">
+        <div className="flex items-start justify-between gap-1">
           <span className="flex h-5 shrink-0 items-center justify-center gap-[3px] rounded-[5px] bg-white px-[5px] text-[13px] font-bold shadow-[0_0_0_0.5px_#e2e8f0]">
             {celda.dia}
             <span
@@ -132,28 +136,27 @@ function DiaCelda({
               {calc.temporada.codigo}
             </span>
           </span>
-          <PuntosFestivos festivos={festivos} />
-        </span>
-        <span className="text-right">
-          <span className="block text-[15px] font-semibold leading-[1.1]">{calc.precioFinal}€</span>
-          {calc.estanciaMinima != null && (
-            <span className="mt-px block text-[11px] font-bold">{calc.estanciaMinima} nits</span>
-          )}
-        </span>
-      </div>
-      {eventos.length > 0 && (
-        <div className="mt-auto flex flex-wrap gap-[3px] pt-1.5">
-          {eventos.map((e) => (
-            <span
-              key={e.id}
-              title={e.nombre}
-              className={cn("whitespace-nowrap rounded-full px-[5px] py-px text-[9px] font-medium", CATEGORIA_STYLES[e.categoria])}
-            >
-              {e.nombre}
-            </span>
-          ))}
+          <span className="text-right">
+            <span className="block text-[15px] font-semibold leading-[1.1]">{calc.precioFinal}€</span>
+            {calc.estanciaMinima != null && (
+              <span className="mt-px block text-[11px] font-bold">{calc.estanciaMinima} nits</span>
+            )}
+          </span>
         </div>
-      )}
+        {eventos.length > 0 && (
+          <div className="mt-auto flex flex-wrap gap-[3px] pt-1.5">
+            {eventos.map((e) => (
+              <span
+                key={e.id}
+                title={e.nombre}
+                className={cn("whitespace-nowrap rounded-full px-[5px] py-px text-[9px] font-medium", CATEGORIA_STYLES[e.categoria])}
+              >
+                {e.nombre}
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
     </Contenedor>
   );
 }
