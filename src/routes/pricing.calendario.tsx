@@ -149,16 +149,11 @@ function DiaCelda({
             if (e.key === " " || e.key === "Enter") { e.preventDefault(); e.stopPropagation(); onToggleSeleccion(); }
           }}
           className={cn(
-            "absolute left-1.5 top-1.5 z-10 flex h-4 w-4 cursor-pointer items-center justify-center rounded border",
+            "absolute bottom-1 right-1 z-20 flex h-4 w-4 cursor-pointer items-center justify-center rounded border",
             seleccionado ? "border-primary bg-primary text-primary-foreground" : "border-slate-300 bg-white/90",
           )}
         >
           {seleccionado && <Check className="h-3 w-3" />}
-        </span>
-      )}
-      {seleccionado && (
-        <span className="absolute right-1.5 top-1.5 z-10 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-primary-foreground">
-          <Check className="h-3 w-3" />
         </span>
       )}
       <BarraFestivos festivos={festivos} />
@@ -182,7 +177,7 @@ function DiaCelda({
           </span>
         </div>
         {eventos.length > 0 && (
-          <div className="mt-auto flex flex-wrap gap-[3px] pt-1.5">
+          <div className="mt-auto flex flex-wrap gap-[3px] pr-5 pt-1.5">
             {eventos.map((e) => (
               <span
                 key={e.id}
