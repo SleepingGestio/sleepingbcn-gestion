@@ -176,7 +176,10 @@ function DiaCelda({
             </span>
           </span>
           <span className="text-right">
-            <span className="block text-[15px] font-semibold leading-[1.1]">{calc.precioFinal}€</span>
+            {/* Garnet flags a price overridden by an ajuste manual; otherwise it inherits the cell's ink. */}
+            <span className={cn("block text-[15px] font-semibold leading-[1.1]", calc.precioManual != null && "text-[#7C2D33]")}>
+              {calc.precioFinal}€
+            </span>
             {calc.estanciaMinima != null && (
               <span className="mt-px block text-[11px] font-bold">{calc.estanciaMinima} nits</span>
             )}
