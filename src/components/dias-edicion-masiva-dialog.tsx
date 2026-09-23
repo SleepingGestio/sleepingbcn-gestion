@@ -5,36 +5,80 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { CalendarCheck } from "lucide-react";
 import { toast } from "sonner";
-import { upsertAjustesDiaBulk, type Temporada, type TemporadaAplicaA } from "@/lib/pricing";
+import { Field } from "@/components/plantilla-edit-dialog";
+import { addDaysISO, fmtDate } from "@/lib/format";
+import {
+  asignarTemporadaRango, findCoverageGaps, upsertAjustesDiaBulk, type Temporada, type TemporadaAplicaA,
+} from "@/lib/pricing";
 import type { DiaCalculado } from "@/lib/pricing-calc";
 
 const NO_CAMBIAR = "__no_cambiar__";
+const CREAR_NUEVA = "__crear_nueva__";
 
 /**
- * Bulk version of the day dialog's "Ajustes manuales" section: applies temporada / estancia mínima /
- * precio overrides to every day in `fechas` at once. Every field defaults to "no cambiar" (left out
- * of that day's changes entirely) so the person can touch only the fields they actually want to set.
- * `dias` is the año's already-computed breakdown (`calculo.dias`), used to read each selected day's
- * current precioFinal for the "ajuste relativo" precio mode.
+ * Whether sorted `fechas` can go to asignar_temporada_rango as the single range [first, last]: every
+ * calculable day in between must be selected. An unselected "Sin datos" day (null in `dias`) is fine,
+ * since it has no checkbox and range-fill already skips it, so the range just covers it too. 0 or 1
+ * dates always count as valid.
+ */
+function esRangoContinuo(fechas: string[], dias: Map<string, DiaCalculado | null>): boolean {
+  if (fechas.length < 2) return true;
+  const seleccionadas = new Set(fechas);
+  const hasta = fechas[fechas.length - 1];
+  for (let d = fechas[0]; d <= hasta; d = addDaysISO(d, 1)) {
+    if (!seleccionadas.has(d) && dias.get(d) != null) return false;
+  }
+  return true;
+}
+
+/**
+ * Bulk edit for the days in `fechas`. Estancia mínima / precio are per-day overrides written to
+ * ajustes_dia, like the day dialog's "Ajustes manuales" section. Temporada is different: it calls
+ * asignar_temporada_rango, which actually resizes/splits the temporada períodos so the whole
+ * [first, last] range belongs to the chosen temporada (existing, or created inline here), so it's
+ * only offered when the selection is one continuous range. Every field defaults to "no cambiar" so
+ * the person can touch only the fields they actually want to set. `dias` is the año's
+ * already-computed breakdown (`calculo.dias`), used for the range check and to read each selected
+ * day's current precioFinal for the "ajuste relativo" precio mode.
  */
 export function DiasEdicionMasivaDialog({
-  fechas, aplicaA, temporadas, dias, onClose, onGuardado,
+  fechas, anio, aplicaA, temporadas, dias, onClose, onTemporadaAplicada, onGuardado,
 }: {
   fechas: string[];
+  anio: number;
   aplicaA: TemporadaAplicaA;
   temporadas: Temporada[];
   dias: Map<string, DiaCalculado | null>;
   onClose: () => void;
+  /** Called right after the temporada RPC succeeds, to refetch temporadas (períodos changed, maybe a new one). */
+  onTemporadaAplicada: () => void | Promise<void>;
   onGuardado: () => void | Promise<void>;
 }) {
-  const anioSel = Number(fechas[0]?.slice(0, 4));
   const temporadasDelAnio = useMemo(
-    () => temporadas.filter((t) => t.anio === anioSel && t.aplica_a === aplicaA).sort((a, b) => a.codigo.localeCompare(b.codigo)),
-    [temporadas, anioSel, aplicaA],
+    () => temporadas.filter((t) => t.anio === anio && t.aplica_a === aplicaA).sort((a, b) => a.codigo.localeCompare(b.codigo)),
+    [temporadas, anio, aplicaA],
   );
+  const rangoValido = useMemo(() => esRangoContinuo(fechas, dias), [fechas, dias]);
 
-  const [temporadaId, setTemporadaId] = useState<string>(NO_CAMBIAR);
+  const [temporadaIdElegida, setTemporadaIdElegida] = useState<string>(NO_CAMBIAR);
+  // Forced to "No cambiar" while the selection isn't one continuous range.
+  const temporadaId = rangoValido ? temporadaIdElegida : NO_CAMBIAR;
+  const [codigoNueva, setCodigoNueva] = useState("");
+  const [nombreNueva, setNombreNueva] = useState("");
+  const [coeficienteNueva, setCoeficienteNueva] = useState("");
+  const [gaps, setGaps] = useState<{ desde: string; hasta: string }[] | null>(null);
+
+  /** Picking anything but "Crear nueva" drops whatever was typed into the new-temporada fields. */
+  function cambiarTemporada(v: string) {
+    setTemporadaIdElegida(v);
+    if (v !== CREAR_NUEVA) {
+      setCodigoNueva("");
+      setNombreNueva("");
+      setCoeficienteNueva("");
+    }
+  }
 
   const [estanciaValor, setEstanciaValor] = useState("");
   const [estanciaQuitar, setEstanciaQuitar] = useState(false);
@@ -68,8 +112,20 @@ export function DiasEdicionMasivaDialog({
     (precioModo === "relativo" && precioDelta.trim() !== "");
 
   async function handleSubmit() {
-    const comunes: Partial<{ temporadaId: string | null; estanciaMinima: number | null; precioManual: number | null }> = {};
-    if (temporadaId !== NO_CAMBIAR) comunes.temporadaId = temporadaId;
+    const aplicarTemporada = temporadaId !== NO_CAMBIAR;
+    let coefNueva = 0;
+    if (temporadaId === CREAR_NUEVA) {
+      // Same checks and messages as TemporadaDialog; the RPC repeats them server-side.
+      if (!codigoNueva.trim()) { toast.error("El código es obligatorio"); return; }
+      if (!nombreNueva.trim()) { toast.error("El nombre es obligatorio"); return; }
+      coefNueva = Number(coeficienteNueva);
+      if (coeficienteNueva.trim() === "" || !Number.isFinite(coefNueva) || coefNueva <= 0) {
+        toast.error("El coeficiente debe ser un número mayor que 0");
+        return;
+      }
+    }
+
+    const comunes: Partial<{ estanciaMinima: number | null; precioManual: number | null }> = {};
     if (estanciaQuitar) comunes.estanciaMinima = null;
     else if (estanciaValor.trim() !== "") comunes.estanciaMinima = Number(estanciaValor);
 
@@ -92,16 +148,36 @@ export function DiasEdicionMasivaDialog({
       })
       .filter((r) => Object.keys(r.changes).length > 0);
 
-    if (rows.length === 0) { toast.error("No hay ningún cambio que aplicar"); return; }
+    if (!aplicarTemporada && rows.length === 0) { toast.error("No hay ningún cambio que aplicar"); return; }
 
     setSaving(true);
+    let temporadaAplicada = false;
     try {
-      await upsertAjustesDiaBulk(rows);
-      toast.success(`${rows.length} días actualizados`);
+      if (aplicarTemporada) {
+        await asignarTemporadaRango(
+          aplicaA, anio, fechas[0], fechas[fechas.length - 1],
+          temporadaId === CREAR_NUEVA
+            ? { nueva: { codigo: codigoNueva.trim(), nombre: nombreNueva.trim(), coeficiente: coefNueva } }
+            : { temporadaId },
+        );
+        temporadaAplicada = true;
+        await onTemporadaAplicada();
+      }
+      // Not one transaction with the RPC above: if this fails after the RPC already committed, the
+      // temporada change stays applied and only estancia/precio are missing (see the catch below).
+      if (rows.length > 0) await upsertAjustesDiaBulk(rows);
+      toast.success(`${aplicarTemporada ? fechas.length : rows.length} días actualizados`);
       await onGuardado();
       onClose();
     } catch (e) {
-      toast.error("Error: " + (e as Error).message);
+      if (temporadaAplicada) {
+        // The temporada is already in place: take it out of the form so a retry only resends
+        // estancia/precio, and can't create the same new temporada a second time.
+        cambiarTemporada(NO_CAMBIAR);
+        toast.error("Temporada aplicada, pero no se pudieron guardar estancia/precio: " + (e as Error).message);
+      } else {
+        toast.error("Error: " + (e as Error).message);
+      }
     } finally {
       setSaving(false);
     }
@@ -117,16 +193,52 @@ export function DiasEdicionMasivaDialog({
 
         <div className="space-y-4 text-sm">
           <div className="space-y-1.5">
-            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Temporada</p>
-            <Select value={temporadaId} onValueChange={setTemporadaId}>
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Temporada</p>
+              <Button
+                size="sm" variant="outline" className="h-7 text-xs"
+                onClick={() => setGaps(findCoverageGaps(temporadasDelAnio.flatMap((t) => t.temporada_periodos), anio))}
+              >
+                <CalendarCheck className="mr-1 h-3.5 w-3.5" /> Comprobar cobertura
+              </Button>
+            </div>
+            <Select value={temporadaId} onValueChange={cambiarTemporada} disabled={!rangoValido}>
               <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value={NO_CAMBIAR}>No cambiar</SelectItem>
                 {temporadasDelAnio.map((t) => (
                   <SelectItem key={t.id} value={t.id}>{t.codigo} · {t.nombre}</SelectItem>
                 ))}
+                <SelectItem value={CREAR_NUEVA}>+ Crear nueva temporada</SelectItem>
               </SelectContent>
             </Select>
+            {!rangoValido && (
+              <p className="text-[11px] text-muted-foreground">
+                La selección debe ser un rango continuo de fechas para asignar una temporada
+              </p>
+            )}
+            {temporadaId === CREAR_NUEVA && (
+              <div className="grid gap-2">
+                <div className="grid grid-cols-2 gap-2">
+                  <Field label="Código *">
+                    <Input value={codigoNueva} onChange={(e) => setCodigoNueva(e.target.value)} className="h-8 text-xs" autoFocus />
+                  </Field>
+                  <Field label="Nombre *">
+                    <Input value={nombreNueva} onChange={(e) => setNombreNueva(e.target.value)} className="h-8 text-xs" />
+                  </Field>
+                </div>
+                <Field label="Coeficiente *">
+                  <Input
+                    type="number"
+                    min={0}
+                    step="any"
+                    value={coeficienteNueva}
+                    onChange={(e) => setCoeficienteNueva(e.target.value)}
+                    className="h-8 w-28 text-xs"
+                  />
+                </Field>
+              </div>
+            )}
           </div>
 
           <div className="space-y-1.5">
@@ -220,6 +332,27 @@ export function DiasEdicionMasivaDialog({
             Aplicar a {fechas.length} días
           </Button>
         </DialogFooter>
+
+        <Dialog open={gaps !== null} onOpenChange={(o) => !o && setGaps(null)}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>Cobertura {anio} · {aplicaA === "city" ? "City" : "Rural"}</DialogTitle>
+              <DialogDescription className="sr-only">Resultado de la comprobación de cobertura del año</DialogDescription>
+            </DialogHeader>
+            {gaps?.length === 0 ? (
+              <p className="text-sm">Todo el año está cubierto por alguna temporada</p>
+            ) : (
+              <ul className="text-sm space-y-1">
+                {gaps?.map((g) => (
+                  <li key={g.desde}>Sin temporada asignada: {fmtDate(g.desde)} – {fmtDate(g.hasta)}</li>
+                ))}
+              </ul>
+            )}
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setGaps(null)}>Cerrar</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </DialogContent>
     </Dialog>
   );

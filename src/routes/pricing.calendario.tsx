@@ -432,10 +432,12 @@ function CalendarioPage() {
       {edicionMasivaAbierta && (
         <DiasEdicionMasivaDialog
           fechas={[...seleccionMasiva].sort()}
+          anio={anio}
           aplicaA={aplicaA}
           temporadas={temporadas}
           dias={calculo.dias}
           onClose={() => setEdicionMasivaAbierta(false)}
+          onTemporadaAplicada={async () => { await temporadasQ.refetch(); }}
           onGuardado={async () => {
             await ajustesQ.refetch();
             setSeleccionMasiva(new Set());

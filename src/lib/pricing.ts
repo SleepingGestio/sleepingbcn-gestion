@@ -374,6 +374,38 @@ export async function deleteTemporadasByYear(anio: number): Promise<void> {
   if (error) throw error;
 }
 
+/**
+ * Assigns a temporada to [fechaInicio, fechaFin] (inclusive) through pricing.asignar_temporada_rango:
+ * every overlapping período of any temporada of that grupo/año is deleted, split or trimmed, then one
+ * período of the target temporada is inserted spanning exactly the range, all in one transaction.
+ * The target is an existing temporada or a new one created from `nueva` (validated server-side the
+ * same way as TemporadaDialog). Returns the id of the temporada applied. The function's RAISE
+ * EXCEPTION messages are user-facing Spanish text and come back as error.message.
+ */
+export async function asignarTemporadaRango(
+  aplicaA: TemporadaAplicaA,
+  anio: number,
+  fechaInicio: string,
+  fechaFin: string,
+  destino: { temporadaId: string } | { nueva: TemporadaEditable },
+): Promise<string> {
+  const { data, error } = await pricingDb().rpc("asignar_temporada_rango", {
+    p_aplica_a: aplicaA,
+    p_anio: anio,
+    p_fecha_inicio: fechaInicio,
+    p_fecha_fin: fechaFin,
+    // The new período's own estancia mínima, a separate concept from the per-day ajustes_dia
+    // override the bulk-edit dialog's "Estancia mínima" field writes: always left empty here.
+    p_estancia_minima: null,
+    p_temporada_id: "temporadaId" in destino ? destino.temporadaId : null,
+    p_codigo: "nueva" in destino ? destino.nueva.codigo : null,
+    p_nombre: "nueva" in destino ? destino.nueva.nombre : null,
+    p_coeficiente: "nueva" in destino ? destino.nueva.coeficiente : null,
+  });
+  if (error) throw error;
+  return data as string;
+}
+
 export type PeriodoConflict = { temporada: Temporada; periodo: TemporadaPeriodo };
 
 /**
