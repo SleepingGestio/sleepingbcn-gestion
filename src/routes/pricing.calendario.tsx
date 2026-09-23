@@ -230,6 +230,8 @@ function CalendarioPage() {
   const [seleccion, setSeleccion] = useState<string | null>(null);
   const [mapaCalor, setMapaCalor] = useState(true);
   const [seleccionMasiva, setSeleccionMasiva] = useState<Set<string>>(new Set());
+  // The day that started the current selection; only meaningful while it's the selection's sole day.
+  const [ancla, setAncla] = useState<string | null>(null);
   const [edicionMasivaAbierta, setEdicionMasivaAbierta] = useState(false);
 
   const dataYears = useMemo(
@@ -263,13 +265,31 @@ function CalendarioPage() {
     });
   }
 
+  /**
+   * Checkbox click. On an empty selection the day becomes the anchor; with only the anchor selected,
+   * clicking another day fills the whole range between them (by date, either direction); from then on
+   * — or whenever the selection holds more than the anchor — each click toggles just that one day.
+   * Any clear (Cancelar selección, month change, after a bulk save) empties the set, so the next click
+   * anchors afresh. The range only fills days that have their own checkbox (in the displayed month
+   * and calculable), so it can't pick up days that couldn't be selected one by one.
+   */
   function toggleSeleccionDia(iso: string) {
-    setSeleccionMasiva((prev) => {
-      const next = new Set(prev);
-      if (next.has(iso)) next.delete(iso);
-      else next.add(iso);
-      return next;
-    });
+    if (seleccionMasiva.size === 0) {
+      setAncla(iso);
+      setSeleccionMasiva(new Set([iso]));
+      return;
+    }
+    if (ancla && iso !== ancla && seleccionMasiva.size === 1 && seleccionMasiva.has(ancla)) {
+      const [desde, hasta] = ancla < iso ? [ancla, iso] : [iso, ancla];
+      setSeleccionMasiva(new Set(celdas.filter((c) => c.enMes && c.iso >= desde && c.iso <= hasta && calculo.dias.get(c.iso)).map((c) => c.iso)));
+      setAncla(null);
+      return;
+    }
+    setAncla(null);
+    const next = new Set(seleccionMasiva);
+    if (next.has(iso)) next.delete(iso);
+    else next.add(iso);
+    setSeleccionMasiva(next);
   }
 
   const cargando =
