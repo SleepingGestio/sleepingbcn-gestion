@@ -45,15 +45,17 @@ type Celda = { iso: string; dia: number; enMes: boolean };
 /**
  * Colored strip across the cell's top edge: one equal-width segment per distinct ámbito present that
  * day, in AMBITO_LIST order, counting the ámbitos of every festivo that day combined (so a single
- * festivo with several ámbitos, like Año Nuevo, already produces several segments). Sits as the cell's
- * first child, outside its padding; the cell's own overflow-hidden + rounded-lg clips it to the top
- * corners, so it needs no rounding of its own. Renders nothing on a day with no festivo.
+ * festivo with several ámbitos, like Año Nuevo, already produces several segments). Absolutely
+ * positioned over the (relative) cell's top edge so it takes no space in the flow: every cell's content
+ * starts at the same offset whether or not it has a festivo, and the cells' fixed pt-3 keeps the day
+ * number clear of it. The cell's own overflow-hidden + rounded-lg clips it to the top corners, so it
+ * needs no rounding of its own. Renders nothing on a day with no festivo.
  */
 function BarraFestivos({ festivos }: { festivos: Festivo[] }) {
   const ambitos = AMBITO_LIST.filter((a) => festivos.some((f) => f.ambitos.includes(a)));
   if (ambitos.length === 0) return null;
   return (
-    <div className="flex h-2.5 w-full shrink-0">
+    <div className="absolute inset-x-0 top-0 flex h-2.5">
       {ambitos.map((a) => (
         <span key={a} className="h-full flex-1" style={{ background: AMBITO_COLOR[a] }} />
       ))}
@@ -109,7 +111,7 @@ function DiaCelda({
     return (
       <div
         className={cn(
-          "flex min-h-[118px] flex-col overflow-hidden rounded-lg border border-slate-200 text-slate-500",
+          "relative flex min-h-[118px] flex-col overflow-hidden rounded-lg border border-slate-200 text-slate-500",
           !celda.enMes && FUERA_DE_MES,
         )}
         style={{ background: HATCHED }}
@@ -119,7 +121,7 @@ function DiaCelda({
           .join("\n")}
       >
         <BarraFestivos festivos={festivos} />
-        <div className="flex flex-1 items-start justify-between gap-1 p-1.5">
+        <div className="flex flex-1 items-start justify-between gap-1 px-1.5 pb-1.5 pt-3">
           <span className="flex h-5 items-center rounded-[5px] bg-white px-[5px] text-[13px] font-bold text-slate-900 shadow-[0_0_0_0.5px_#e2e8f0]">
             {celda.dia}
           </span>
@@ -161,7 +163,7 @@ function DiaCelda({
         </span>
       )}
       <BarraFestivos festivos={festivos} />
-      <div className="flex flex-1 flex-col px-1.5 pb-2 pt-1.5">
+      <div className="flex flex-1 flex-col px-1.5 pb-2 pt-3">
         <div className="flex items-start justify-between gap-1">
           <span className="flex h-5 shrink-0 items-center justify-center gap-[3px] rounded-[5px] bg-white px-[5px] text-[13px] font-bold shadow-[0_0_0_0.5px_#e2e8f0]">
             {celda.dia}
