@@ -13,17 +13,20 @@ import { Field } from "@/components/plantilla-edit-dialog";
 /**
  * Create (no `festivo`, always a "local" one) / edit (`festivo` given) dialog: Fecha, Nombre, ámbitos
  * (multi-select) and detalle (free text, only meaningful with "comunidad_otras" checked, but shown
- * unconditionally to keep the form simple).
+ * unconditionally to keep the form simple). `defaultFecha` seeds the date field on create when the
+ * caller already knows which day it's for (e.g. opened from a specific day in Vista Calendario),
+ * instead of always defaulting to `${anio}-01-01`.
  */
 export function FestivoDialog({
-  festivo, anio, onClose, onSaved,
+  festivo, anio, defaultFecha, onClose, onSaved,
 }: {
   festivo?: Festivo | null;
   anio: number;
+  defaultFecha?: string;
   onClose: () => void;
   onSaved: () => void;
 }) {
-  const [fecha, setFecha] = useState(festivo?.fecha ?? `${anio}-01-01`);
+  const [fecha, setFecha] = useState(festivo?.fecha ?? defaultFecha ?? `${anio}-01-01`);
   const [nombre, setNombre] = useState(festivo?.nombre ?? "");
   const [ambitos, setAmbitos] = useState<FestivoAmbito[]>(festivo?.ambitos ?? ["local"]);
   const [detalle, setDetalle] = useState(festivo?.detalle ?? "");

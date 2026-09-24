@@ -17,7 +17,7 @@ import { FestivoDialog } from "@/components/festivo-dialog";
 
 /** A row whose ámbitos are exactly ["local"] is a manual one; anything else comes from "Generar" (and
  * would come back if the año is regenerated), same distinction the old per-tipo logic made. */
-const esGenerado = (ambitos: FestivoAmbito[]) => !(ambitos.length === 1 && ambitos[0] === "local");
+export const esGenerado = (ambitos: FestivoAmbito[]) => !(ambitos.length === 1 && ambitos[0] === "local");
 
 /**
  * "Festivos" tab of Configuración Tarifas. Festivos are calendar facts, so the page's Grupo does not

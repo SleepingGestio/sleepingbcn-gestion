@@ -425,6 +425,7 @@ function CalendarioPage() {
           festivos={festivosPorFecha.get(seleccionado.fecha) ?? []}
           temporadas={temporadas}
           onAjusteGuardado={async () => { await ajustesQ.refetch(); }}
+          onFestivoGuardado={async () => { await festivosQ.refetch(); }}
           onClose={() => setSeleccion(null)}
         />
       )}
