@@ -33,6 +33,17 @@ import { fmtDate, fmtEUR, fmtNum2, resolveTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { TimeBadge } from "@/components/time-badge";
 
+/** Nights between two "Check in"/"Check-out" ISO date strings (YYYY-MM-DD, same
+ * format used everywhere else this pair is diffed, e.g. generar-limpiezas.ts's
+ * addDaysISO). null if either date is missing or unparseable. */
+function nochesEntre(checkin: string | null, checkout: string | null): number | null {
+  if (!checkin || !checkout) return null;
+  const ci = new Date(checkin + "T00:00:00");
+  const co = new Date(checkout + "T00:00:00");
+  if (isNaN(ci.getTime()) || isNaN(co.getTime())) return null;
+  return Math.round((co.getTime() - ci.getTime()) / 86_400_000);
+}
+
 export function ReservaDetail({
   numero,
   open,
@@ -107,6 +118,7 @@ export function ReservaDetail({
 
   const llegada = reserva ? resolveTime(reserva["Hora estimada de llegada"], "15:00:00") : null;
   const salida = reserva ? resolveTime(reserva["Hora estimada de salida"], "11:00:00") : null;
+  const noches = reserva ? nochesEntre(reserva["Check in"], reserva["Check-out"]) : null;
   // KB's imported tourist-tax figure — shown only as a reference next to the
   // (editable, often corrected) Tasa turística field. NaN when absent/non-numeric.
   const tasaKB = reserva ? Number(reserva["Cargo tasa turística"]) : NaN;
@@ -355,7 +367,7 @@ export function ReservaDetail({
 
             {/* ── Dates & times ── */}
             <section className="space-y-2 text-sm">
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-3 gap-3">
                 <InfoReadOnly
                   label="Check-in"
                   value={
@@ -365,6 +377,7 @@ export function ReservaDetail({
                     </span>
                   }
                 />
+                <InfoReadOnly label="Noches" value={noches ?? "—"} />
                 <InfoReadOnly
                   label="Check-out"
                   value={
