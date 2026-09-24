@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { CalendarCheck } from "lucide-react";
 import { toast } from "sonner";
 import { Field } from "@/components/plantilla-edit-dialog";
+import { isPositiveIntOrEmpty } from "@/components/evento-form-dialog";
 import { addDaysISO, fmtDate } from "@/lib/format";
 import {
   asignarTemporadaRango, findCoverageGaps, upsertAjustesDiaBulk, type Temporada, type TemporadaAplicaA,
@@ -68,6 +69,9 @@ export function DiasEdicionMasivaDialog({
   const [codigoNueva, setCodigoNueva] = useState("");
   const [nombreNueva, setNombreNueva] = useState("");
   const [coeficienteNueva, setCoeficienteNueva] = useState("");
+  // The new período's own minimum stay (asignar_temporada_rango's p_estancia_minima), not to be
+  // confused with the unrelated per-day "Estancia mínima" section below (ajustes_dia override).
+  const [estanciaMinimaPeriodo, setEstanciaMinimaPeriodo] = useState("");
   const [gaps, setGaps] = useState<{ desde: string; hasta: string }[] | null>(null);
 
   /** Picking anything but "Crear nueva" drops whatever was typed into the new-temporada fields. */
@@ -124,6 +128,10 @@ export function DiasEdicionMasivaDialog({
         return;
       }
     }
+    if (aplicarTemporada && !isPositiveIntOrEmpty(estanciaMinimaPeriodo)) {
+      toast.error("La estancia mínima del período debe ser un número entero mayor que 0");
+      return;
+    }
 
     const comunes: Partial<{ estanciaMinima: number | null; precioManual: number | null }> = {};
     if (estanciaQuitar) comunes.estanciaMinima = null;
@@ -156,6 +164,7 @@ export function DiasEdicionMasivaDialog({
       if (aplicarTemporada) {
         await asignarTemporadaRango(
           aplicaA, anio, fechas[0], fechas[fechas.length - 1],
+          estanciaMinimaPeriodo.trim() === "" ? null : Number(estanciaMinimaPeriodo),
           temporadaId === CREAR_NUEVA
             ? { nueva: { codigo: codigoNueva.trim(), nombre: nombreNueva.trim(), coeficiente: coefNueva } }
             : { temporadaId },
@@ -238,6 +247,19 @@ export function DiasEdicionMasivaDialog({
                   />
                 </Field>
               </div>
+            )}
+            {temporadaId !== NO_CAMBIAR && (
+              <Field label="Estancia mínima del período">
+                <Input
+                  type="number"
+                  min={1}
+                  step={1}
+                  placeholder="Sin mínimo"
+                  value={estanciaMinimaPeriodo}
+                  onChange={(e) => setEstanciaMinimaPeriodo(e.target.value)}
+                  className="h-8 w-28 text-xs"
+                />
+              </Field>
             )}
           </div>
 
