@@ -249,22 +249,30 @@ export function DiasEdicionMasivaDialog({
               </div>
             )}
             {temporadaId !== NO_CAMBIAR && (
-              <Field label="Estancia mínima del período">
-                <Input
-                  type="number"
-                  min={1}
-                  step={1}
-                  placeholder="Sin mínimo"
-                  value={estanciaMinimaPeriodo}
-                  onChange={(e) => setEstanciaMinimaPeriodo(e.target.value)}
-                  className="h-8 w-28 text-xs"
-                />
-              </Field>
+              <div className="space-y-1">
+                <Field label="Estancia mínima del período">
+                  <Input
+                    type="number"
+                    min={1}
+                    step={1}
+                    placeholder="Sin mínimo"
+                    value={estanciaMinimaPeriodo}
+                    onChange={(e) => setEstanciaMinimaPeriodo(e.target.value)}
+                    className="h-8 w-28 text-xs"
+                  />
+                </Field>
+                <p className="text-[11px] text-muted-foreground">
+                  Se guarda en el período de la temporada; aplica a todo el rango salvo que un día tenga su propio ajuste.
+                </p>
+              </div>
             )}
           </div>
 
           <div className="space-y-1.5">
             <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Estancia mínima</p>
+            <p className="text-[11px] text-muted-foreground">
+              Ajuste manual para días concretos — tiene prioridad sobre el período.
+            </p>
             <div className="flex items-center gap-2">
               <Input
                 type="number"
