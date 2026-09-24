@@ -207,7 +207,7 @@ function DiaCelda({
 
 /**
  * Compact day cell for the 3-month view: same data as `DiaCelda` (heatmap, temporada, festivo
- * stripe, precio, mínimo noches, eventos, selection) laid out for a ~62px-tall cell instead of
+ * stripe, precio, mínimo noches, eventos, selection) laid out for a ~80px-tall cell instead of
  * `DiaCelda`'s full-detail one — see the approved "Vista de 3 meses" mockup this follows. Out-of-month
  * padding days render as an invisible placeholder rather than `DiaCelda`'s muted/grayscale treatment,
  * so three adjacent months' grids don't visually bleed into each other with neighbouring dates.
@@ -226,13 +226,13 @@ function DiaCeldaCompacta({
   onToggleSeleccion: () => void;
 }) {
   if (!celda.enMes) {
-    return <div className="invisible min-h-[62px]" aria-hidden />;
+    return <div className="invisible min-h-[80px]" aria-hidden />;
   }
 
   if (!calc || !rango) {
     return (
       <div
-        className="relative flex min-h-[62px] flex-col overflow-hidden rounded-[6px] border border-slate-200 px-[5px] pb-1 pt-3 text-slate-500"
+        className="relative flex min-h-[80px] flex-col overflow-hidden rounded-[6px] border border-slate-200 px-[5px] pb-1 pt-3 text-slate-500"
         style={{ background: HATCHED }}
         title={["Sin cobertura: falta período de temporada, de días de la semana o precio base", tooltipFestivos(festivos)]
           .filter(Boolean)
@@ -252,7 +252,7 @@ function DiaCeldaCompacta({
       type="button"
       onClick={onOpen}
       className={cn(
-        "relative flex min-h-[62px] flex-col justify-between overflow-hidden rounded-[6px] border text-left text-slate-900 outline-2 -outline-offset-2 outline-transparent transition-[outline-color] hover:outline-slate-900 focus-visible:outline-slate-900",
+        "relative flex min-h-[80px] flex-col justify-between overflow-hidden rounded-[6px] border text-left text-slate-900 outline-2 -outline-offset-2 outline-transparent transition-[outline-color] hover:outline-slate-900 focus-visible:outline-slate-900",
         "px-[5px] pb-1 pt-3",
         seleccionado ? "border-primary ring-2 ring-primary" : "border-slate-200",
         !mapaCalor && "bg-card",
@@ -277,20 +277,12 @@ function DiaCeldaCompacta({
         {seleccionado && <Check className="h-2 w-2" />}
       </span>
       <BarraFestivos festivos={festivos} />
-      {evento && (
-        <span
-          title={eventos.map((e) => e.nombre).join(", ")}
-          className="absolute right-0.5 top-3 z-10 max-w-[calc(100%-10px)] truncate rounded-full border border-primary bg-card px-1 text-[7px] font-extrabold leading-[12px] text-primary"
-        >
-          {evento.nombre}
-        </span>
-      )}
       <span className="text-[10px] font-bold tabular-nums">{celda.dia}</span>
-      <div>
+      <div className="flex flex-col gap-0.5 pr-4">
         <span className={cn("block text-[11px] font-extrabold tabular-nums", calc.precioManual != null && "text-[#7C2D33]")}>
           {calc.precioFinal}€
         </span>
-        <div className="mt-0.5 flex items-center gap-[3px]">
+        <div className="flex items-center gap-[3px]">
           <span
             className="rounded-full px-1 text-[8px] font-extrabold leading-[13px] text-white"
             style={{ background: tempColor(calc.temporada.codigo) }}
@@ -302,6 +294,14 @@ function DiaCeldaCompacta({
             <span className="whitespace-nowrap text-[8px] font-semibold opacity-75">{calc.estanciaMinima} nits</span>
           )}
         </div>
+        {evento && (
+          <span
+            title={eventos.map((e) => e.nombre).join(", ")}
+            className="max-w-full self-start truncate rounded-full border border-primary bg-card px-1 text-[7px] font-extrabold leading-[12px] text-primary"
+          >
+            {evento.nombre}
+          </span>
+        )}
       </div>
     </button>
   );
@@ -538,7 +538,7 @@ function CalendarioPage() {
       {error && <p className="mb-4 text-sm text-destructive">{error.message}</p>}
       {cargando && <p className="mb-4 text-sm text-muted-foreground">Cargando…</p>}
 
-      <div className={vista === "trimestre" ? "mx-auto max-w-[1360px]" : "mx-auto max-w-[760px]"}>
+      <div className={vista === "trimestre" ? "w-full" : "mx-auto max-w-[760px]"}>
         <div className="mb-3 flex items-center justify-between">
           <Button
             size="icon"
