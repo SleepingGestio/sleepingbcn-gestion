@@ -207,10 +207,15 @@ function DiaCelda({
 
 /**
  * Compact day cell for the 3-month view: same data as `DiaCelda` (heatmap, temporada, festivo
- * stripe, precio, mínimo noches, eventos, selection) laid out for a ~80px-tall cell instead of
+ * stripe, precio, mínimo noches, eventos, selection) laid out for a ~104px-tall cell instead of
  * `DiaCelda`'s full-detail one — see the approved "Vista de 3 meses" mockup this follows. Out-of-month
  * padding days render as an invisible placeholder rather than `DiaCelda`'s muted/grayscale treatment,
  * so three adjacent months' grids don't visually bleed into each other with neighbouring dates.
+ *
+ * Día+temporada, precio and mínimo noches are a fixed top-down flow — each always at the same
+ * position relative to the cell's top, regardless of the day's other content. The evento badge is
+ * deliberately NOT part of that flow: it's absolutely positioned at the bottom so its presence or
+ * absence never shifts the price/mínimo noches above it.
  */
 function DiaCeldaCompacta({
   celda, calc, eventos, festivos, rango, mapaCalor, seleccionado, onOpen, onToggleSeleccion,
@@ -226,13 +231,13 @@ function DiaCeldaCompacta({
   onToggleSeleccion: () => void;
 }) {
   if (!celda.enMes) {
-    return <div className="invisible min-h-[80px]" aria-hidden />;
+    return <div className="invisible min-h-[104px]" aria-hidden />;
   }
 
   if (!calc || !rango) {
     return (
       <div
-        className="relative flex min-h-[80px] flex-col overflow-hidden rounded-[6px] border border-slate-200 px-[5px] pb-1 pt-3 text-slate-500"
+        className="relative flex min-h-[104px] flex-col overflow-hidden rounded-[6px] border border-slate-200 px-[5px] pb-1 pt-3 text-slate-500"
         style={{ background: HATCHED }}
         title={["Sin cobertura: falta período de temporada, de días de la semana o precio base", tooltipFestivos(festivos)]
           .filter(Boolean)
@@ -252,7 +257,7 @@ function DiaCeldaCompacta({
       type="button"
       onClick={onOpen}
       className={cn(
-        "relative flex min-h-[80px] flex-col justify-between overflow-hidden rounded-[6px] border text-left text-slate-900 outline-2 -outline-offset-2 outline-transparent transition-[outline-color] hover:outline-slate-900 focus-visible:outline-slate-900",
+        "relative flex min-h-[104px] flex-col overflow-hidden rounded-[6px] border text-left text-slate-900 outline-2 -outline-offset-2 outline-transparent transition-[outline-color] hover:outline-slate-900 focus-visible:outline-slate-900",
         "px-[5px] pb-1 pt-3",
         seleccionado ? "border-primary ring-2 ring-primary" : "border-slate-200",
         !mapaCalor && "bg-card",
@@ -277,32 +282,33 @@ function DiaCeldaCompacta({
         {seleccionado && <Check className="h-2 w-2" />}
       </span>
       <BarraFestivos festivos={festivos} />
-      <span className="text-[10px] font-bold tabular-nums">{celda.dia}</span>
-      <div className="flex flex-col gap-0.5 pr-4">
-        <span className={cn("block text-[11px] font-extrabold tabular-nums", calc.precioManual != null && "text-[#7C2D33]")}>
-          {calc.precioFinal}€
+      <span className="flex h-4 w-fit shrink-0 items-center gap-1 rounded-[4px] bg-white px-1 text-[9px] font-bold shadow-[0_0_0_0.5px_#e2e8f0]">
+        {celda.dia}
+        <span
+          className="inline-flex h-[10px] min-w-[10px] items-center justify-center rounded-[3px] px-[2px] text-[6.5px] font-bold text-white"
+          style={{ background: tempColor(calc.temporada.codigo) }}
+          title={calc.temporada.nombre}
+        >
+          {calc.temporada.codigo}
         </span>
-        <div className="flex items-center gap-[3px]">
-          <span
-            className="rounded-full px-1 text-[8px] font-extrabold leading-[13px] text-white"
-            style={{ background: tempColor(calc.temporada.codigo) }}
-            title={calc.temporada.nombre}
-          >
-            {calc.temporada.codigo}
-          </span>
-          {calc.estanciaMinima != null && (
-            <span className="whitespace-nowrap text-[8px] font-semibold opacity-75">{calc.estanciaMinima} nits</span>
+      </span>
+      <span className={cn("mt-1 block text-[11px] font-extrabold tabular-nums", calc.precioManual != null && "text-[#7C2D33]")}>
+        {calc.precioFinal}€
+      </span>
+      {calc.estanciaMinima != null && (
+        <span className="block text-[8px] font-semibold opacity-75">{calc.estanciaMinima} nits</span>
+      )}
+      {evento && (
+        <span
+          title={eventos.map((e) => e.nombre).join(", ")}
+          className={cn(
+            "absolute bottom-1 left-1 z-10 max-w-[calc(100%-18px)] truncate rounded-full px-1 text-[7px] font-medium",
+            CATEGORIA_STYLES[evento.categoria],
           )}
-        </div>
-        {evento && (
-          <span
-            title={eventos.map((e) => e.nombre).join(", ")}
-            className="max-w-full self-start truncate rounded-full border border-primary bg-card px-1 text-[7px] font-extrabold leading-[12px] text-primary"
-          >
-            {evento.nombre}
-          </span>
-        )}
-      </div>
+        >
+          {evento.nombre}
+        </span>
+      )}
     </button>
   );
 }
