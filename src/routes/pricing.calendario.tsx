@@ -1,11 +1,12 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Check, ChevronLeft, ChevronRight } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { DiaPrecioDialog } from "@/components/dia-precio-dialog";
 import { DiasEdicionMasivaDialog } from "@/components/dias-edicion-masiva-dialog";
 import { DiasAsignarEventoDialog } from "@/components/dias-asignar-evento-dialog";
@@ -204,6 +205,144 @@ function DiaCelda({
   );
 }
 
+/**
+ * Compact day cell for the 3-month view: same data as `DiaCelda` (heatmap, temporada, festivo
+ * stripe, precio, mínimo noches, eventos, selection) laid out for a ~62px-tall cell instead of
+ * `DiaCelda`'s full-detail one — see the approved "Vista de 3 meses" mockup this follows. Out-of-month
+ * padding days render as an invisible placeholder rather than `DiaCelda`'s muted/grayscale treatment,
+ * so three adjacent months' grids don't visually bleed into each other with neighbouring dates.
+ */
+function DiaCeldaCompacta({
+  celda, calc, eventos, festivos, rango, mapaCalor, seleccionado, onOpen, onToggleSeleccion,
+}: {
+  celda: Celda;
+  calc: DiaCalculado | null;
+  eventos: Evento[];
+  festivos: Festivo[];
+  rango: { min: number; max: number } | null;
+  mapaCalor: boolean;
+  seleccionado: boolean;
+  onOpen: () => void;
+  onToggleSeleccion: () => void;
+}) {
+  if (!celda.enMes) {
+    return <div className="invisible min-h-[62px]" aria-hidden />;
+  }
+
+  if (!calc || !rango) {
+    return (
+      <div
+        className="relative flex min-h-[62px] flex-col overflow-hidden rounded-[6px] border border-slate-200 px-[5px] pb-1 pt-3 text-slate-500"
+        style={{ background: HATCHED }}
+        title={["Sin cobertura: falta período de temporada, de días de la semana o precio base", tooltipFestivos(festivos)]
+          .filter(Boolean)
+          .join("\n")}
+      >
+        <BarraFestivos festivos={festivos} />
+        <span className="text-[10px] font-bold tabular-nums">{celda.dia}</span>
+      </div>
+    );
+  }
+
+  // Only one event's badge fits the cell; the rest still show in the tooltip.
+  const evento = eventos[0];
+
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      className={cn(
+        "relative flex min-h-[62px] flex-col justify-between overflow-hidden rounded-[6px] border text-left text-slate-900 outline-2 -outline-offset-2 outline-transparent transition-[outline-color] hover:outline-slate-900 focus-visible:outline-slate-900",
+        "px-[5px] pb-1 pt-3",
+        seleccionado ? "border-primary ring-2 ring-primary" : "border-slate-200",
+        !mapaCalor && "bg-card",
+      )}
+      style={mapaCalor ? { background: heatColor(calc.precioFinal, rango.min, rango.max) } : undefined}
+      title={tooltipFestivos(festivos)}
+    >
+      <span
+        role="checkbox"
+        aria-checked={seleccionado}
+        aria-label="Seleccionar este día"
+        tabIndex={0}
+        onClick={(e) => { e.stopPropagation(); onToggleSeleccion(); }}
+        onKeyDown={(e) => {
+          if (e.key === " " || e.key === "Enter") { e.preventDefault(); e.stopPropagation(); onToggleSeleccion(); }
+        }}
+        className={cn(
+          "absolute bottom-0.5 right-0.5 z-20 flex h-3 w-3 cursor-pointer items-center justify-center rounded border",
+          seleccionado ? "border-primary bg-primary text-primary-foreground" : "border-slate-300 bg-white/90",
+        )}
+      >
+        {seleccionado && <Check className="h-2 w-2" />}
+      </span>
+      <BarraFestivos festivos={festivos} />
+      {evento && (
+        <span
+          title={eventos.map((e) => e.nombre).join(", ")}
+          className="absolute right-0.5 top-3 z-10 max-w-[calc(100%-10px)] truncate rounded-full border border-primary bg-card px-1 text-[7px] font-extrabold leading-[12px] text-primary"
+        >
+          {evento.nombre}
+        </span>
+      )}
+      <span className="text-[10px] font-bold tabular-nums">{celda.dia}</span>
+      <div>
+        <span className={cn("block text-[11px] font-extrabold tabular-nums", calc.precioManual != null && "text-[#7C2D33]")}>
+          {calc.precioFinal}€
+        </span>
+        <div className="mt-0.5 flex items-center gap-[3px]">
+          <span
+            className="rounded-full px-1 text-[8px] font-extrabold leading-[13px] text-white"
+            style={{ background: tempColor(calc.temporada.codigo) }}
+            title={calc.temporada.nombre}
+          >
+            {calc.temporada.codigo}
+          </span>
+          {calc.estanciaMinima != null && (
+            <span className="whitespace-nowrap text-[8px] font-semibold opacity-75">{calc.estanciaMinima} nits</span>
+          )}
+        </div>
+      </div>
+    </button>
+  );
+}
+
+/**
+ * Weekday header row + 7-column day grid for one month. Cell rendering is left entirely to
+ * `renderCelda`, so the same layout serves both the full-detail 1-month view (`DiaCelda`) and the
+ * compact 3-month view (`DiaCeldaCompacta`) without either one knowing about the other.
+ */
+function MesGrid({
+  celdas, renderCelda, titulo, compacta,
+}: {
+  celdas: Celda[];
+  renderCelda: (celda: Celda) => ReactNode;
+  /** Per-column month label; only the 3-month view needs one, since the 1-month view already has its own header above the grid. */
+  titulo?: string;
+  /** Denser weekday header to match the compact cell's smaller footprint. */
+  compacta?: boolean;
+}) {
+  return (
+    <div className="flex min-w-0 flex-col">
+      {titulo && <h3 className="mb-2 border-b border-slate-200 pb-2 text-center text-[13px] font-extrabold">{titulo}</h3>}
+      <div className={cn("grid grid-cols-7", compacta ? "mb-1 gap-1" : "mb-1.5 gap-1.5")}>
+        {DIAS.map((d) => (
+          <div
+            key={d}
+            className={cn(
+              "text-center font-bold uppercase tracking-[0.04em] text-slate-500",
+              compacta ? "text-[9px]" : "border-b-2 border-slate-200 py-1 text-[11px]",
+            )}
+          >
+            {d}
+          </div>
+        ))}
+      </div>
+      <div className={cn("grid grid-cols-7", compacta ? "gap-1" : "gap-1.5")}>{celdas.map((c) => renderCelda(c))}</div>
+    </div>
+  );
+}
+
 function CalendarioPage() {
   const temporadasQ = useQuery({ queryKey: ["pricing-temporadas"], queryFn: fetchTemporadas });
   const diaQ = useQuery({ queryKey: ["pricing-dia-semana-periodos"], queryFn: fetchDiaSemanaPeriodos });
@@ -228,6 +367,7 @@ function CalendarioPage() {
   // null until the person navigates: then the year/month default from the data that exists.
   const [cursor, setCursor] = useState<{ y: number; m: number } | null>(null);
   const [dir, setDir] = useState<1 | -1>(1);
+  const [vista, setVista] = useState<"mes" | "trimestre">("mes");
   const [seleccion, setSeleccion] = useState<string | null>(null);
   const [mapaCalor, setMapaCalor] = useState(true);
   const [seleccionMasiva, setSeleccionMasiva] = useState<Set<string>>(new Set());
@@ -251,13 +391,25 @@ function CalendarioPage() {
     () => calcularAnio(anio, aplicaA, { temporadas, diaSemanaPeriodos, precioBase, eventos }, ajustesDia),
     [anio, aplicaA, temporadas, diaSemanaPeriodos, precioBase, eventos, ajustesDia],
   );
-  const celdas = useMemo(() => celdasDelMes(anio, mes), [anio, mes]);
+  // Quarter-aligned starts only: 0, 3, 6, 9. A trimestre built from one of these never spans two
+  // años, so it always reads from this single año's `calculo` — no merging across `calcularAnio` calls.
+  const trimestreInicio = mes - (mes % 3);
+  const mesesVisibles = useMemo(
+    () => (vista === "trimestre" ? [trimestreInicio, trimestreInicio + 1, trimestreInicio + 2] : [mes]),
+    [vista, trimestreInicio, mes],
+  );
+  const celdasPorMes = useMemo(() => mesesVisibles.map((m) => celdasDelMes(anio, m)), [anio, mesesVisibles]);
+  // Flattened across every visible month, so range-fill selection (toggleSeleccionDia below) sees the
+  // whole 3-month window in "trimestre" mode instead of only the first month.
+  const celdasVisibles = useMemo(() => celdasPorMes.flat(), [celdasPorMes]);
 
-  // The selection doesn't need to carry across months: simplest is to drop it whenever the
-  // displayed month changes, whichever control (prev/next, Año, Mes) triggered it.
+  // The selection doesn't need to carry across the visible window: simplest is to drop it whenever
+  // that window changes — the trimestre's start month in "trimestre" mode, the month itself in "mes"
+  // mode — or whenever the view mode itself switches.
+  const ventanaInicio = vista === "trimestre" ? trimestreInicio : mes;
   useEffect(() => {
     setSeleccionMasiva(new Set());
-  }, [anio, mes]);
+  }, [anio, vista, ventanaInicio]);
 
   function moverMes(delta: 1 | -1) {
     setDir(delta);
@@ -267,13 +419,23 @@ function CalendarioPage() {
     });
   }
 
+  function moverTrimestre(delta: 1 | -1) {
+    setDir(delta);
+    const destino = trimestreInicio + delta * 3;
+    setCursor({
+      y: destino < 0 ? anio - 1 : destino > 9 ? anio + 1 : anio,
+      m: (destino + 12) % 12,
+    });
+  }
+
   /**
    * Checkbox click. On an empty selection the day becomes the anchor; with only the anchor selected,
    * clicking another day fills the whole range between them (by date, either direction); from then on
    * — or whenever the selection holds more than the anchor — each click toggles just that one day.
-   * Any clear (Cancelar selección, month change, after a bulk save) empties the set, so the next click
-   * anchors afresh. The range only fills days that have their own checkbox (in the displayed month
-   * and calculable), so it can't pick up days that couldn't be selected one by one.
+   * Any clear (Cancelar selección, window change, after a bulk save) empties the set, so the next
+   * click anchors afresh. The range only fills days that have their own checkbox (visible — in "mes"
+   * mode the displayed month, in "trimestre" mode any of the three — and calculable), so it can't pick
+   * up days that couldn't be selected one by one.
    */
   function toggleSeleccionDia(iso: string) {
     if (seleccionMasiva.size === 0) {
@@ -283,7 +445,7 @@ function CalendarioPage() {
     }
     if (ancla && iso !== ancla && seleccionMasiva.size === 1 && seleccionMasiva.has(ancla)) {
       const [desde, hasta] = ancla < iso ? [ancla, iso] : [iso, ancla];
-      setSeleccionMasiva(new Set(celdas.filter((c) => c.enMes && c.iso >= desde && c.iso <= hasta && calculo.dias.get(c.iso)).map((c) => c.iso)));
+      setSeleccionMasiva(new Set(celdasVisibles.filter((c) => c.enMes && c.iso >= desde && c.iso <= hasta && calculo.dias.get(c.iso)).map((c) => c.iso)));
       setAncla(null);
       return;
     }
@@ -311,20 +473,38 @@ function CalendarioPage() {
             </SelectContent>
           </Select>
         </div>
+        {vista === "mes" && (
+          <div className="grid gap-1">
+            <span className="text-xs text-muted-foreground">Mes</span>
+            <Select
+              value={String(mes)}
+              onValueChange={(v) => {
+                setDir(Number(v) >= mes ? 1 : -1);
+                setCursor({ y: anio, m: Number(v) });
+              }}
+            >
+              <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {MESES.map((nombre, i) => <SelectItem key={nombre} value={String(i)}>{nombre}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
         <div className="grid gap-1">
-          <span className="text-xs text-muted-foreground">Mes</span>
-          <Select
-            value={String(mes)}
-            onValueChange={(v) => {
-              setDir(Number(v) >= mes ? 1 : -1);
-              setCursor({ y: anio, m: Number(v) });
-            }}
+          <span className="text-xs text-muted-foreground">Vista</span>
+          <ToggleGroup
+            type="single"
+            value={vista}
+            onValueChange={(v) => v && setVista(v as "mes" | "trimestre")}
+            className="h-9 justify-start"
           >
-            <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              {MESES.map((nombre, i) => <SelectItem key={nombre} value={String(i)}>{nombre}</SelectItem>)}
-            </SelectContent>
-          </Select>
+            <ToggleGroupItem value="mes" className="h-9 px-3 text-xs data-[state=on]:bg-primary data-[state=on]:text-primary-foreground">
+              1 mes
+            </ToggleGroupItem>
+            <ToggleGroupItem value="trimestre" className="h-9 px-3 text-xs data-[state=on]:bg-primary data-[state=on]:text-primary-foreground">
+              3 meses
+            </ToggleGroupItem>
+          </ToggleGroup>
         </div>
         <div className="grid gap-1">
           <span className="text-xs text-muted-foreground">Grupo</span>
@@ -358,13 +538,25 @@ function CalendarioPage() {
       {error && <p className="mb-4 text-sm text-destructive">{error.message}</p>}
       {cargando && <p className="mb-4 text-sm text-muted-foreground">Cargando…</p>}
 
-      <div className="mx-auto max-w-[760px]">
+      <div className={vista === "trimestre" ? "mx-auto max-w-[1360px]" : "mx-auto max-w-[760px]"}>
         <div className="mb-3 flex items-center justify-between">
-          <Button size="icon" variant="outline" onClick={() => moverMes(-1)} title="Mes anterior">
+          <Button
+            size="icon"
+            variant="outline"
+            onClick={() => (vista === "trimestre" ? moverTrimestre(-1) : moverMes(-1))}
+            title={vista === "trimestre" ? "Trimestre anterior" : "Mes anterior"}
+          >
             <ChevronLeft className="h-4 w-4" />
           </Button>
-          <h2 className="text-base font-semibold">{MESES[mes]} {anio}</h2>
-          <Button size="icon" variant="outline" onClick={() => moverMes(1)} title="Mes siguiente">
+          <h2 className="text-base font-semibold">
+            {vista === "trimestre" ? `${MESES[mesesVisibles[0]]} – ${MESES[mesesVisibles[2]]} ${anio}` : `${MESES[mes]} ${anio}`}
+          </h2>
+          <Button
+            size="icon"
+            variant="outline"
+            onClick={() => (vista === "trimestre" ? moverTrimestre(1) : moverMes(1))}
+            title={vista === "trimestre" ? "Trimestre siguiente" : "Mes siguiente"}
+          >
             <ChevronRight className="h-4 w-4" />
           </Button>
         </div>
@@ -388,39 +580,61 @@ function CalendarioPage() {
           </div>
         )}
 
-        <div className="mb-1.5 grid grid-cols-7 gap-1.5">
-          {DIAS.map((d) => (
-            <div
-              key={d}
-              className="border-b-2 border-slate-200 py-1 text-center text-[11px] font-bold uppercase tracking-[0.04em] text-slate-500"
-            >
-              {d}
-            </div>
-          ))}
-        </div>
-
-        <div
-          key={`${anio}-${mes}`}
-          className={cn(
-            "grid grid-cols-7 gap-1.5 animate-in fade-in-0 duration-200",
-            dir === 1 ? "slide-in-from-right-4" : "slide-in-from-left-4",
-          )}
-        >
-          {celdas.map((c) => (
-            <DiaCelda
-              key={c.iso}
-              celda={c}
-              calc={calculo.dias.get(c.iso) ?? null}
-              eventos={eventosActivosDia(eventos, c.iso, aplicaA)}
-              festivos={festivosPorFecha.get(c.iso) ?? []}
-              rango={calculo.rango}
-              mapaCalor={mapaCalor}
-              seleccionado={seleccionMasiva.has(c.iso)}
-              onOpen={() => setSeleccion(c.iso)}
-              onToggleSeleccion={() => toggleSeleccionDia(c.iso)}
+        {vista === "mes" ? (
+          <div
+            key={`${anio}-${mes}`}
+            className={cn("animate-in fade-in-0 duration-200", dir === 1 ? "slide-in-from-right-4" : "slide-in-from-left-4")}
+          >
+            <MesGrid
+              celdas={celdasPorMes[0]}
+              renderCelda={(c) => (
+                <DiaCelda
+                  key={c.iso}
+                  celda={c}
+                  calc={calculo.dias.get(c.iso) ?? null}
+                  eventos={eventosActivosDia(eventos, c.iso, aplicaA)}
+                  festivos={festivosPorFecha.get(c.iso) ?? []}
+                  rango={calculo.rango}
+                  mapaCalor={mapaCalor}
+                  seleccionado={seleccionMasiva.has(c.iso)}
+                  onOpen={() => setSeleccion(c.iso)}
+                  onToggleSeleccion={() => toggleSeleccionDia(c.iso)}
+                />
+              )}
             />
-          ))}
-        </div>
+          </div>
+        ) : (
+          <div
+            key={`${anio}-${trimestreInicio}`}
+            className={cn(
+              "grid grid-cols-1 gap-6 animate-in fade-in-0 duration-200 lg:grid-cols-3",
+              dir === 1 ? "slide-in-from-right-4" : "slide-in-from-left-4",
+            )}
+          >
+            {mesesVisibles.map((m, i) => (
+              <MesGrid
+                key={m}
+                titulo={`${MESES[m]} ${anio}`}
+                celdas={celdasPorMes[i]}
+                compacta
+                renderCelda={(c) => (
+                  <DiaCeldaCompacta
+                    key={c.iso}
+                    celda={c}
+                    calc={calculo.dias.get(c.iso) ?? null}
+                    eventos={eventosActivosDia(eventos, c.iso, aplicaA)}
+                    festivos={festivosPorFecha.get(c.iso) ?? []}
+                    rango={calculo.rango}
+                    mapaCalor={mapaCalor}
+                    seleccionado={seleccionMasiva.has(c.iso)}
+                    onOpen={() => setSeleccion(c.iso)}
+                    onToggleSeleccion={() => toggleSeleccionDia(c.iso)}
+                  />
+                )}
+              />
+            ))}
+          </div>
+        )}
       </div>
 
       {seleccionado && (
