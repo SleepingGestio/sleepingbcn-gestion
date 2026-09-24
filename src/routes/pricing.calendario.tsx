@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import { DiaPrecioDialog } from "@/components/dia-precio-dialog";
 import { DiasEdicionMasivaDialog } from "@/components/dias-edicion-masiva-dialog";
+import { DiasAsignarEventoDialog } from "@/components/dias-asignar-evento-dialog";
 import { CATEGORIA_STYLES, AMBITO_LIST, AMBITO_LABEL, AMBITO_COLOR } from "@/lib/pricing-styles";
 import {
   fetchTemporadas, fetchDiaSemanaPeriodos, fetchPrecioBase, fetchEventos, fetchFestivos, fetchAjustesDia,
@@ -233,6 +234,7 @@ function CalendarioPage() {
   // The day that started the current selection; only meaningful while it's the selection's sole day.
   const [ancla, setAncla] = useState<string | null>(null);
   const [edicionMasivaAbierta, setEdicionMasivaAbierta] = useState(false);
+  const [asignarEventoAbierto, setAsignarEventoAbierto] = useState(false);
 
   const dataYears = useMemo(
     () => [...new Set([...temporadas.map((t) => t.anio), ...diaSemanaPeriodos.map((p) => p.anio), ...precioBase.map((p) => p.anio)])],
@@ -376,6 +378,9 @@ function CalendarioPage() {
               <Button size="sm" variant="outline" onClick={() => setSeleccionMasiva(new Set())}>
                 Cancelar selección
               </Button>
+              <Button size="sm" variant="outline" onClick={() => setAsignarEventoAbierto(true)}>
+                Asignar a evento
+              </Button>
               <Button size="sm" onClick={() => setEdicionMasivaAbierta(true)}>
                 Editar {seleccionMasiva.size} días
               </Button>
@@ -441,6 +446,22 @@ function CalendarioPage() {
           onTemporadaAplicada={async () => { await temporadasQ.refetch(); }}
           onGuardado={async () => {
             await ajustesQ.refetch();
+            setSeleccionMasiva(new Set());
+          }}
+        />
+      )}
+
+      {asignarEventoAbierto && (
+        <DiasAsignarEventoDialog
+          fechas={[...seleccionMasiva].sort()}
+          anio={anio}
+          aplicaA={aplicaA}
+          eventos={eventos}
+          temporadas={temporadas}
+          dias={calculo.dias}
+          onClose={() => setAsignarEventoAbierto(false)}
+          onEventoAplicado={async () => {
+            await eventosQ.refetch();
             setSeleccionMasiva(new Set());
           }}
         />

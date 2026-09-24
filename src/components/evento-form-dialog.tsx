@@ -33,9 +33,12 @@ const ESTADO_OPTIONS: { value: EventoEstado; label: string }[] = [
 
 // Edit mode only: an edition either has no price change, a %/€ effect (valor),
 // or a season override (temporada_override_id) — never both (DB enforces it too).
-type EfectoModo = "ninguno" | "valor" | "temporada";
+// Exported so dias-asignar-evento-dialog.tsx's own reassign-existing-edition
+// path (also edit-mode-shaped, since it updates an existing Evento) can reuse
+// the same three options instead of redefining them.
+export type EfectoModo = "ninguno" | "valor" | "temporada";
 
-const EFECTO_OPTIONS: { value: EfectoModo; label: string }[] = [
+export const EFECTO_OPTIONS: { value: EfectoModo; label: string }[] = [
   { value: "ninguno", label: "Sin cambio" },
   { value: "valor", label: "Efecto %/€" },
   { value: "temporada", label: "Cambio de temporada" },

@@ -1,6 +1,7 @@
 import type {
   AjusteDia, DiaSemanaPeriodo, Evento, EventoTipoValor, PrecioBase, Temporada, TemporadaAplicaA,
 } from "@/lib/pricing";
+import { addDaysISO } from "@/lib/format";
 
 // Pure price calculation for one day. No I/O, no UI: everything comes in through `data`.
 
@@ -105,6 +106,33 @@ export function eventosActivosDia(eventos: Evento[], fecha: string, aplicaA: Tem
   return eventos.filter(
     (e) => e.estado === "confirmado" && cubre(e, fecha) && (e.aplica_a === "ambos" || e.aplica_a === aplicaA),
   );
+}
+
+/**
+ * Whether sorted `fechas` can go to asignar_temporada_rango (or the eventos
+ * "Asignar a evento" flow) as the single range [first, last]: every calculable
+ * day in between must be selected. An unselected "Sin datos" day (null in
+ * `dias`) is fine, since it has no checkbox and range-fill already skips it, so
+ * the range just covers it too. 0 or 1 dates always count as valid.
+ * Extracted from dias-edicion-masiva-dialog.tsx (its original, only caller
+ * until now) so dias-asignar-evento-dialog.tsx can reuse it too — matching how
+ * findCoverageGaps is genuinely shared rather than duplicated per file.
+ */
+export function esRangoContinuo(fechas: string[], dias: Map<string, DiaCalculado | null>): boolean {
+  if (fechas.length < 2) return true;
+  const seleccionadas = new Set(fechas);
+  const hasta = fechas[fechas.length - 1];
+  for (let d = fechas[0]; d <= hasta; d = addDaysISO(d, 1)) {
+    if (!seleccionadas.has(d) && dias.get(d) != null) return false;
+  }
+  return true;
+}
+
+/** Whole days between two "YYYY-MM-DD" dates (b - a); negative if b is before a. */
+export function diffDaysISO(a: string, b: string): number {
+  const da = new Date(a + "T00:00:00").getTime();
+  const db = new Date(b + "T00:00:00").getTime();
+  return Math.round((db - da) / 86_400_000);
 }
 
 /**

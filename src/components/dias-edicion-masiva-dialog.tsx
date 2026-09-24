@@ -9,30 +9,14 @@ import { CalendarCheck } from "lucide-react";
 import { toast } from "sonner";
 import { Field } from "@/components/plantilla-edit-dialog";
 import { isPositiveIntOrEmpty } from "@/components/evento-form-dialog";
-import { addDaysISO, fmtDate } from "@/lib/format";
+import { fmtDate } from "@/lib/format";
 import {
   asignarTemporadaRango, findCoverageGaps, upsertAjustesDiaBulk, type Temporada, type TemporadaAplicaA,
 } from "@/lib/pricing";
-import type { DiaCalculado } from "@/lib/pricing-calc";
+import { esRangoContinuo, type DiaCalculado } from "@/lib/pricing-calc";
 
 const NO_CAMBIAR = "__no_cambiar__";
 const CREAR_NUEVA = "__crear_nueva__";
-
-/**
- * Whether sorted `fechas` can go to asignar_temporada_rango as the single range [first, last]: every
- * calculable day in between must be selected. An unselected "Sin datos" day (null in `dias`) is fine,
- * since it has no checkbox and range-fill already skips it, so the range just covers it too. 0 or 1
- * dates always count as valid.
- */
-function esRangoContinuo(fechas: string[], dias: Map<string, DiaCalculado | null>): boolean {
-  if (fechas.length < 2) return true;
-  const seleccionadas = new Set(fechas);
-  const hasta = fechas[fechas.length - 1];
-  for (let d = fechas[0]; d <= hasta; d = addDaysISO(d, 1)) {
-    if (!seleccionadas.has(d) && dias.get(d) != null) return false;
-  }
-  return true;
-}
 
 /**
  * Bulk edit for the days in `fechas`. Estancia mínima / precio are per-day overrides written to
