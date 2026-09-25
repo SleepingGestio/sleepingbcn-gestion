@@ -29,6 +29,9 @@ const MESES = [
   "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
   "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre",
 ];
+/** Short form for the print-only "Calendario" format's rotated month label — a full name read
+ * vertically down a narrow spine reads awkwardly, so this label uses the abbreviation instead. */
+const MESES_ABR = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
 const DIAS = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
 
 const TEMP_COLORS: Record<string, string> = { B: "#0ea5e9", A: "#22c55e", S: "#f97316", E: "#ef4444" };
@@ -577,49 +580,66 @@ function TablaMesImpresion({
 }
 
 /**
- * Max per-day-cell row height (mm) for the "Calendario" print format, sized so the worst case — a
- * month needing 6 calendar-week rows — still fits `mesesPorPagina` stacked months on one A4 portrait
- * page (`@page` in styles.css: size A4, 12mm margin → 297 − 2×12 = 273mm usable height). Scales with
- * mesesPorPagina, since 1-per-página has far more room to breathe than 3-per-página:
+ * Max per-day-cell row height (mm) for the "Calendario" print format, given `mesesPorPagina` and the
+ * actual max week-rows any month in this print job needs (`maxSemanas`, from `celdasDelMes(...).length
+ * / 7` — 4, 5 or 6 depending on the real month, not a hardcoded worst case). Sized so `maxSemanas`
+ * stacked rows always fit `mesesPorPagina` stacked months on one A4 portrait page (`@page` in
+ * styles.css: size A4, 12mm margin → 297 − 2×12 = 273mm usable height).
  *
- *   interMonthGaps = (mesesPorPagina − 1) × 4mm          the page-wrapper's gap-4 between stacked months
+ * The month title no longer takes a horizontal line (it's now a vertical label beside the grid, in
+ * `MesImpresionCalendario` — see there), so the per-month overhead below is just the weekday header:
+ *
+ *   interMonthGaps = (mesesPorPagina − 1) × 4mm     the page-wrapper's gap-4 between stacked months
  *   monthBudget    = (273mm − interMonthGaps) / mesesPorPagina
- *   rowBudget      = monthBudget − 14mm − 5mm            14mm = title + weekday header (measured ≈12.55mm, +buffer)
- *                                                         5mm = the 6-row grid's 5 inter-row gaps
- *   alturaMm       = floor(rowBudget / 6)                6 = worst-case week-rows in a month
+ *   rowGapsTotal   = (maxSemanas − 1) × 1mm         the day-grid's inter-row gaps (gap-1 ≈ 1.06mm)
+ *   rowBudget      = monthBudget − 5mm − rowGapsTotal   5mm = weekday header (measured ≈3.92mm, +buffer)
+ *   alturaMm       = floor(rowBudget / maxSemanas)
  *
- *   mesesPorPagina=1: (273−0)/1  = 273,    273−14−5   = 254,    254/6   = 42.33 → 42mm
- *   mesesPorPagina=2: (273−4)/2  = 134.5,  134.5−14−5 = 115.5,  115.5/6 = 19.25 → 19mm
- *   mesesPorPagina=3: (273−8)/3  = 88.33,  88.33−14−5 = 69.33,  69.33/6 = 11.55 → 11mm
+ * Worked examples (maxSemanas=4/5/6, the only values a calendar month can need):
+ *   mesesPorPagina=1: monthBudget=273.    maxSemanas=4→(273−5−3)/4=66.25→66mm   =5→(273−5−4)/5=52.8→52mm   =6→(273−5−5)/6=43.83→43mm
+ *   mesesPorPagina=2: monthBudget=134.5.  maxSemanas=4→(134.5−5−3)/4=31.6→31mm  =5→(134.5−5−4)/5=25.1→25mm =6→(134.5−5−5)/6=20.75→20mm
+ *   mesesPorPagina=3: monthBudget=88.33.  maxSemanas=4→(88.33−5−3)/4=20.08→20mm =5→(88.33−5−4)/5=15.87→15mm=6→(88.33−5−5)/6=13.06→13mm
  *
  * Flooring (rather than rounding) keeps every case a guaranteed underestimate of what actually fits.
+ * Note monthBudget only depends on mesesPorPagina, not maxSemanas — so a month's *total* height stays
+ * ~constant regardless of how many weeks it needs; fewer weeks just means taller individual rows.
  */
-const ALTURA_FILA_IMPRESION_MM: Record<1 | 2 | 3, number> = { 1: 42, 2: 19, 3: 11 };
+function alturaFilaImpresionMm(mesesPorPagina: 1 | 2 | 3, maxSemanas: number): number {
+  const interMonthGaps = (mesesPorPagina - 1) * 4;
+  const monthBudget = (273 - interMonthGaps) / mesesPorPagina;
+  const rowGapsTotal = (maxSemanas - 1) * 1;
+  const rowBudget = monthBudget - 5 - rowGapsTotal;
+  return Math.floor(rowBudget / maxSemanas);
+}
 
 /**
  * Non-interactive calendar-grid cell for the print-only "Calendario" format, rendered via the
  * existing `MesGrid` (which already renders any cell it's given, interactive or not, so it needs no
- * changes to host this): day number + temporada codigo, a compact festivos marker (just the first
- * one's name, plus "+N" for the rest — festivos only, not eventos: a full month grid has far less room
- * per day than `TablaMesImpresion`'s row), and precio + mínimo de noches on one line, each edge-aligned
- * — garnet + bold on the same manual signals as everywhere else. No heatmap, no click handler, no
- * selection checkbox. Out-of-month padding cells (from `celdasDelMes`, same as the on-screen grids)
- * render empty to keep weekday columns aligned; CSS Grid's default row-stretch sizes them to match
- * their row without needing their own `alturaMm`.
+ * changes to host this): day number + temporada codigo, a compact festivos marker top-right (just the
+ * first one's name, plus "+N" for the rest — festivos only, not eventos), precio + mínimo de noches on
+ * one line, each edge-aligned, and eventos pinned to the cell's bottom edge (`mt-auto`) in a visually
+ * distinct style so it's never confused with the festivo marker — garnet + bold on the same manual
+ * signals as everywhere else. No heatmap, no click handler, no selection checkbox. Out-of-month padding
+ * cells (from `celdasDelMes`, same as the on-screen grids) render empty to keep weekday columns
+ * aligned; CSS Grid's default row-stretch sizes them to match their row without needing their own
+ * `alturaMm`.
  */
 function DiaCeldaImpresion({
-  celda, calc, festivosPorFecha, alturaMm,
+  celda, calc, eventos, festivosPorFecha, aplicaA, alturaMm,
 }: {
   celda: Celda;
   calc: DiaCalculado | null;
+  eventos: Evento[];
   festivosPorFecha: Map<string, Festivo[]>;
-  /** Max row height in mm — see `ALTURA_FILA_IMPRESION_MM`. Passed as an inline style since Tailwind's
-   * JIT can't generate a class for a value computed at runtime from `mesesPorPagina`. */
+  aplicaA: TemporadaAplicaA;
+  /** Max row height in mm — see `alturaFilaImpresionMm`. Passed as an inline style since Tailwind's
+   * JIT can't generate a class for a value computed at runtime. */
   alturaMm: number;
 }) {
   if (!celda.enMes) return <div aria-hidden />;
 
   const festivos = (festivosPorFecha.get(celda.iso) ?? []).map((f) => f.nombre);
+  const eventosDia = eventosActivosDia(eventos, celda.iso, aplicaA).map((e) => e.nombre);
 
   return (
     <div
@@ -655,6 +675,58 @@ function DiaCeldaImpresion({
       ) : (
         <span className="text-[7px] text-muted-foreground">Sin datos</span>
       )}
+      {eventosDia.length > 0 && (
+        <span className="mt-auto truncate text-[7px] italic leading-tight text-indigo-600" title={eventosDia.join(", ")}>
+          {eventosDia[0]}
+          {eventosDia.length > 1 ? ` +${eventosDia.length - 1}` : ""}
+        </span>
+      )}
+    </div>
+  );
+}
+
+/**
+ * One month's calendar grid for the print-only "Calendario" format, with the month title rendered as
+ * a vertical label down the left edge instead of `MesGrid`'s usual horizontal line above the grid —
+ * this reclaims the vertical space the horizontal title used to take (folded into
+ * `alturaFilaImpresionMm`'s math, which now only budgets for the weekday header). `MesGrid`'s own
+ * `titulo` prop is left untouched for the on-screen 3-month view — this wraps `MesGrid` (called with no
+ * `titulo`) instead of passing one. Uses the month abbreviation (`MESES_ABR`), not the full name — a
+ * full name reads awkwardly rotated down a narrow spine.
+ */
+function MesImpresionCalendario({
+  anio, mes, dias, eventos, festivosPorFecha, aplicaA, alturaMm,
+}: {
+  anio: number;
+  mes: number;
+  dias: Map<string, DiaCalculado | null>;
+  eventos: Evento[];
+  festivosPorFecha: Map<string, Festivo[]>;
+  aplicaA: TemporadaAplicaA;
+  alturaMm: number;
+}) {
+  return (
+    <div className="flex gap-1 [break-inside:avoid]">
+      <div className="flex w-4 shrink-0 items-center justify-center text-center text-[9px] font-extrabold text-slate-700 [writing-mode:vertical-rl]">
+        {MESES_ABR[mes]} {anio}
+      </div>
+      <div className="min-w-0 flex-1">
+        <MesGrid
+          celdas={celdasDelMes(anio, mes)}
+          compacta
+          renderCelda={(c) => (
+            <DiaCeldaImpresion
+              key={c.iso}
+              celda={c}
+              calc={dias.get(c.iso) ?? null}
+              eventos={eventos}
+              festivosPorFecha={festivosPorFecha}
+              aplicaA={aplicaA}
+              alturaMm={alturaMm}
+            />
+          )}
+        />
+      </div>
     </div>
   );
 }
@@ -760,6 +832,14 @@ function CalendarioPage() {
     const n = printSpec.mesesPorPagina;
     return Array.from({ length: Math.ceil(mesesImpresion.length / n) }, (_, i) => mesesImpresion.slice(i * n, i * n + n));
   }, [mesesImpresion, printSpec]);
+
+  // The actual worst-case week-rows across the months in this print job (4, 5 or 6) — feeds
+  // alturaFilaImpresionMm so the "Calendario" format's row height isn't shrunk for a hypothetical
+  // 6-row month when nothing in this job actually needs one.
+  const maxSemanasImpresion = useMemo(
+    () => Math.max(1, ...mesesImpresion.map(({ anio: a, mes: m }) => celdasDelMes(a, m).length / 7)),
+    [mesesImpresion],
+  );
 
   // Fires window.print() once the print-only DOM (driven by printSpec) has actually mounted.
   useEffect(() => {
@@ -1039,20 +1119,15 @@ function CalendarioPage() {
                     aplicaA={aplicaA}
                   />
                 ) : (
-                  <MesGrid
+                  <MesImpresionCalendario
                     key={`${a}-${m}`}
-                    titulo={`${MESES[m]} ${a}`}
-                    celdas={celdasDelMes(a, m)}
-                    compacta
-                    renderCelda={(c) => (
-                      <DiaCeldaImpresion
-                        key={c.iso}
-                        celda={c}
-                        calc={diasImpresion.get(c.iso) ?? null}
-                        festivosPorFecha={festivosPorFecha}
-                        alturaMm={ALTURA_FILA_IMPRESION_MM[printSpec.mesesPorPagina]}
-                      />
-                    )}
+                    anio={a}
+                    mes={m}
+                    dias={diasImpresion}
+                    eventos={eventos}
+                    festivosPorFecha={festivosPorFecha}
+                    aplicaA={aplicaA}
+                    alturaMm={alturaFilaImpresionMm(printSpec.mesesPorPagina, maxSemanasImpresion)}
                   />
                 ),
               )}

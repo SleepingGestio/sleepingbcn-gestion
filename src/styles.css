@@ -176,9 +176,9 @@
 }
 
 /* Vista Calendario "Imprimir": always A4 portrait, at every "meses por página" value (1, 2 or 3) and
-   in both formats (Lista and Calendario) — see ALTURA_FILA_IMPRESION_MM in pricing.calendario.tsx for
-   how the Calendario format's cell height is sized against this page's 273mm usable height so 3
-   stacked months always fit. */
+   in both formats (Lista and Calendario) — see alturaFilaImpresionMm in pricing.calendario.tsx for how
+   the Calendario format's cell height is sized against this page's 273mm usable height so every month
+   in the job always fits, however many calendar-week rows it actually needs. */
 @page {
   size: A4 portrait;
   margin: 12mm;
