@@ -696,12 +696,6 @@ function DiaCeldaImpresion({
       </div>
       {calc ? (
         <div className="flex items-baseline justify-between gap-1 tabular-nums">
-          <span
-            className={cn("font-semibold", calc.precioManual != null && "font-bold text-[#7C2D33]")}
-            style={{ fontSize: `${9 * escala}px` }}
-          >
-            {calc.precioFinal}€
-          </span>
           {calc.estanciaMinima != null && (
             <span
               className={cn(calc.estanciaMinimaFuentes.some((f) => f.origen === "manual") && "font-bold text-[#7C2D33]")}
@@ -710,6 +704,12 @@ function DiaCeldaImpresion({
               {calc.estanciaMinima} n.
             </span>
           )}
+          <span
+            className={cn("font-semibold", calc.precioManual != null && "font-bold text-[#7C2D33]")}
+            style={{ fontSize: `${9 * escala}px` }}
+          >
+            {calc.precioFinal}€
+          </span>
         </div>
       ) : (
         <span className="text-[7px] text-muted-foreground">Sin datos</span>

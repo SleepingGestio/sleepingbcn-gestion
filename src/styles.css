@@ -183,3 +183,16 @@
   size: A4 portrait;
   margin: 12mm;
 }
+
+/* Chrome (and other browsers) drop background colors/shadows when printing by default, unless the
+   person checks "Background graphics" in the print dialog — not something to rely on. This forces them
+   back on, needed for MesGrid's separadorImpresion band (pricing.calendario.tsx) to actually show up on
+   paper/PDF; it's the only print-only background color this feature uses (everything else — garnet
+   manual-override flags, DiaCeldaImpresion, TablaMesImpresion — is text color only, unaffected either
+   way). Scoped to @media print only, so it has no effect on the app's normal screen rendering. */
+@media print {
+  * {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+}
