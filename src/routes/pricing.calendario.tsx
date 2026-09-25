@@ -346,7 +346,7 @@ function DiaCeldaCompacta({
  * compact 3-month view (`DiaCeldaCompacta`) without either one knowing about the other.
  */
 function MesGrid({
-  celdas, renderCelda, titulo, compacta,
+  celdas, renderCelda, titulo, compacta, separadorImpresion,
 }: {
   celdas: Celda[];
   renderCelda: (celda: Celda) => ReactNode;
@@ -354,6 +354,10 @@ function MesGrid({
   titulo?: string;
   /** Denser weekday header to match the compact cell's smaller footprint. */
   compacta?: boolean;
+  /** Print-only: a full-width light gray band directly below the weekday header, marking the
+   * separation between one stacked month and the next on the printed page. Never set by the on-screen
+   * views (1-month or 3-month), which are unaffected by this prop existing. */
+  separadorImpresion?: boolean;
 }) {
   return (
     <div className="flex min-w-0 flex-col">
@@ -371,6 +375,7 @@ function MesGrid({
           </div>
         ))}
       </div>
+      {separadorImpresion && <div className="mb-0.5 h-0.5 w-full bg-slate-200" />}
       <div className={cn("grid grid-cols-7", compacta ? "gap-1" : "gap-1.5")}>{celdas.map((c) => renderCelda(c))}</div>
     </div>
   );
@@ -593,29 +598,50 @@ function TablaMesImpresion({
  * styles.css: size A4, 12mm margin → 297 − 2×12 = 273mm usable height).
  *
  * The month title no longer takes a horizontal line (it's now a vertical label beside the grid, in
- * `MesImpresionCalendario` — see there), so the per-month overhead below is just the weekday header:
+ * `MesImpresionCalendario` — see there), so the per-month overhead below is just the weekday header
+ * plus its print-only separator band (`MesGrid`'s `separadorImpresion`):
  *
  *   interMonthGaps = (mesesPorPagina − 1) × 4mm     the page-wrapper's gap-4 between stacked months
  *   monthBudget    = (273mm − interMonthGaps) / mesesPorPagina
  *   rowGapsTotal   = (maxSemanas − 1) × 1mm         the day-grid's inter-row gaps (gap-1 ≈ 1.06mm)
- *   rowBudget      = monthBudget − 5mm − rowGapsTotal   5mm = weekday header (measured ≈3.92mm, +buffer)
+ *   rowBudget      = monthBudget − 6mm − rowGapsTotal   6mm = weekday header + separator band
+ *                                                        (measured ≈4.97mm, +buffer)
  *   alturaMm       = floor(rowBudget / maxSemanas)
  *
  * Worked examples (maxSemanas=4/5/6, the only values a calendar month can need):
- *   mesesPorPagina=1: monthBudget=273.    maxSemanas=4→(273−5−3)/4=66.25→66mm   =5→(273−5−4)/5=52.8→52mm   =6→(273−5−5)/6=43.83→43mm
- *   mesesPorPagina=2: monthBudget=134.5.  maxSemanas=4→(134.5−5−3)/4=31.6→31mm  =5→(134.5−5−4)/5=25.1→25mm =6→(134.5−5−5)/6=20.75→20mm
- *   mesesPorPagina=3: monthBudget=88.33.  maxSemanas=4→(88.33−5−3)/4=20.08→20mm =5→(88.33−5−4)/5=15.87→15mm=6→(88.33−5−5)/6=13.06→13mm
+ *   mesesPorPagina=1: monthBudget=273.    maxSemanas=4→(273−6−3)/4=66→66mm     =5→(273−6−4)/5=52.6→52mm    =6→(273−6−5)/6=43.67→43mm
+ *   mesesPorPagina=2: monthBudget=134.5.  maxSemanas=4→(134.5−6−3)/4=31.4→31mm =5→(134.5−6−4)/5=24.9→24mm  =6→(134.5−6−5)/6=20.58→20mm
+ *   mesesPorPagina=3: monthBudget=88.33.  maxSemanas=4→(88.33−6−3)/4=19.83→19mm=5→(88.33−6−4)/5=15.67→15mm =6→(88.33−6−5)/6=12.89→12mm
  *
  * Flooring (rather than rounding) keeps every case a guaranteed underestimate of what actually fits.
  * Note monthBudget only depends on mesesPorPagina, not maxSemanas — so a month's *total* height stays
  * ~constant regardless of how many weeks it needs; fewer weeks just means taller individual rows.
+ *
+ * mesesPorPagina=1 is additionally capped at whatever mesesPorPagina=2 would produce for the same
+ * maxSemanas: uncapped, splitting the whole 273mm on a single month makes its cells implausibly
+ * tall/stretched rather than just "the same cells with more page around them" — the leftover space on
+ * a 1-mes-por-página page is meant to sit unused below the month, not inflate the cells. 2 and 3
+ * mesesPorPagina are unaffected.
  */
 function alturaFilaImpresionMm(mesesPorPagina: 1 | 2 | 3, maxSemanas: number): number {
   const interMonthGaps = (mesesPorPagina - 1) * 4;
   const monthBudget = (273 - interMonthGaps) / mesesPorPagina;
   const rowGapsTotal = (maxSemanas - 1) * 1;
-  const rowBudget = monthBudget - 5 - rowGapsTotal;
-  return Math.floor(rowBudget / maxSemanas);
+  const rowBudget = monthBudget - 6 - rowGapsTotal;
+  const alturaMm = Math.floor(rowBudget / maxSemanas);
+  return mesesPorPagina === 1 ? Math.min(alturaMm, alturaFilaImpresionMm(2, maxSemanas)) : alturaMm;
+}
+
+/**
+ * Font-size scale factor for the "número" elements in `DiaCeldaImpresion` (día, precio, mínimo de
+ * noches) — everything else in the cell (temporada codigo, festivo/evento markers) stays at its fixed
+ * size regardless. 3-meses-por-página's current sizing is the 1.0 "looks right" baseline; as
+ * `mesesPorPagina` drops to 2 or 1 and `alturaMm` (post-cap, see `alturaFilaImpresionMm`) grows, this
+ * scales the números up proportionally to how much taller the cell actually got, instead of leaving
+ * them at a small fixed size in a now much bigger box.
+ */
+function escalaNumerosImpresion(alturaMm: number, maxSemanas: number): number {
+  return alturaMm / alturaFilaImpresionMm(3, maxSemanas);
 }
 
 /**
@@ -628,10 +654,11 @@ function alturaFilaImpresionMm(mesesPorPagina: 1 | 2 | 3, maxSemanas: number): n
  * signals as everywhere else. No heatmap, no click handler, no selection checkbox. Out-of-month padding
  * cells (from `celdasDelMes`, same as the on-screen grids) render empty to keep weekday columns
  * aligned; CSS Grid's default row-stretch sizes them to match their row without needing their own
- * `alturaMm`.
+ * `alturaMm`. Día, precio and mínimo de noches scale with `escala`; temporada codigo and the
+ * festivo/evento markers stay pinned to their own fixed size regardless.
  */
 function DiaCeldaImpresion({
-  celda, calc, eventos, festivosPorFecha, aplicaA, alturaMm,
+  celda, calc, eventos, festivosPorFecha, aplicaA, alturaMm, escala,
 }: {
   celda: Celda;
   calc: DiaCalculado | null;
@@ -641,6 +668,9 @@ function DiaCeldaImpresion({
   /** Max row height in mm — see `alturaFilaImpresionMm`. Passed as an inline style since Tailwind's
    * JIT can't generate a class for a value computed at runtime. */
   alturaMm: number;
+  /** Font-size scale for día/precio/mínimo de noches — see `escalaNumerosImpresion`. Also an inline
+   * style, for the same reason. */
+  escala: number;
 }) {
   if (!celda.enMes) return <div aria-hidden />;
 
@@ -653,9 +683,9 @@ function DiaCeldaImpresion({
       style={{ minHeight: `${alturaMm}mm` }}
     >
       <div className="flex items-start justify-between gap-1">
-        <span className="shrink-0 text-[9px] font-bold">
+        <span className="shrink-0 font-bold" style={{ fontSize: `${9 * escala}px` }}>
           {celda.dia}
-          {calc && <span className="ml-0.5 text-slate-500">{calc.temporada.codigo}</span>}
+          {calc && <span className="ml-0.5 text-[9px] text-slate-500">{calc.temporada.codigo}</span>}
         </span>
         {festivos.length > 0 && (
           <span className="min-w-0 flex-1 truncate text-right text-[7px] leading-tight text-muted-foreground" title={festivos.join(", ")}>
@@ -665,14 +695,17 @@ function DiaCeldaImpresion({
         )}
       </div>
       {calc ? (
-        <div className="flex items-baseline justify-between gap-1 text-[9px] tabular-nums">
-          <span className={cn("font-semibold", calc.precioManual != null && "font-bold text-[#7C2D33]")}>{calc.precioFinal}€</span>
+        <div className="flex items-baseline justify-between gap-1 tabular-nums">
+          <span
+            className={cn("font-semibold", calc.precioManual != null && "font-bold text-[#7C2D33]")}
+            style={{ fontSize: `${9 * escala}px` }}
+          >
+            {calc.precioFinal}€
+          </span>
           {calc.estanciaMinima != null && (
             <span
-              className={cn(
-                "text-[7.5px]",
-                calc.estanciaMinimaFuentes.some((f) => f.origen === "manual") && "font-bold text-[#7C2D33]",
-              )}
+              className={cn(calc.estanciaMinimaFuentes.some((f) => f.origen === "manual") && "font-bold text-[#7C2D33]")}
+              style={{ fontSize: `${7.5 * escala}px` }}
             >
               {calc.estanciaMinima} n.
             </span>
@@ -695,13 +728,15 @@ function DiaCeldaImpresion({
  * One month's calendar grid for the print-only "Calendario" format, with the month title rendered as
  * a vertical label down the left edge instead of `MesGrid`'s usual horizontal line above the grid —
  * this reclaims the vertical space the horizontal title used to take (folded into
- * `alturaFilaImpresionMm`'s math, which now only budgets for the weekday header). `MesGrid`'s own
- * `titulo` prop is left untouched for the on-screen 3-month view — this wraps `MesGrid` (called with no
- * `titulo`) instead of passing one. Uses the month abbreviation (`MESES_ABR`), not the full name — a
- * full name reads awkwardly rotated down a narrow spine.
+ * `alturaFilaImpresionMm`'s math, which now only budgets for the weekday header). Reads bottom-to-top
+ * (`rotate-180` alongside `writing-mode: vertical-rl`). `MesGrid`'s own `titulo` prop is left untouched
+ * for the on-screen 3-month view — this wraps `MesGrid` (called with no `titulo`, but with
+ * `separadorImpresion` for the print-only header band) instead of passing one. Uses the month
+ * abbreviation (`MESES_ABR`), not the full name — a full name reads awkwardly rotated down a narrow
+ * spine.
  */
 function MesImpresionCalendario({
-  anio, mes, dias, eventos, festivosPorFecha, aplicaA, alturaMm,
+  anio, mes, dias, eventos, festivosPorFecha, aplicaA, alturaMm, escala,
 }: {
   anio: number;
   mes: number;
@@ -710,16 +745,18 @@ function MesImpresionCalendario({
   festivosPorFecha: Map<string, Festivo[]>;
   aplicaA: TemporadaAplicaA;
   alturaMm: number;
+  escala: number;
 }) {
   return (
     <div className="flex gap-1 [break-inside:avoid]">
-      <div className="flex w-4 shrink-0 items-center justify-center text-center text-[9px] font-extrabold text-slate-700 [writing-mode:vertical-rl]">
+      <div className="flex w-4 shrink-0 items-center justify-center text-center text-[9px] font-extrabold text-slate-700 [writing-mode:vertical-rl] rotate-180">
         {MESES_ABR[mes]} {anio}
       </div>
       <div className="min-w-0 flex-1">
         <MesGrid
           celdas={celdasDelMes(anio, mes)}
           compacta
+          separadorImpresion
           renderCelda={(c) => (
             <DiaCeldaImpresion
               key={c.iso}
@@ -729,6 +766,7 @@ function MesImpresionCalendario({
               festivosPorFecha={festivosPorFecha}
               aplicaA={aplicaA}
               alturaMm={alturaMm}
+              escala={escala}
             />
           )}
         />
@@ -847,6 +885,18 @@ function CalendarioPage() {
   const maxSemanasImpresion = useMemo(
     () => Math.max(1, ...mesesImpresion.map(({ anio: a, mes: m }) => celdasDelMes(a, m).length / 7)),
     [mesesImpresion],
+  );
+
+  // Row height (and the números' font-size scale derived from it) for the "Calendario" format, for
+  // this print job's mesesPorPagina and maxSemanasImpresion — computed once here rather than inline
+  // per month, since every month in the job shares the same value.
+  const alturaFilaCalendario = useMemo(
+    () => (printSpec ? alturaFilaImpresionMm(printSpec.mesesPorPagina, maxSemanasImpresion) : 0),
+    [printSpec, maxSemanasImpresion],
+  );
+  const escalaNumerosCalendario = useMemo(
+    () => escalaNumerosImpresion(alturaFilaCalendario, maxSemanasImpresion),
+    [alturaFilaCalendario, maxSemanasImpresion],
   );
 
   // Fires window.print() once the print-only DOM (driven by printSpec) has actually mounted.
@@ -1135,7 +1185,8 @@ function CalendarioPage() {
                     eventos={eventos}
                     festivosPorFecha={festivosPorFecha}
                     aplicaA={aplicaA}
-                    alturaMm={alturaFilaImpresionMm(printSpec.mesesPorPagina, maxSemanasImpresion)}
+                    alturaMm={alturaFilaCalendario}
+                    escala={escalaNumerosCalendario}
                   />
                 ),
               )}
