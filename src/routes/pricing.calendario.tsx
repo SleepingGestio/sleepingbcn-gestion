@@ -377,6 +377,7 @@ type PrintSpec = {
   desde: { anio: number; mes: number };
   hasta: { anio: number; mes: number };
   mesesPorPagina: 1 | 2 | 3;
+  formato: "lista" | "calendario";
 };
 
 /**
@@ -399,6 +400,7 @@ function ImprimirDialog({
   const [hastaAnio, setHastaAnio] = useState(anio);
   const [hastaMes, setHastaMes] = useState(mes);
   const [mesesPorPagina, setMesesPorPagina] = useState<1 | 2 | 3>(1);
+  const [formato, setFormato] = useState<"lista" | "calendario">("calendario");
 
   // The picked años might fall outside the page's own `years` (data years) once someone picks a
   // range spanning a boundary año with no data of its own yet — always keep them selectable.
@@ -456,6 +458,23 @@ function ImprimirDialog({
         {!rangoValido && <p className="text-xs text-destructive">"Hasta" debe ser igual o posterior a "Desde".</p>}
 
         <div className="grid gap-1">
+          <span className="text-xs text-muted-foreground">Formato</span>
+          <ToggleGroup
+            type="single"
+            value={formato}
+            onValueChange={(v) => v && setFormato(v as "lista" | "calendario")}
+            className="h-9 justify-start"
+          >
+            <ToggleGroupItem value="calendario" className="h-9 px-3 text-xs data-[state=on]:bg-primary data-[state=on]:text-primary-foreground">
+              Calendario
+            </ToggleGroupItem>
+            <ToggleGroupItem value="lista" className="h-9 px-3 text-xs data-[state=on]:bg-primary data-[state=on]:text-primary-foreground">
+              Lista
+            </ToggleGroupItem>
+          </ToggleGroup>
+        </div>
+
+        <div className="grid gap-1">
           <span className="text-xs text-muted-foreground">Meses por página</span>
           <ToggleGroup
             type="single"
@@ -479,7 +498,9 @@ function ImprimirDialog({
           <Button variant="outline" onClick={onClose}>Cancelar</Button>
           <Button
             disabled={!rangoValido}
-            onClick={() => onConfirmar({ desde: { anio: desdeAnio, mes: desdeMes }, hasta: { anio: hastaAnio, mes: hastaMes }, mesesPorPagina })}
+            onClick={() =>
+              onConfirmar({ desde: { anio: desdeAnio, mes: desdeMes }, hasta: { anio: hastaAnio, mes: hastaMes }, mesesPorPagina, formato })
+            }
           >
             <Printer className="mr-1.5 h-4 w-4" /> Imprimir
           </Button>
@@ -552,6 +573,63 @@ function TablaMesImpresion({
         })}
       </tbody>
     </table>
+  );
+}
+
+/**
+ * Non-interactive calendar-grid cell for the print-only "Calendario" format, rendered via the
+ * existing `MesGrid` (which already renders any cell it's given, interactive or not, so it needs no
+ * changes to host this): day number, precio and mínimo de noches — garnet + bold on the same manual
+ * signals as everywhere else — and a compact festivos/eventos marker (just the first one's name, plus
+ * "+N" for the rest, unlike `TablaMesImpresion`'s full joined list — a full month grid has far less
+ * room per day). No heatmap, no click handler, no selection checkbox. Out-of-month padding cells (from
+ * `celdasDelMes`, same as the on-screen grids) render empty to keep weekday columns aligned.
+ */
+function DiaCeldaImpresion({
+  celda, calc, eventos, festivosPorFecha, aplicaA,
+}: {
+  celda: Celda;
+  calc: DiaCalculado | null;
+  eventos: Evento[];
+  festivosPorFecha: Map<string, Festivo[]>;
+  aplicaA: TemporadaAplicaA;
+}) {
+  if (!celda.enMes) return <div aria-hidden />;
+
+  const notas = [
+    ...(festivosPorFecha.get(celda.iso) ?? []).map((f) => f.nombre),
+    ...eventosActivosDia(eventos, celda.iso, aplicaA).map((e) => e.nombre),
+  ];
+
+  return (
+    <div className="flex min-h-[42px] flex-col gap-px rounded border border-slate-300 px-1 py-0.5 [break-inside:avoid]">
+      <span className="text-[9px] font-bold">{celda.dia}</span>
+      {calc ? (
+        <>
+          <span className={cn("text-[9px] font-semibold tabular-nums", calc.precioManual != null && "font-bold text-[#7C2D33]")}>
+            {calc.precioFinal}€
+          </span>
+          {calc.estanciaMinima != null && (
+            <span
+              className={cn(
+                "text-[7.5px] tabular-nums",
+                calc.estanciaMinimaFuentes.some((f) => f.origen === "manual") && "font-bold text-[#7C2D33]",
+              )}
+            >
+              {calc.estanciaMinima} n.
+            </span>
+          )}
+          {notas.length > 0 && (
+            <span className="truncate text-[7px] leading-tight text-muted-foreground" title={notas.join(", ")}>
+              {notas[0]}
+              {notas.length > 1 ? ` +${notas.length - 1}` : ""}
+            </span>
+          )}
+        </>
+      ) : (
+        <span className="text-[7px] text-muted-foreground">Sin datos</span>
+      )}
+    </div>
   );
 }
 
@@ -929,17 +1007,36 @@ function CalendarioPage() {
                 printSpec.mesesPorPagina === 3 ? "grid grid-cols-3 gap-4 [page:landscape]" : "flex flex-col gap-4",
               )}
             >
-              {pagina.map(({ anio: a, mes: m }) => (
-                <TablaMesImpresion
-                  key={`${a}-${m}`}
-                  anio={a}
-                  mes={m}
-                  dias={diasImpresion}
-                  eventos={eventos}
-                  festivosPorFecha={festivosPorFecha}
-                  aplicaA={aplicaA}
-                />
-              ))}
+              {pagina.map(({ anio: a, mes: m }) =>
+                printSpec.formato === "lista" ? (
+                  <TablaMesImpresion
+                    key={`${a}-${m}`}
+                    anio={a}
+                    mes={m}
+                    dias={diasImpresion}
+                    eventos={eventos}
+                    festivosPorFecha={festivosPorFecha}
+                    aplicaA={aplicaA}
+                  />
+                ) : (
+                  <MesGrid
+                    key={`${a}-${m}`}
+                    titulo={`${MESES[m]} ${a}`}
+                    celdas={celdasDelMes(a, m)}
+                    compacta
+                    renderCelda={(c) => (
+                      <DiaCeldaImpresion
+                        key={c.iso}
+                        celda={c}
+                        calc={diasImpresion.get(c.iso) ?? null}
+                        eventos={eventos}
+                        festivosPorFecha={festivosPorFecha}
+                        aplicaA={aplicaA}
+                      />
+                    )}
+                  />
+                ),
+              )}
             </div>
           ))}
         </div>
