@@ -577,58 +577,81 @@ function TablaMesImpresion({
 }
 
 /**
+ * Max per-day-cell row height (mm) for the "Calendario" print format, sized so the worst case — a
+ * month needing 6 calendar-week rows — still fits `mesesPorPagina` stacked months on one A4 portrait
+ * page (`@page` in styles.css: size A4, 12mm margin → 297 − 2×12 = 273mm usable height). Scales with
+ * mesesPorPagina, since 1-per-página has far more room to breathe than 3-per-página:
+ *
+ *   interMonthGaps = (mesesPorPagina − 1) × 4mm          the page-wrapper's gap-4 between stacked months
+ *   monthBudget    = (273mm − interMonthGaps) / mesesPorPagina
+ *   rowBudget      = monthBudget − 14mm − 5mm            14mm = title + weekday header (measured ≈12.55mm, +buffer)
+ *                                                         5mm = the 6-row grid's 5 inter-row gaps
+ *   alturaMm       = floor(rowBudget / 6)                6 = worst-case week-rows in a month
+ *
+ *   mesesPorPagina=1: (273−0)/1  = 273,    273−14−5   = 254,    254/6   = 42.33 → 42mm
+ *   mesesPorPagina=2: (273−4)/2  = 134.5,  134.5−14−5 = 115.5,  115.5/6 = 19.25 → 19mm
+ *   mesesPorPagina=3: (273−8)/3  = 88.33,  88.33−14−5 = 69.33,  69.33/6 = 11.55 → 11mm
+ *
+ * Flooring (rather than rounding) keeps every case a guaranteed underestimate of what actually fits.
+ */
+const ALTURA_FILA_IMPRESION_MM: Record<1 | 2 | 3, number> = { 1: 42, 2: 19, 3: 11 };
+
+/**
  * Non-interactive calendar-grid cell for the print-only "Calendario" format, rendered via the
  * existing `MesGrid` (which already renders any cell it's given, interactive or not, so it needs no
- * changes to host this): day number, precio and mínimo de noches — garnet + bold on the same manual
- * signals as everywhere else — and a compact festivos/eventos marker (just the first one's name, plus
- * "+N" for the rest, unlike `TablaMesImpresion`'s full joined list — a full month grid has far less
- * room per day). No heatmap, no click handler, no selection checkbox. Out-of-month padding cells (from
- * `celdasDelMes`, same as the on-screen grids) render empty to keep weekday columns aligned.
+ * changes to host this): day number + temporada codigo, a compact festivos marker (just the first
+ * one's name, plus "+N" for the rest — festivos only, not eventos: a full month grid has far less room
+ * per day than `TablaMesImpresion`'s row), and precio + mínimo de noches on one line, each edge-aligned
+ * — garnet + bold on the same manual signals as everywhere else. No heatmap, no click handler, no
+ * selection checkbox. Out-of-month padding cells (from `celdasDelMes`, same as the on-screen grids)
+ * render empty to keep weekday columns aligned; CSS Grid's default row-stretch sizes them to match
+ * their row without needing their own `alturaMm`.
  */
 function DiaCeldaImpresion({
-  celda, calc, eventos, festivosPorFecha, aplicaA,
+  celda, calc, festivosPorFecha, alturaMm,
 }: {
   celda: Celda;
   calc: DiaCalculado | null;
-  eventos: Evento[];
   festivosPorFecha: Map<string, Festivo[]>;
-  aplicaA: TemporadaAplicaA;
+  /** Max row height in mm — see `ALTURA_FILA_IMPRESION_MM`. Passed as an inline style since Tailwind's
+   * JIT can't generate a class for a value computed at runtime from `mesesPorPagina`. */
+  alturaMm: number;
 }) {
   if (!celda.enMes) return <div aria-hidden />;
 
-  const notas = [
-    ...(festivosPorFecha.get(celda.iso) ?? []).map((f) => f.nombre),
-    ...eventosActivosDia(eventos, celda.iso, aplicaA).map((e) => e.nombre),
-  ];
+  const festivos = (festivosPorFecha.get(celda.iso) ?? []).map((f) => f.nombre);
 
   return (
-    <div className="flex min-h-[30px] flex-col gap-px rounded border border-slate-300 px-1 py-0.5 [break-inside:avoid]">
+    <div
+      className="flex flex-col gap-px rounded border border-slate-300 px-1 py-0.5 [break-inside:avoid]"
+      style={{ minHeight: `${alturaMm}mm` }}
+    >
       <div className="flex items-start justify-between gap-1">
         <span className="shrink-0 text-[9px] font-bold">
           {celda.dia}
           {calc && <span className="ml-0.5 text-slate-500">{calc.temporada.codigo}</span>}
         </span>
-        {notas.length > 0 && (
-          <span className="min-w-0 flex-1 truncate text-right text-[7px] leading-tight text-muted-foreground" title={notas.join(", ")}>
-            {notas[0]}
-            {notas.length > 1 ? ` +${notas.length - 1}` : ""}
+        {festivos.length > 0 && (
+          <span className="min-w-0 flex-1 truncate text-right text-[7px] leading-tight text-muted-foreground" title={festivos.join(", ")}>
+            {festivos[0]}
+            {festivos.length > 1 ? ` +${festivos.length - 1}` : ""}
           </span>
         )}
       </div>
       {calc ? (
-        <span className="text-[9px] tabular-nums">
+        <div className="flex items-baseline justify-between gap-1 text-[9px] tabular-nums">
           <span className={cn("font-semibold", calc.precioManual != null && "font-bold text-[#7C2D33]")}>{calc.precioFinal}€</span>
           {calc.estanciaMinima != null && (
             <span
               className={cn(
-                "ml-1 text-[7.5px]",
+                "text-[7.5px]",
                 calc.estanciaMinimaFuentes.some((f) => f.origen === "manual") && "font-bold text-[#7C2D33]",
               )}
             >
               {calc.estanciaMinima} n.
             </span>
           )}
-        </span>
+        </div>
       ) : (
         <span className="text-[7px] text-muted-foreground">Sin datos</span>
       )}
@@ -1003,13 +1026,7 @@ function CalendarioPage() {
       {printSpec && (
         <div className="hidden print:block">
           {paginasImpresion.map((pagina, i) => (
-            <div
-              key={i}
-              className={cn(
-                i < paginasImpresion.length - 1 && "[break-after:page]",
-                printSpec.mesesPorPagina === 3 ? "grid grid-cols-3 gap-4 [page:landscape]" : "flex flex-col gap-4",
-              )}
-            >
+            <div key={i} className={cn("flex flex-col gap-4", i < paginasImpresion.length - 1 && "[break-after:page]")}>
               {pagina.map(({ anio: a, mes: m }) =>
                 printSpec.formato === "lista" ? (
                   <TablaMesImpresion
@@ -1032,9 +1049,8 @@ function CalendarioPage() {
                         key={c.iso}
                         celda={c}
                         calc={diasImpresion.get(c.iso) ?? null}
-                        eventos={eventos}
                         festivosPorFecha={festivosPorFecha}
-                        aplicaA={aplicaA}
+                        alturaMm={ALTURA_FILA_IMPRESION_MM[printSpec.mesesPorPagina]}
                       />
                     )}
                   />
