@@ -483,6 +483,7 @@ function ImprimirDialog({
             type="single"
             value={String(mesesPorPagina)}
             onValueChange={(v) => v && setMesesPorPagina(Number(v) as 1 | 2 | 3)}
+            disabled={formato === "lista"}
             className="h-9 justify-start"
           >
             <ToggleGroupItem value="1" className="h-9 px-3 text-xs data-[state=on]:bg-primary data-[state=on]:text-primary-foreground">
@@ -495,6 +496,11 @@ function ImprimirDialog({
               3 meses
             </ToggleGroupItem>
           </ToggleGroup>
+          {/* Lista always prints one month per página regardless of this value (see paginasImpresion) —
+              disabled rather than hidden, so switching back to Calendario doesn't lose the choice. */}
+          {formato === "lista" && (
+            <p className="text-[11px] text-muted-foreground">Lista siempre imprime un mes por página.</p>
+          )}
         </div>
 
         <DialogFooter>
@@ -829,7 +835,9 @@ function CalendarioPage() {
   // Months grouped into page-sized chunks for the print stylesheet's page breaks.
   const paginasImpresion = useMemo(() => {
     if (!printSpec) return [];
-    const n = printSpec.mesesPorPagina;
+    // "Meses por página" only makes sense for the Calendario grid (stacking compact month-grids);
+    // Lista's per-day table always gets one month per página, regardless of that setting.
+    const n = printSpec.formato === "lista" ? 1 : printSpec.mesesPorPagina;
     return Array.from({ length: Math.ceil(mesesImpresion.length / n) }, (_, i) => mesesImpresion.slice(i * n, i * n + n));
   }, [mesesImpresion, printSpec]);
 
