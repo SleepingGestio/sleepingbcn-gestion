@@ -93,7 +93,7 @@ export type DiaCalculado = {
 };
 
 /** Day of week (0 = Sunday … 6 = Saturday) of a "YYYY-MM-DD" date, independent of timezone. */
-function diaDeLaSemana(fecha: string): number {
+export function diaDeLaSemana(fecha: string): number {
   const [y, m, d] = fecha.split("-").map(Number);
   return new Date(Date.UTC(y, m - 1, d)).getUTCDay();
 }
@@ -338,4 +338,33 @@ export function calcularAnio(
     }
   }
   return { dias, rango: min <= max ? { min, max } : null };
+}
+
+/**
+ * Day-level data for an arbitrary "desde mes/año – hasta mes/año" range (inclusive, by month), which
+ * may span more than one año (e.g. Nov 2026 – Feb 2027). `calcularAnio` only computes one año at a
+ * time, so this calls it once per año touched by the range and merges the resulting `.dias` Maps —
+ * safe because their keys are ISO date strings, so a año boundary never collides. Only the days
+ * actually inside the range are returned, sorted ascending. `calcularAnio`'s heatmap `rango` is
+ * dropped entirely: this is print-only territory with no heatmap, so callers that need it should call
+ * `calcularAnio` directly instead.
+ */
+export function calcularRango(
+  desde: { anio: number; mes: number },
+  hasta: { anio: number; mes: number },
+  aplicaA: TemporadaAplicaA,
+  data: CalcData,
+  ajustesDia: AjusteDia[] = [],
+): { fecha: string; calc: DiaCalculado | null }[] {
+  let dias = new Map<string, DiaCalculado | null>();
+  for (let anio = desde.anio; anio <= hasta.anio; anio++) {
+    dias = new Map([...dias, ...calcularAnio(anio, aplicaA, data, ajustesDia).dias]);
+  }
+  const desdeFecha = `${desde.anio}-${String(desde.mes + 1).padStart(2, "0")}-01`;
+  const ultimoDiaHasta = new Date(Date.UTC(hasta.anio, hasta.mes + 1, 0)).getUTCDate();
+  const hastaFecha = `${hasta.anio}-${String(hasta.mes + 1).padStart(2, "0")}-${String(ultimoDiaHasta).padStart(2, "0")}`;
+  return [...dias.entries()]
+    .filter(([fecha]) => fecha >= desdeFecha && fecha <= hastaFecha)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([fecha, calc]) => ({ fecha, calc }));
 }

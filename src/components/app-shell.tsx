@@ -8,13 +8,15 @@ export function AppShell({ title, children }: { title: string; children: ReactNo
   return (
     <SidebarProvider>
       <div className="min-h-screen flex w-full bg-slate-50">
-        <AppSidebar />
+        <div className="print:hidden">
+          <AppSidebar />
+        </div>
         <div className="flex-1 flex flex-col min-w-0">
-          <header className="h-14 flex items-center gap-3 px-4 bg-slate-900 text-white border-b-2 border-primary">
+          <header className="h-14 flex items-center gap-3 px-4 bg-slate-900 text-white border-b-2 border-primary print:hidden">
             <SidebarTrigger className="text-white hover:bg-white/10" />
             <h1 className="text-base font-semibold">{title}</h1>
           </header>
-          <main className="flex-1 p-4 md:p-6">{children}</main>
+          <main className="flex-1 p-4 md:p-6 print:p-0">{children}</main>
         </div>
       </div>
     </SidebarProvider>

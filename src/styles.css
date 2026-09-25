@@ -174,3 +174,17 @@
     animation: none;
   }
 }
+
+/* Vista Calendario "Imprimir": default page is portrait (1 or 2 meses per página); the print-only
+   block opts into the named "landscape" page (via the `page` CSS property, [page:landscape] in
+   pricing.calendario.tsx) for the 3-meses-per-página layout. One single orientation per print job —
+   never mixed within the same document. */
+@page {
+  size: A4 portrait;
+  margin: 12mm;
+}
+
+@page landscape {
+  size: A4 landscape;
+  margin: 12mm;
+}

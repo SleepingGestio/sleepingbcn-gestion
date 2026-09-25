@@ -1,12 +1,15 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Check, ChevronLeft, ChevronRight } from "lucide-react";
+import { Check, ChevronLeft, ChevronRight, Printer } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
+} from "@/components/ui/dialog";
 import { DiaPrecioDialog } from "@/components/dia-precio-dialog";
 import { DiasEdicionMasivaDialog } from "@/components/dias-edicion-masiva-dialog";
 import { DiasAsignarEventoDialog } from "@/components/dias-asignar-evento-dialog";
@@ -15,7 +18,7 @@ import {
   fetchTemporadas, fetchDiaSemanaPeriodos, fetchPrecioBase, fetchEventos, fetchFestivos, fetchAjustesDia,
   type Evento, type Festivo, type TemporadaAplicaA,
 } from "@/lib/pricing";
-import { calcularAnio, eventosActivosDia, type DiaCalculado } from "@/lib/pricing-calc";
+import { calcularAnio, calcularRango, diaDeLaSemana, eventosActivosDia, type DiaCalculado } from "@/lib/pricing-calc";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/pricing/calendario")({
@@ -92,6 +95,13 @@ function celdasDelMes(y: number, m: number): Celda[] {
 // Days of the neighbouring months (padding at the grid edges) look like in-month days but muted,
 // and are not clickable.
 const FUERA_DE_MES = "pointer-events-none opacity-50 grayscale";
+
+/** Every day of `mes` (0–11) as "YYYY-MM-DD", unpadded — unlike `celdasDelMes` this is only for the
+ * print table, which lists just the in-month days, not a 7-column grid. */
+function fechasDelMes(anio: number, mes: number): string[] {
+  const dias = new Date(Date.UTC(anio, mes + 1, 0)).getUTCDate();
+  return Array.from({ length: dias }, (_, i) => new Date(Date.UTC(anio, mes, i + 1)).toISOString().slice(0, 10));
+}
 
 function DiaCelda({
   celda, calc, eventos, festivos, rango, mapaCalor, seleccionado, onOpen, onToggleSeleccion,
@@ -363,6 +373,188 @@ function MesGrid({
   );
 }
 
+type PrintSpec = {
+  desde: { anio: number; mes: number };
+  hasta: { anio: number; mes: number };
+  mesesPorPagina: 1 | 2 | 3;
+};
+
+/**
+ * "Imprimir" dialog: picks an arbitrary "desde mes/año – hasta mes/año" range — independent of
+ * whatever Año/Mes/Vista is currently on screen, and free to span a año boundary (e.g. Nov → Feb) —
+ * plus a "meses por página" layout. `onConfirmar` hands both to the caller, which computes the
+ * print-only data and kicks off `window.print()`.
+ */
+function ImprimirDialog({
+  anio, mes, years, onClose, onConfirmar,
+}: {
+  anio: number;
+  mes: number;
+  years: number[];
+  onClose: () => void;
+  onConfirmar: (spec: PrintSpec) => void;
+}) {
+  const [desdeAnio, setDesdeAnio] = useState(anio);
+  const [desdeMes, setDesdeMes] = useState(mes);
+  const [hastaAnio, setHastaAnio] = useState(anio);
+  const [hastaMes, setHastaMes] = useState(mes);
+  const [mesesPorPagina, setMesesPorPagina] = useState<1 | 2 | 3>(1);
+
+  // The picked años might fall outside the page's own `years` (data years) once someone picks a
+  // range spanning a boundary año with no data of its own yet — always keep them selectable.
+  const anosSelect = useMemo(() => [...new Set([...years, desdeAnio, hastaAnio])].sort((a, b) => a - b), [years, desdeAnio, hastaAnio]);
+
+  const rangoValido = desdeAnio < hastaAnio || (desdeAnio === hastaAnio && desdeMes <= hastaMes);
+
+  return (
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="text-sm">Imprimir calendario</DialogTitle>
+          <DialogDescription className="sr-only">Elige el rango de meses y la disposición de impresión</DialogDescription>
+        </DialogHeader>
+
+        <div className="grid grid-cols-2 gap-3">
+          <div className="grid gap-1">
+            <span className="text-xs text-muted-foreground">Desde — mes</span>
+            <Select value={String(desdeMes)} onValueChange={(v) => setDesdeMes(Number(v))}>
+              <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {MESES.map((nombre, i) => <SelectItem key={nombre} value={String(i)}>{nombre}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="grid gap-1">
+            <span className="text-xs text-muted-foreground">Desde — año</span>
+            <Select value={String(desdeAnio)} onValueChange={(v) => setDesdeAnio(Number(v))}>
+              <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {anosSelect.map((y) => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="grid gap-1">
+            <span className="text-xs text-muted-foreground">Hasta — mes</span>
+            <Select value={String(hastaMes)} onValueChange={(v) => setHastaMes(Number(v))}>
+              <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {MESES.map((nombre, i) => <SelectItem key={nombre} value={String(i)}>{nombre}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="grid gap-1">
+            <span className="text-xs text-muted-foreground">Hasta — año</span>
+            <Select value={String(hastaAnio)} onValueChange={(v) => setHastaAnio(Number(v))}>
+              <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {anosSelect.map((y) => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+
+        {!rangoValido && <p className="text-xs text-destructive">"Hasta" debe ser igual o posterior a "Desde".</p>}
+
+        <div className="grid gap-1">
+          <span className="text-xs text-muted-foreground">Meses por página</span>
+          <ToggleGroup
+            type="single"
+            value={String(mesesPorPagina)}
+            onValueChange={(v) => v && setMesesPorPagina(Number(v) as 1 | 2 | 3)}
+            className="h-9 justify-start"
+          >
+            <ToggleGroupItem value="1" className="h-9 px-3 text-xs data-[state=on]:bg-primary data-[state=on]:text-primary-foreground">
+              1 mes
+            </ToggleGroupItem>
+            <ToggleGroupItem value="2" className="h-9 px-3 text-xs data-[state=on]:bg-primary data-[state=on]:text-primary-foreground">
+              2 meses
+            </ToggleGroupItem>
+            <ToggleGroupItem value="3" className="h-9 px-3 text-xs data-[state=on]:bg-primary data-[state=on]:text-primary-foreground">
+              3 meses
+            </ToggleGroupItem>
+          </ToggleGroup>
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>Cancelar</Button>
+          <Button
+            disabled={!rangoValido}
+            onClick={() => onConfirmar({ desde: { anio: desdeAnio, mes: desdeMes }, hasta: { anio: hastaAnio, mes: hastaMes }, mesesPorPagina })}
+          >
+            <Printer className="mr-1.5 h-4 w-4" /> Imprimir
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/**
+ * One month's plain table for the print-only output: date + weekday, precio, mínimo de noches,
+ * temporada and a short festivos/eventos reference — deliberately not a reuse of `DiaCelda` /
+ * `DiaCeldaCompacta` (no heatmap, no pill styling, no annotation column). Manual overrides keep the
+ * same garnet flag as the on-screen cells so the calculado/manual distinction survives on paper.
+ */
+function TablaMesImpresion({
+  anio, mes, dias, eventos, festivosPorFecha, aplicaA,
+}: {
+  anio: number;
+  mes: number;
+  dias: Map<string, DiaCalculado | null>;
+  eventos: Evento[];
+  festivosPorFecha: Map<string, Festivo[]>;
+  aplicaA: TemporadaAplicaA;
+}) {
+  return (
+    <table className="w-full border-collapse text-[10px]">
+      <caption className="mb-1.5 text-left text-[13px] font-bold">{MESES[mes]} {anio}</caption>
+      <thead>
+        <tr className="border-b border-slate-400 text-left">
+          <th className="py-1 pr-2 font-semibold">Día</th>
+          <th className="py-1 pr-2 text-right font-semibold">Precio</th>
+          <th className="py-1 pr-2 text-right font-semibold">Mín. noches</th>
+          <th className="py-1 pr-2 font-semibold">Temporada</th>
+          <th className="py-1 font-semibold">Festivos / eventos</th>
+        </tr>
+      </thead>
+      <tbody>
+        {fechasDelMes(anio, mes).map((fecha) => {
+          const calc = dias.get(fecha) ?? null;
+          const dia = Number(fecha.slice(8, 10));
+          const notas = [
+            ...(festivosPorFecha.get(fecha) ?? []).map((f) => f.nombre),
+            ...eventosActivosDia(eventos, fecha, aplicaA).map((e) => e.nombre),
+          ].join(" · ");
+          return (
+            <tr key={fecha} className="[break-inside:avoid] border-b border-slate-200">
+              <td className="py-1 pr-2 whitespace-nowrap">{dia} {DIAS[(diaDeLaSemana(fecha) + 6) % 7]}</td>
+              {calc ? (
+                <>
+                  <td className={cn("py-1 pr-2 text-right tabular-nums", calc.precioManual != null && "font-bold text-[#7C2D33]")}>
+                    {calc.precioFinal}€
+                  </td>
+                  <td
+                    className={cn(
+                      "py-1 pr-2 text-right tabular-nums",
+                      calc.estanciaMinimaFuentes.some((f) => f.origen === "manual") && "font-bold text-[#7C2D33]",
+                    )}
+                  >
+                    {calc.estanciaMinima ?? "—"}
+                  </td>
+                  <td className="py-1 pr-2">{calc.temporada.codigo} · {calc.temporada.nombre}</td>
+                  <td className="py-1">{notas}</td>
+                </>
+              ) : (
+                <td className="py-1 text-muted-foreground" colSpan={4}>Sin datos</td>
+              )}
+            </tr>
+          );
+        })}
+      </tbody>
+    </table>
+  );
+}
+
 function CalendarioPage() {
   const temporadasQ = useQuery({ queryKey: ["pricing-temporadas"], queryFn: fetchTemporadas });
   const diaQ = useQuery({ queryKey: ["pricing-dia-semana-periodos"], queryFn: fetchDiaSemanaPeriodos });
@@ -395,6 +587,8 @@ function CalendarioPage() {
   const [ancla, setAncla] = useState<string | null>(null);
   const [edicionMasivaAbierta, setEdicionMasivaAbierta] = useState(false);
   const [asignarEventoAbierto, setAsignarEventoAbierto] = useState(false);
+  const [imprimirAbierto, setImprimirAbierto] = useState(false);
+  const [printSpec, setPrintSpec] = useState<PrintSpec | null>(null);
 
   const dataYears = useMemo(
     () => [...new Set([...temporadas.map((t) => t.anio), ...diaSemanaPeriodos.map((p) => p.anio), ...precioBase.map((p) => p.anio)])],
@@ -430,6 +624,53 @@ function CalendarioPage() {
   useEffect(() => {
     setSeleccionMasiva(new Set());
   }, [anio, vista, ventanaInicio]);
+
+  // Every month from printSpec.desde to printSpec.hasta, inclusive — independent of the on-screen
+  // Año/Mes/Vista, and free to cross a año boundary.
+  const mesesImpresion = useMemo(() => {
+    if (!printSpec) return [];
+    const { desde, hasta } = printSpec;
+    const meses: { anio: number; mes: number }[] = [];
+    for (let a = desde.anio, m = desde.mes; a < hasta.anio || (a === hasta.anio && m <= hasta.mes); m++) {
+      if (m > 11) { m = 0; a++; }
+      meses.push({ anio: a, mes: m });
+    }
+    return meses;
+  }, [printSpec]);
+
+  // Day-level data for the printed range, computed once via calcularRango (which itself merges one
+  // calcularAnio call per año touched) rather than reusing `calculo`, which only covers the año
+  // currently shown on screen.
+  const diasImpresion = useMemo(() => {
+    if (!printSpec) return new Map<string, DiaCalculado | null>();
+    const dias = calcularRango(
+      printSpec.desde, printSpec.hasta, aplicaA,
+      { temporadas, diaSemanaPeriodos, precioBase, eventos }, ajustesDia,
+    );
+    return new Map(dias.map((d) => [d.fecha, d.calc]));
+  }, [printSpec, aplicaA, temporadas, diaSemanaPeriodos, precioBase, eventos, ajustesDia]);
+
+  // Months grouped into page-sized chunks for the print stylesheet's page breaks.
+  const paginasImpresion = useMemo(() => {
+    if (!printSpec) return [];
+    const n = printSpec.mesesPorPagina;
+    return Array.from({ length: Math.ceil(mesesImpresion.length / n) }, (_, i) => mesesImpresion.slice(i * n, i * n + n));
+  }, [mesesImpresion, printSpec]);
+
+  // Fires window.print() once the print-only DOM (driven by printSpec) has actually mounted.
+  useEffect(() => {
+    if (!printSpec) return;
+    const id = requestAnimationFrame(() => window.print());
+    return () => cancelAnimationFrame(id);
+  }, [printSpec]);
+
+  // Cleanup: drop the print-only content once the print dialog (or the "Guardar como PDF" flow)
+  // closes, so it doesn't sit rendered-but-hidden until the next print.
+  useEffect(() => {
+    const onAfterPrint = () => setPrintSpec(null);
+    window.addEventListener("afterprint", onAfterPrint);
+    return () => window.removeEventListener("afterprint", onAfterPrint);
+  }, []);
 
   function moverMes(delta: 1 | -1) {
     setDir(delta);
@@ -483,6 +724,7 @@ function CalendarioPage() {
 
   return (
     <AppShell title="Vista Calendario">
+      <div className="print:hidden">
       <div className="mb-4 flex flex-wrap items-end gap-4">
         <div className="grid gap-1">
           <span className="text-xs text-muted-foreground">Año</span>
@@ -541,6 +783,12 @@ function CalendarioPage() {
           <div className="flex h-9 items-center">
             <Switch checked={mapaCalor} onCheckedChange={setMapaCalor} />
           </div>
+        </div>
+        <div className="grid gap-1">
+          <span className="text-xs text-muted-foreground invisible">Imprimir</span>
+          <Button variant="outline" className="h-9" onClick={() => setImprimirAbierto(true)}>
+            <Printer className="mr-1.5 h-4 w-4" /> Imprimir
+          </Button>
         </div>
         {mapaCalor && calculo.rango && (
           <div className="flex items-center gap-2 pb-2 text-xs text-muted-foreground">
@@ -656,6 +904,46 @@ function CalendarioPage() {
           </div>
         )}
       </div>
+      </div>
+
+      {imprimirAbierto && (
+        <ImprimirDialog
+          anio={anio}
+          mes={mes}
+          years={years}
+          onClose={() => setImprimirAbierto(false)}
+          onConfirmar={(spec) => {
+            setImprimirAbierto(false);
+            setPrintSpec(spec);
+          }}
+        />
+      )}
+
+      {printSpec && (
+        <div className="hidden print:block">
+          {paginasImpresion.map((pagina, i) => (
+            <div
+              key={i}
+              className={cn(
+                i < paginasImpresion.length - 1 && "[break-after:page]",
+                printSpec.mesesPorPagina === 3 ? "grid grid-cols-3 gap-4 [page:landscape]" : "flex flex-col gap-4",
+              )}
+            >
+              {pagina.map(({ anio: a, mes: m }) => (
+                <TablaMesImpresion
+                  key={`${a}-${m}`}
+                  anio={a}
+                  mes={m}
+                  dias={diasImpresion}
+                  eventos={eventos}
+                  festivosPorFecha={festivosPorFecha}
+                  aplicaA={aplicaA}
+                />
+              ))}
+            </div>
+          ))}
+        </div>
+      )}
 
       {seleccionado && (
         <DiaPrecioDialog
