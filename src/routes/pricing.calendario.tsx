@@ -354,18 +354,27 @@ function MesGrid({
   titulo?: string;
   /** Denser weekday header to match the compact cell's smaller footprint. */
   compacta?: boolean;
-  /** Print-only: a full-width light gray band directly below the weekday header, marking the
-   * separation between one stacked month and the next on the printed page. Never set by the on-screen
-   * views (1-month or 3-month), which are unaffected by this prop existing. Carries the
+  /** Print-only: gives the weekday header row itself a light gray background, instead of the header's
+   * usual transparent one, marking the separation between one stacked month and the next on the
+   * printed page. Only covers this row's own (grid) width — when a vertical title label sits to its
+   * left (see `MesImpresionCalendario`), that component adds its own matching spacer so the band reads
+   * as one continuous edge-to-edge bar rather than stopping short at the grid's edge. Carries the
    * `franja-separadora-impresion` class, which styles.css targets with a scoped print-color-adjust
-   * override — the band's own background would otherwise be suppressed by the browser's print
-   * defaults, same as any other background color. */
+   * override — the background would otherwise be suppressed by the browser's print defaults, same as
+   * any other background color. Never set by the on-screen views (1-month or 3-month), which are
+   * unaffected by this prop existing. */
   separadorImpresion?: boolean;
 }) {
   return (
     <div className="flex min-w-0 flex-col">
       {titulo && <h3 className="mb-2 border-b border-slate-200 pb-2 text-center text-[13px] font-extrabold">{titulo}</h3>}
-      <div className={cn("grid grid-cols-7", compacta ? "mb-1 gap-1" : "mb-1.5 gap-1.5")}>
+      <div
+        className={cn(
+          "grid grid-cols-7",
+          compacta ? "mb-1 gap-1" : "mb-1.5 gap-1.5",
+          separadorImpresion && "franja-separadora-impresion bg-slate-200",
+        )}
+      >
         {DIAS.map((d) => (
           <div
             key={d}
@@ -378,7 +387,6 @@ function MesGrid({
           </div>
         ))}
       </div>
-      {separadorImpresion && <div className="franja-separadora-impresion mb-0.5 h-0.5 w-full bg-slate-200" />}
       <div className={cn("grid grid-cols-7", compacta ? "gap-1" : "gap-1.5")}>{celdas.map((c) => renderCelda(c))}</div>
     </div>
   );
@@ -601,20 +609,21 @@ function TablaMesImpresion({
  * styles.css: size A4, 12mm margin → 297 − 2×12 = 273mm usable height).
  *
  * The month title no longer takes a horizontal line (it's now a vertical label beside the grid, in
- * `MesImpresionCalendario` — see there), so the per-month overhead below is just the weekday header
- * plus its print-only separator band (`MesGrid`'s `separadorImpresion`):
+ * `MesImpresionCalendario` — see there), so the per-month overhead below is just the weekday header.
+ * Its print-only gray background (`separadorImpresion`) is painted on the header row's own box, not an
+ * extra element, so it adds no flow height of its own — the overhead is the same header height as
+ * before that background existed:
  *
  *   interMonthGaps = (mesesPorPagina − 1) × 4mm     the page-wrapper's gap-4 between stacked months
  *   monthBudget    = (273mm − interMonthGaps) / mesesPorPagina
  *   rowGapsTotal   = (maxSemanas − 1) × 1mm         the day-grid's inter-row gaps (gap-1 ≈ 1.06mm)
- *   rowBudget      = monthBudget − 6mm − rowGapsTotal   6mm = weekday header + separator band
- *                                                        (measured ≈4.97mm, +buffer)
+ *   rowBudget      = monthBudget − 5mm − rowGapsTotal   5mm = weekday header (measured ≈3.92mm, +buffer)
  *   alturaMm       = floor(rowBudget / maxSemanas)
  *
  * Worked examples (maxSemanas=4/5/6, the only values a calendar month can need):
- *   mesesPorPagina=1: monthBudget=273.    maxSemanas=4→(273−6−3)/4=66→66mm     =5→(273−6−4)/5=52.6→52mm    =6→(273−6−5)/6=43.67→43mm
- *   mesesPorPagina=2: monthBudget=134.5.  maxSemanas=4→(134.5−6−3)/4=31.4→31mm =5→(134.5−6−4)/5=24.9→24mm  =6→(134.5−6−5)/6=20.58→20mm
- *   mesesPorPagina=3: monthBudget=88.33.  maxSemanas=4→(88.33−6−3)/4=19.83→19mm=5→(88.33−6−4)/5=15.67→15mm =6→(88.33−6−5)/6=12.89→12mm
+ *   mesesPorPagina=1: monthBudget=273.    maxSemanas=4→(273−5−3)/4=66.25→66mm   =5→(273−5−4)/5=52.8→52mm   =6→(273−5−5)/6=43.83→43mm
+ *   mesesPorPagina=2: monthBudget=134.5.  maxSemanas=4→(134.5−5−3)/4=31.6→31mm  =5→(134.5−5−4)/5=25.1→25mm =6→(134.5−5−5)/6=20.75→20mm
+ *   mesesPorPagina=3: monthBudget=88.33.  maxSemanas=4→(88.33−5−3)/4=20.08→20mm =5→(88.33−5−4)/5=15.87→15mm=6→(88.33−5−5)/6=13.06→13mm
  *
  * Flooring (rather than rounding) keeps every case a guaranteed underestimate of what actually fits.
  * Note monthBudget only depends on mesesPorPagina, not maxSemanas — so a month's *total* height stays
@@ -630,7 +639,7 @@ function alturaFilaImpresionMm(mesesPorPagina: 1 | 2 | 3, maxSemanas: number): n
   const interMonthGaps = (mesesPorPagina - 1) * 4;
   const monthBudget = (273 - interMonthGaps) / mesesPorPagina;
   const rowGapsTotal = (maxSemanas - 1) * 1;
-  const rowBudget = monthBudget - 6 - rowGapsTotal;
+  const rowBudget = monthBudget - 5 - rowGapsTotal;
   const alturaMm = Math.floor(rowBudget / maxSemanas);
   return mesesPorPagina === 1 ? Math.min(alturaMm, alturaFilaImpresionMm(2, maxSemanas)) : alturaMm;
 }
@@ -734,9 +743,14 @@ function DiaCeldaImpresion({
  * `alturaFilaImpresionMm`'s math, which now only budgets for the weekday header). Reads bottom-to-top
  * (`rotate-180` alongside `writing-mode: vertical-rl`). `MesGrid`'s own `titulo` prop is left untouched
  * for the on-screen 3-month view — this wraps `MesGrid` (called with no `titulo`, but with
- * `separadorImpresion` for the print-only header band) instead of passing one. Uses the month
- * abbreviation (`MESES_ABR`), not the full name — a full name reads awkwardly rotated down a narrow
- * spine.
+ * `separadorImpresion` so its weekday-header row gets a gray background) instead of passing one. Uses
+ * the month abbreviation (`MESES_ABR`), not the full name — a full name reads awkwardly rotated down a
+ * narrow spine.
+ *
+ * The title column carries its own small spacer above the label, sized and colored (same
+ * `franja-separadora-impresion` class) to match `MesGrid`'s header row exactly — `MesGrid` only knows
+ * about its own (grid) width, so without this the gray band would stop short at the grid's left edge
+ * instead of running the full page width, under the title column too.
  */
 function MesImpresionCalendario({
   anio, mes, dias, eventos, festivosPorFecha, aplicaA, alturaMm, escala,
@@ -752,8 +766,11 @@ function MesImpresionCalendario({
 }) {
   return (
     <div className="flex gap-1 [break-inside:avoid]">
-      <div className="flex w-4 shrink-0 items-center justify-center text-center text-[9px] font-extrabold text-slate-700 [writing-mode:vertical-rl] rotate-180">
-        {MESES_ABR[mes]} {anio}
+      <div className="flex w-4 shrink-0 flex-col items-center">
+        <div className="franja-separadora-impresion h-[11px] w-full bg-slate-200" />
+        <div className="flex flex-1 items-center justify-center text-center text-[9px] font-extrabold text-slate-700 [writing-mode:vertical-rl] rotate-180">
+          {MESES_ABR[mes]} {anio}
+        </div>
       </div>
       <div className="min-w-0 flex-1">
         <MesGrid

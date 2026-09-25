@@ -186,10 +186,12 @@
 
 /* Chrome (and other browsers) drop background colors/shadows when printing by default, unless the
    person checks "Background graphics" in the print dialog — not something to rely on. This forces it
-   back on for MesGrid's separadorImpresion band (pricing.calendario.tsx, class below) so it actually
-   shows up on paper/PDF. Scoped to just that one element, not `*` — a blanket override also un-suppresses
-   every ancestor's background (e.g. app-shell.tsx's bg-slate-50 root wrapper), which isn't print:hidden
-   and printed as an unwanted full-page gray wash the first time this was tried. */
+   back on for the print-only Calendario format's gray header band (pricing.calendario.tsx): MesGrid's
+   weekday-header row when separadorImpresion is set, plus MesImpresionCalendario's matching spacer
+   above the vertical title label, so the two adjoining elements read as one edge-to-edge gray bar.
+   Scoped to just those elements, not `*` — a blanket override also un-suppresses every ancestor's
+   background (e.g. app-shell.tsx's bg-slate-50 root wrapper), which isn't print:hidden and printed as
+   an unwanted full-page gray wash the first time this was tried. */
 @media print {
   .franja-separadora-impresion {
     -webkit-print-color-adjust: exact;
