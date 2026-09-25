@@ -356,7 +356,10 @@ function MesGrid({
   compacta?: boolean;
   /** Print-only: a full-width light gray band directly below the weekday header, marking the
    * separation between one stacked month and the next on the printed page. Never set by the on-screen
-   * views (1-month or 3-month), which are unaffected by this prop existing. */
+   * views (1-month or 3-month), which are unaffected by this prop existing. Carries the
+   * `franja-separadora-impresion` class, which styles.css targets with a scoped print-color-adjust
+   * override — the band's own background would otherwise be suppressed by the browser's print
+   * defaults, same as any other background color. */
   separadorImpresion?: boolean;
 }) {
   return (
@@ -375,7 +378,7 @@ function MesGrid({
           </div>
         ))}
       </div>
-      {separadorImpresion && <div className="mb-0.5 h-0.5 w-full bg-slate-200" />}
+      {separadorImpresion && <div className="franja-separadora-impresion mb-0.5 h-0.5 w-full bg-slate-200" />}
       <div className={cn("grid grid-cols-7", compacta ? "gap-1" : "gap-1.5")}>{celdas.map((c) => renderCelda(c))}</div>
     </div>
   );
