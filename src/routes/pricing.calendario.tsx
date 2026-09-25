@@ -183,7 +183,14 @@ function DiaCelda({
               {calc.precioFinal}€
             </span>
             {calc.estanciaMinima != null && (
-              <span className="mt-px block text-[11px] font-bold">{calc.estanciaMinima} nits</span>
+              <span
+                className={cn(
+                  "mt-px block text-[11px] font-bold",
+                  calc.estanciaMinimaFuentes.some((f) => f.origen === "manual") && "text-[#7C2D33]",
+                )}
+              >
+                {calc.estanciaMinima} nits
+              </span>
             )}
           </span>
         </div>
@@ -296,7 +303,14 @@ function DiaCeldaCompacta({
         {calc.precioFinal}€
       </span>
       {calc.estanciaMinima != null && (
-        <span className="block text-[8px] font-semibold opacity-75">{calc.estanciaMinima} nits</span>
+        <span
+          className={cn(
+            "block text-[8px] font-semibold opacity-75",
+            calc.estanciaMinimaFuentes.some((f) => f.origen === "manual") && "text-[#7C2D33]",
+          )}
+        >
+          {calc.estanciaMinima} nits
+        </span>
       )}
       {evento && (
         <span
