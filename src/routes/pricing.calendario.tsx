@@ -602,30 +602,33 @@ function DiaCeldaImpresion({
   ];
 
   return (
-    <div className="flex min-h-[42px] flex-col gap-px rounded border border-slate-300 px-1 py-0.5 [break-inside:avoid]">
-      <span className="text-[9px] font-bold">{celda.dia}</span>
-      {calc ? (
-        <>
-          <span className={cn("text-[9px] font-semibold tabular-nums", calc.precioManual != null && "font-bold text-[#7C2D33]")}>
-            {calc.precioFinal}€
+    <div className="flex min-h-[30px] flex-col gap-px rounded border border-slate-300 px-1 py-0.5 [break-inside:avoid]">
+      <div className="flex items-start justify-between gap-1">
+        <span className="shrink-0 text-[9px] font-bold">
+          {celda.dia}
+          {calc && <span className="ml-0.5 text-slate-500">{calc.temporada.codigo}</span>}
+        </span>
+        {notas.length > 0 && (
+          <span className="min-w-0 flex-1 truncate text-right text-[7px] leading-tight text-muted-foreground" title={notas.join(", ")}>
+            {notas[0]}
+            {notas.length > 1 ? ` +${notas.length - 1}` : ""}
           </span>
+        )}
+      </div>
+      {calc ? (
+        <span className="text-[9px] tabular-nums">
+          <span className={cn("font-semibold", calc.precioManual != null && "font-bold text-[#7C2D33]")}>{calc.precioFinal}€</span>
           {calc.estanciaMinima != null && (
             <span
               className={cn(
-                "text-[7.5px] tabular-nums",
+                "ml-1 text-[7.5px]",
                 calc.estanciaMinimaFuentes.some((f) => f.origen === "manual") && "font-bold text-[#7C2D33]",
               )}
             >
               {calc.estanciaMinima} n.
             </span>
           )}
-          {notas.length > 0 && (
-            <span className="truncate text-[7px] leading-tight text-muted-foreground" title={notas.join(", ")}>
-              {notas[0]}
-              {notas.length > 1 ? ` +${notas.length - 1}` : ""}
-            </span>
-          )}
-        </>
+        </span>
       ) : (
         <span className="text-[7px] text-muted-foreground">Sin datos</span>
       )}
