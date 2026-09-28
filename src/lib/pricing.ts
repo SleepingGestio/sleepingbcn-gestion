@@ -12,7 +12,7 @@ export type EventoCategoria = "feria" | "deporte" | "cultura" | "otro";
 export type EventoAplicaA = "city" | "rural" | "ambos";
 export type EventoFase = "principal" | "previo" | "post";
 export type EventoEstado = "confirmado" | "propuesto" | "descartado";
-export type EventoPeriodicidad = "anual" | "bianual" | "puntual";
+export type EventoPeriodicidad = "anual" | "bianual" | "trianual" | "puntual";
 export type EventoTipoValor = "%" | "€";
 
 export type Evento = {

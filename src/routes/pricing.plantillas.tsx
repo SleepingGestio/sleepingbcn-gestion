@@ -40,6 +40,7 @@ const CATEGORIA_FILTER_OPTIONS: { value: "todas" | EventoCategoria; label: strin
 const PERIODICIDAD_LABEL: Record<EventoPeriodicidad, string> = {
   anual: "Anual",
   bianual: "Bianual",
+  trianual: "Trianual",
   puntual: "Puntual",
 };
 

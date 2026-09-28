@@ -42,6 +42,7 @@ export const APLICA_A_OPTIONS: { value: EventoAplicaA; label: string }[] = [
 export const PERIODICIDAD_OPTIONS: { value: EventoPeriodicidad; label: string }[] = [
   { value: "anual", label: "Anual" },
   { value: "bianual", label: "Bianual" },
+  { value: "trianual", label: "Trianual" },
   { value: "puntual", label: "Puntual" },
 ];
 
