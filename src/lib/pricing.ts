@@ -49,6 +49,13 @@ export async function fetchEventos(): Promise<Evento[]> {
   return (data ?? []) as Evento[];
 }
 
+/** "€"/tipo_valor formatted as a signed percentage or a flat amount; "" when there's no valor set. */
+export function formatEfecto(valor: number | null, tipoValor: EventoTipoValor | null): string {
+  if (valor == null) return "";
+  if (tipoValor === "%") return `${valor > 0 ? "+" : ""}${valor}%`;
+  return `${valor}€`;
+}
+
 export type NuevoEventoInput = {
   nombre: string;
   categoria: EventoCategoria;
@@ -191,6 +198,81 @@ export async function deleteFuente(id: string): Promise<void> {
 export async function updateFuenteRevisionForzada(id: string, revisionForzada: boolean): Promise<void> {
   const { error } = await pricingDb().from("plantillas_fuentes").update({ revision_forzada: revisionForzada }).eq("id", id);
   if (error) throw error;
+}
+
+export type EdicionAnio = {
+  anio: number;
+  previo: Evento | null;
+  principal: Evento;
+  post: Evento | null;
+};
+
+/**
+ * One row per año of a plantilla's Principal editions, ascending by fecha_inicio, with its
+ * Previo/Post matched via evento_relacionado_id. `estado === "descartado"` is excluded
+ * throughout, same default as pricing.eventos.tsx's own list. Años with no edition are simply
+ * absent — never synthesized as a placeholder row.
+ */
+export function edicionesPorAnio(eventos: Evento[], plantillaId: string): EdicionAnio[] {
+  const delaPlantilla = eventos.filter((e) => e.plantilla_id === plantillaId && e.estado !== "descartado");
+  return delaPlantilla
+    .filter((e) => e.fase === "principal")
+    .sort((a, b) => a.fecha_inicio.localeCompare(b.fecha_inicio))
+    .map((principal) => {
+      const children = delaPlantilla.filter((e) => e.evento_relacionado_id === principal.id);
+      return {
+        anio: Number(principal.fecha_inicio.slice(0, 4)),
+        previo: children.find((e) => e.fase === "previo") ?? null,
+        principal,
+        post: children.find((e) => e.fase === "post") ?? null,
+      };
+    });
+}
+
+/** A plantilla's nearest upcoming Principal edition (fecha_inicio >= today), or null if none. */
+export function proximaEdicionPlantilla(eventos: Evento[], plantillaId: string, today: string): Evento | null {
+  return (
+    eventos
+      .filter(
+        (e) =>
+          e.plantilla_id === plantillaId &&
+          e.fase === "principal" &&
+          e.estado !== "descartado" &&
+          e.fecha_inicio >= today,
+      )
+      .sort((a, b) => a.fecha_inicio.localeCompare(b.fecha_inicio))[0] ?? null
+  );
+}
+
+export type EdicionAnioEstado = "pasada" | "actual" | "proxima" | "futura";
+
+/**
+ * Marks each año row with its display status, relative to `today`/`anioActual`:
+ * - "actual": the row's año is the current calendar year and its Principal hasn't happened yet.
+ * - "proxima": the row right after "actual" (if one exists), or — when there's no "actual" row
+ *   (this year's edition already happened, or there's a periodicity gap over it) — the nearest
+ *   upcoming row instead (same row the "Próxima edición" column itself points to).
+ * - "pasada" / "futura": everything else, split on whether its Principal date has passed.
+ * Assumes `ediciones` is already sorted ascending (edicionesPorAnio's own order).
+ */
+export function anotarEstadoEdiciones(
+  ediciones: EdicionAnio[],
+  today: string,
+  anioActual: number,
+): (EdicionAnio & { estadoFila: EdicionAnioEstado })[] {
+  const actualIdx = ediciones.findIndex((e) => e.anio === anioActual && e.principal.fecha_inicio >= today);
+  const proximaIdx =
+    actualIdx !== -1
+      ? (actualIdx + 1 < ediciones.length ? actualIdx + 1 : -1)
+      : ediciones.findIndex((e) => e.principal.fecha_inicio >= today);
+  return ediciones.map((e, i) => ({
+    ...e,
+    estadoFila:
+      i === actualIdx ? "actual"
+      : i === proximaIdx ? "proxima"
+      : e.principal.fecha_inicio < today ? "pasada"
+      : "futura",
+  }));
 }
 
 export type NuevaPlantillaInput = Pick<Plantilla, "nombre" | "categoria" | "aplica_a" | "periodicidad">;
