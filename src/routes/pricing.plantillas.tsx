@@ -104,7 +104,7 @@ function PlantillasPage() {
   const [incluirInactivas, setIncluirInactivas] = useState(false);
   const [soloMarcadas, setSoloMarcadas] = useState(false);
   const [categoriaFilter, setCategoriaFilter] = useState<"todas" | EventoCategoria>("todas");
-  const [sortKey, setSortKey] = useState<SortKey>("nombre");
+  const [sortKey, setSortKey] = useState<SortKey>("proxima");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const [editingEvento, setEditingEvento] = useState<Evento | null>(null);
@@ -347,13 +347,15 @@ function PlantillasPage() {
                                   <TableHead className="text-[10.5px]">Post</TableHead>
                                   <TableHead className="text-[10.5px]">Efecto</TableHead>
                                   <TableHead className="text-[10.5px]">Mín. noches</TableHead>
+                                  <TableHead className="text-[10.5px]">Afluencia prevista</TableHead>
+                                  <TableHead className="text-[10.5px]">Ubicación</TableHead>
                                   <TableHead className="text-right text-[10.5px]">Acciones</TableHead>
                                 </TableRow>
                               </TableHeader>
                               <TableBody>
                                 {ediciones.length === 0 && (
                                   <TableRow>
-                                    <TableCell colSpan={7} className="py-4 text-center text-xs text-muted-foreground">
+                                    <TableCell colSpan={9} className="py-4 text-center text-xs text-muted-foreground">
                                       Sin ediciones
                                     </TableCell>
                                   </TableRow>
@@ -404,6 +406,15 @@ function PlantillasPage() {
                                       <TableCell className={MUTED_COLOR[ed.estadoFila]}>
                                         {ed.principal.estancia_minima ?? "—"}
                                       </TableCell>
+                                      <TableCell className={MUTED_COLOR[ed.estadoFila]}>
+                                        {ed.principal.afluencia_estimada != null ? ed.principal.afluencia_estimada : "—"}
+                                      </TableCell>
+                                      <TableCell
+                                        className={cn("max-w-[200px] truncate", MUTED_COLOR[ed.estadoFila])}
+                                        title={ed.principal.ubicacion ?? undefined}
+                                      >
+                                        {ed.principal.ubicacion ?? "—"}
+                                      </TableCell>
                                       <TableCell className="text-right">
                                         {ed.estadoFila === "pasada" ? (
                                           <span
@@ -431,13 +442,8 @@ function PlantillasPage() {
                               </TableBody>
                             </Table>
                           </div>
-                          <div className="mt-2 flex items-center justify-between gap-3">
-                            <div className="text-[11px] text-muted-foreground">
-                              "Actual" y "Próxima" llevan lápiz activo (editables) · pasadas sombreadas y sin lápiz ·{" "}
-                              <span className="font-semibold text-green-600">●</span> fechas confirmadas ·{" "}
-                              <span className="font-semibold text-amber-600">●</span> aún provisionales · años sin edición se omiten
-                            </div>
-                            {canEditEventos && (
+                          {canEditEventos && (
+                            <div className="mt-2 flex justify-end">
                               <button
                                 type="button"
                                 className="shrink-0 text-xs font-semibold text-primary hover:underline"
@@ -445,8 +451,8 @@ function PlantillasPage() {
                               >
                                 + Nueva edición
                               </button>
-                            )}
-                          </div>
+                            </div>
+                          )}
                         </div>
                       </TableCell>
                     </TableRow>
