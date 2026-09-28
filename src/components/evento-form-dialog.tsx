@@ -12,7 +12,7 @@ import { toast } from "sonner";
 import {
   insertEvento, updateEvento, deleteEvento, fetchTemporadas,
   type Evento, type EventoEstado, type EventoFase,
-  type EventoTipoValor,
+  type EventoTipoValor, type Plantilla,
 } from "@/lib/pricing";
 import { addDaysISO } from "@/lib/format";
 
@@ -50,24 +50,29 @@ export function isPositiveIntOrEmpty(s: string): boolean {
 
 /**
  * Create/edit dialog for pricing.eventos editions. Create mode (no `evento`)
- * is used by the per-row "+ Previo" / "+ Post" actions (fase set accordingly,
- * evento_relacionado_id = parent.id; categoria/aplica_a/plantilla_id come from
- * parent). Edit mode (`evento` given, fase = evento.fase; `parent` is only used
- * to resolve aplica_a for a previo/post's season choices) pre-fills from the
- * row and updates it. Categoría / Aplica a are owned by the
- * plantilla and never shown here; principal editions are created from the
- * Plantillas screen, not from this dialog.
+ * covers two shapes: the per-row "+ Previo" / "+ Post" actions (fase set
+ * accordingly, `parent` = the Principal evento — evento_relacionado_id =
+ * parent.id; categoria/aplica_a/plantilla_id come from parent), and a brand
+ * new Principal edition for an existing plantilla (fase "principal", no
+ * `parent` evento — `plantilla` given instead; evento_relacionado_id stays
+ * null, plantilla_id = plantilla.id). Exactly one of `parent`/`plantilla` is
+ * expected in create mode; edit mode (`evento` given, fase = evento.fase;
+ * `parent` is only used there to resolve aplica_a for a previo/post's season
+ * choices) pre-fills from the row and updates it. Categoría / Aplica a are
+ * owned by the plantilla and never shown here.
  */
 export function EventoFormDialog({
-  fase, parent, evento, onClose, onSaved,
+  fase, parent, plantilla, evento, onClose, onSaved,
 }: {
   fase: EventoFase;
   parent: Evento | null;
+  /** Create mode only, for a new Principal with no parent evento — see the comment above. */
+  plantilla?: Plantilla | null;
   evento?: Evento | null;
   onClose: () => void;
   onSaved: () => void;
 }) {
-  const [nombre, setNombre] = useState(evento?.nombre ?? "");
+  const [nombre, setNombre] = useState(evento?.nombre ?? plantilla?.nombre ?? "");
   // previo: one-day range ending where the principal starts; post: one-day
   // range starting where the principal ends (both still editable).
   const [fechaInicio, setFechaInicio] = useState(
@@ -120,6 +125,7 @@ export function EventoFormDialog({
     ? fase === "previo" ? "Editar previo" : fase === "post" ? "Editar post" : `Editar — ${evento.nombre}`
     : fase === "previo" ? `Nuevo previo — ${parent?.nombre ?? ""}`
     : fase === "post" ? `Nuevo post — ${parent?.nombre ?? ""}`
+    : plantilla ? `Nueva edición — ${plantilla.nombre}`
     : "Nuevo evento";
 
   async function handleSubmit() {
@@ -162,18 +168,21 @@ export function EventoFormDialog({
           notas: notas.trim() || null,
         });
       } else {
+        // parent (Previo/Post) and plantilla (a brand new Principal) share the same
+        // categoria/aplica_a shape — either one is a valid source, never both at once.
+        const origen = parent ?? plantilla;
         await insertEvento({
           nombre: nombre.trim(),
-          categoria: parent!.categoria,
+          categoria: origen!.categoria,
           fecha_inicio: fechaInicio,
           fecha_fin: fechaFin,
-          aplica_a: parent!.aplica_a,
+          aplica_a: origen!.aplica_a,
           valor: valor.trim() === "" ? null : Number(valor),
           tipo_valor: valor.trim() === "" ? null : tipoValor,
           estancia_minima: estanciaMinima.trim() === "" ? null : Number(estanciaMinima),
           fase,
           evento_relacionado_id: parent?.id ?? null,
-          plantilla_id: parent?.plantilla_id ?? null,
+          plantilla_id: parent?.plantilla_id ?? plantilla?.id ?? null,
           notas: notas.trim() || null,
         });
       }

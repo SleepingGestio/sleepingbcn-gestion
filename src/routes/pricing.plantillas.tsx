@@ -108,6 +108,7 @@ function PlantillasPage() {
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const [editingEvento, setEditingEvento] = useState<Evento | null>(null);
+  const [creatingEdicionFor, setCreatingEdicionFor] = useState<Plantilla | null>(null);
 
   const q = useQuery({ queryKey: ["pricing-plantillas"], queryFn: fetchPlantillas });
   const eventosQ = useQuery({ queryKey: ["pricing-eventos"], queryFn: fetchEventos });
@@ -430,10 +431,21 @@ function PlantillasPage() {
                               </TableBody>
                             </Table>
                           </div>
-                          <div className="mt-2 text-[11px] text-muted-foreground">
-                            "Actual" y "Próxima" llevan lápiz activo (editables) · pasadas sombreadas y sin lápiz ·{" "}
-                            <span className="font-semibold text-green-600">●</span> fechas confirmadas ·{" "}
-                            <span className="font-semibold text-amber-600">●</span> aún provisionales · años sin edición se omiten
+                          <div className="mt-2 flex items-center justify-between gap-3">
+                            <div className="text-[11px] text-muted-foreground">
+                              "Actual" y "Próxima" llevan lápiz activo (editables) · pasadas sombreadas y sin lápiz ·{" "}
+                              <span className="font-semibold text-green-600">●</span> fechas confirmadas ·{" "}
+                              <span className="font-semibold text-amber-600">●</span> aún provisionales · años sin edición se omiten
+                            </div>
+                            {canEditEventos && (
+                              <button
+                                type="button"
+                                className="shrink-0 text-xs font-semibold text-primary hover:underline"
+                                onClick={() => setCreatingEdicionFor(p)}
+                              >
+                                + Nueva edición
+                              </button>
+                            )}
                           </div>
                         </div>
                       </TableCell>
@@ -468,6 +480,16 @@ function PlantillasPage() {
           parent={null}
           evento={editingEvento}
           onClose={() => setEditingEvento(null)}
+          onSaved={() => eventosQ.refetch()}
+        />
+      )}
+
+      {creatingEdicionFor && (
+        <EventoFormDialog
+          fase="principal"
+          parent={null}
+          plantilla={creatingEdicionFor}
+          onClose={() => setCreatingEdicionFor(null)}
           onSaved={() => eventosQ.refetch()}
         />
       )}
