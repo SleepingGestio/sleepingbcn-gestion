@@ -15,6 +15,7 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { CalendarCheck, Pencil, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { usePermissions } from "@/hooks/use-permissions";
@@ -22,9 +23,11 @@ import {
   fetchTemporadas, copyTemporadasToYear, deleteTemporada, deleteTemporadasByYear, findCoverageGaps,
   fetchDiaSemanaPeriodos, copyDiaSemanaPeriodosToYear, deleteDiaSemanaPeriodosByYear,
   fetchPrecioBase, copyPrecioBaseToYear, deletePrecioBaseByYear, ordenarPeriodos, type PrecioBase,
-  festivosDelAnio, generarFestivosDelAnio, type Temporada, type TemporadaAplicaA,
+  festivosDelAnio, generarFestivosDelAnio, fetchEventos, type Temporada, type TemporadaAplicaA, type Evento,
 } from "@/lib/pricing";
+import { CATEGORIA_STYLES } from "@/lib/pricing-styles";
 import { fmtDate, fmtEUR } from "@/lib/format";
+import { cn } from "@/lib/utils";
 import { SortHeader } from "@/components/sort-header";
 import { TemporadaDialog } from "@/components/temporada-dialog";
 import { DiaSemanaTab } from "@/components/dia-semana-tab";
@@ -34,16 +37,80 @@ import { FestivosTab } from "@/components/festivos-tab";
 const firstInicio = (t: Temporada) =>
   t.temporada_periodos.map((p) => p.fecha_inicio).sort()[0] ?? "";
 
-function PeriodosSummary({ temporada }: { temporada: Temporada }) {
-  const ps = ordenarPeriodos(temporada.temporada_periodos);
-  if (ps.length === 0) return <span className="text-muted-foreground">—</span>;
-  const label = (p: (typeof ps)[number]) =>
-    `${fmtDate(p.fecha_inicio)} – ${fmtDate(p.fecha_fin)}${p.estancia_minima != null ? ` · mín. ${p.estancia_minima}` : ""}`;
+const periodoLabel = (fechaInicio: string, fechaFin: string, estanciaMinima: number | null) =>
+  `${fmtDate(fechaInicio)} – ${fmtDate(fechaFin)}${estanciaMinima != null ? ` · mín. ${estanciaMinima}` : ""}`;
+
+type PeriodoItem =
+  | { kind: "periodo"; key: string; fechaInicio: string; fechaFin: string; estanciaMinima: number | null }
+  | { kind: "evento"; key: string; fechaInicio: string; fechaFin: string; estanciaMinima: number | null; evento: Evento };
+
+/**
+ * A temporada can apply two independent ways: a plain temporada_periodos range, or an evento's
+ * Efecto set to "Cambio de temporada" (temporada_override_id pointing here, valor/tipo_valor both
+ * null). Both render as one merged, chronologically-sorted timeline — event-driven ranges just get
+ * the evento's categoria color instead of the plain muted background, and reveal the evento's
+ * nombre on click (a Popover, not a hover tooltip — Ramon wants it click-triggered). Scoped to the
+ * currently selected año/grupo exactly like the real temporada rows already are (t.anio === anio,
+ * aplica_a via aplicaA) — not a "fecha_inicio >= today" cutoff, so past editions of the año you're
+ * looking at still show.
+ */
+function PeriodosSummary({
+  temporada, eventos, anio, aplicaA,
+}: {
+  temporada: Temporada;
+  eventos: Evento[];
+  anio: number;
+  aplicaA: TemporadaAplicaA;
+}) {
+  const periodos = ordenarPeriodos(temporada.temporada_periodos);
+  const eventosTemporada = eventos.filter(
+    (e) =>
+      e.fase === "principal" &&
+      e.estado !== "descartado" &&
+      e.temporada_override_id === temporada.id &&
+      Number(e.fecha_inicio.slice(0, 4)) === anio &&
+      (e.aplica_a === aplicaA || e.aplica_a === "ambos"),
+  );
+
+  if (periodos.length === 0 && eventosTemporada.length === 0) {
+    return <span className="text-muted-foreground">—</span>;
+  }
+
+  const items: PeriodoItem[] = [
+    ...periodos.map((p): PeriodoItem => ({
+      kind: "periodo", key: p.id, fechaInicio: p.fecha_inicio, fechaFin: p.fecha_fin, estanciaMinima: p.estancia_minima,
+    })),
+    ...eventosTemporada.map((e): PeriodoItem => ({
+      kind: "evento", key: e.id, fechaInicio: e.fecha_inicio, fechaFin: e.fecha_fin, estanciaMinima: e.estancia_minima, evento: e,
+    })),
+  ].sort((a, b) => a.fechaInicio.localeCompare(b.fechaInicio));
+
   return (
     <div className="flex flex-wrap items-center gap-1">
-      {ps.map((p) => (
-        <span key={p.id} className="whitespace-nowrap rounded bg-muted px-1.5 py-0.5 text-xs">{label(p)}</span>
-      ))}
+      {items.map((it) =>
+        it.kind === "periodo" ? (
+          <span key={it.key} className="whitespace-nowrap rounded bg-muted px-1.5 py-0.5 text-xs">
+            {periodoLabel(it.fechaInicio, it.fechaFin, it.estanciaMinima)}
+          </span>
+        ) : (
+          <Popover key={it.key}>
+            <PopoverTrigger asChild>
+              <button
+                type="button"
+                className={cn(
+                  "whitespace-nowrap rounded px-1.5 py-0.5 text-xs font-medium",
+                  CATEGORIA_STYLES[it.evento.categoria],
+                )}
+              >
+                {periodoLabel(it.fechaInicio, it.fechaFin, it.estanciaMinima)}
+              </button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-2 text-xs" align="start">
+              {it.evento.nombre}
+            </PopoverContent>
+          </Popover>
+        ),
+      )}
     </div>
   );
 }
@@ -66,6 +133,9 @@ function TemporadasTab({ anio, aplicaA, temporadas: all, loading, error, onSaved
   const [sortKey, setSortKey] = useState<SortKey>("fechas");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const colSpan = canEditTemporadas ? 5 : 4;
+
+  // Shares the cache with pricing.eventos.tsx / pricing.plantillas.tsx (same queryKey).
+  const eventosQ = useQuery({ queryKey: ["pricing-eventos"], queryFn: fetchEventos });
 
   const temporadas = useMemo(() => {
     const pick = (t: Temporada) => {
@@ -155,7 +225,7 @@ function TemporadasTab({ anio, aplicaA, temporadas: all, loading, error, onSaved
                 <TableCell className="font-medium">{t.codigo}</TableCell>
                 <TableCell>{t.nombre}</TableCell>
                 <TableCell>{t.coeficiente}</TableCell>
-                <TableCell><PeriodosSummary temporada={t} /></TableCell>
+                <TableCell><PeriodosSummary temporada={t} eventos={eventosQ.data ?? []} anio={anio} aplicaA={aplicaA} /></TableCell>
                 {canEditTemporadas && (
                   <TableCell>
                     <div className="flex justify-end gap-2">
