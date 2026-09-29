@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Flag, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import {
-  updatePlantilla, addFuente, deleteFuente, updateFuenteRevisionForzada,
+  updatePlantilla, addFuente, deleteFuente, updateFuenteRevisionForzada, esFuenteDesactualizada,
   type Plantilla, type PlantillaFuente, type EventoAplicaA, type EventoCategoria, type EventoPeriodicidad,
 } from "@/lib/pricing";
 import { fmtDate } from "@/lib/format";
@@ -55,25 +55,18 @@ export function isHttpUrl(s: string): boolean {
   }
 }
 
-type EstadoBadge = "ok" | "roto" | "sin_verificar";
+type EstadoBadge = "ok" | "dudosa" | "roto" | "sin_verificar";
 
 const ESTADO_VERIFICACION_LABEL: Record<EstadoBadge, string> = {
-  ok: "Ok", roto: "Roto", sin_verificar: "Sin verificar",
+  ok: "Ok", dudosa: "Dudosa", roto: "Roto", sin_verificar: "Sin verificar",
 };
 
 const ESTADO_VERIFICACION_STYLES: Record<EstadoBadge, string> = {
   ok: "border-transparent bg-emerald-600 text-white hover:bg-emerald-600",
+  dudosa: "border-transparent bg-amber-500 text-white hover:bg-amber-500",
   roto: "border-transparent bg-red-600 text-white hover:bg-red-600",
   sin_verificar: "border-transparent bg-slate-400 text-white hover:bg-slate-400",
 };
-
-/** Due for the annual September review: never verified, or verified more than 11 months ago. */
-function esFuenteDesactualizada(f: PlantillaFuente): boolean {
-  if (!f.ultima_verificacion) return true;
-  const limite = new Date();
-  limite.setMonth(limite.getMonth() - 11);
-  return new Date(f.ultima_verificacion) < limite;
-}
 
 /**
  * Combined edit dialog for a plantilla: core fields save with the button in

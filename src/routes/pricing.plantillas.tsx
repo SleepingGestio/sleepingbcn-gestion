@@ -9,12 +9,15 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { ChevronRight, CircleCheck, Clock, Pencil, Plus } from "lucide-react";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { ChevronRight, CircleCheck, Clock, Loader2, Pencil, Plus, RefreshCw } from "lucide-react";
+import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { usePermissions } from "@/hooks/use-permissions";
 import {
   fetchPlantillas, fetchEventos, fetchTemporadas, formatEfecto,
-  edicionesPorAnio, proximaEdicionPlantilla, anotarEstadoEdiciones,
+  edicionesPorAnio, proximaEdicionPlantilla, anotarEstadoEdiciones, anioAComprobar,
+  esFuenteDesactualizada, updateFuenteVerificacion, type FuenteEstadoVerificacion,
   type EventoCategoria, type EventoPeriodicidad, type EventoEstado, type Evento,
   type Plantilla, type EdicionAnioEstado,
 } from "@/lib/pricing";
@@ -25,6 +28,10 @@ import { EventoFormDialog } from "@/components/evento-form-dialog";
 import { FilterField } from "@/components/filter-field";
 import { PlantillaCreateDialog } from "@/components/plantilla-create-dialog";
 import { SortHeader } from "@/components/sort-header";
+import { comprobarFuente } from "@/lib/api/fuentes.functions";
+
+type RevisarAlcance = "todas" | "pendientes";
+type RevisarPendientes = "marcadas" | "desactualizadas" | "ambas";
 
 type SortKey = "nombre" | "categoria" | "aplica_a" | "periodicidad" | "activo" | "fuentes" | "proxima";
 
@@ -110,6 +117,9 @@ function PlantillasPage() {
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const [editingEvento, setEditingEvento] = useState<Evento | null>(null);
   const [creatingEdicionFor, setCreatingEdicionFor] = useState<Plantilla | null>(null);
+  const [revisarAlcance, setRevisarAlcance] = useState<RevisarAlcance>("pendientes");
+  const [revisarPendientes, setRevisarPendientes] = useState<RevisarPendientes>("ambas");
+  const [revisando, setRevisando] = useState<{ hecho: number; total: number } | null>(null);
 
   const q = useQuery({ queryKey: ["pricing-plantillas"], queryFn: fetchPlantillas });
   const eventosQ = useQuery({ queryKey: ["pricing-eventos"], queryFn: fetchEventos });
@@ -185,6 +195,48 @@ function PlantillasPage() {
       });
   }, [q.data, sortKey, sortDir, incluirInactivas, categoriaFilter, soloMarcadas, proximaByPlantilla]);
 
+  // One server call per fuente (looped here) keeps each request small and gives per-item progress.
+  async function revisarFuentes() {
+    const eventos = eventosQ.data ?? [];
+    const fuentes = (q.data ?? [])
+      .filter((p) => p.activo)
+      .flatMap((p) => p.plantillas_fuentes.map((f) => ({ plantilla: p, fuente: f })))
+      .filter(({ fuente: f }) => {
+        if (revisarAlcance === "todas") return true;
+        const marcada = f.revision_forzada;
+        const vieja = esFuenteDesactualizada(f);
+        return revisarPendientes === "marcadas" ? marcada : revisarPendientes === "desactualizadas" ? vieja : marcada || vieja;
+      });
+    if (fuentes.length === 0) {
+      toast.info("No hay fuentes que revisar con este alcance");
+      return;
+    }
+
+    const cuenta: Record<FuenteEstadoVerificacion, number> = { ok: 0, roto: 0, dudosa: 0 };
+    let errores = 0;
+    setRevisando({ hecho: 0, total: fuentes.length });
+    for (const [i, { plantilla, fuente }] of fuentes.entries()) {
+      try {
+        const anio = anioAComprobar(
+          anotarEstadoEdiciones(edicionesPorAnio(eventos, plantilla.id), today, anioActual),
+          anioActual,
+        );
+        const { resultado } = await comprobarFuente({ data: { url: fuente.url, nombre: plantilla.nombre, anio } });
+        await updateFuenteVerificacion(fuente.id, resultado);
+        cuenta[resultado]++;
+      } catch {
+        errores++;
+      }
+      setRevisando({ hecho: i + 1, total: fuentes.length });
+    }
+    setRevisando(null);
+    await q.refetch();
+
+    const resumen = `${cuenta.ok} OK · ${cuenta.roto} ${cuenta.roto === 1 ? "rota" : "rotas"} · ${cuenta.dudosa} ${cuenta.dudosa === 1 ? "dudosa" : "dudosas"}`;
+    if (errores > 0) toast.warning(`${resumen} · ${errores} sin comprobar por error`);
+    else toast.success(resumen);
+  }
+
   const toggleSort = (k: SortKey) => {
     if (sortKey === k) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
     else { setSortKey(k); setSortDir("asc"); }
@@ -224,6 +276,42 @@ function PlantillasPage() {
               Ver solo marcadas
             </Label>
           </div>
+          {canEditPlantillas && (
+            <div className="flex items-center gap-2">
+              <ToggleGroup
+                type="single"
+                value={revisarAlcance}
+                onValueChange={(v) => v && setRevisarAlcance(v as RevisarAlcance)}
+                disabled={revisando !== null}
+                className="h-9"
+              >
+                <ToggleGroupItem value="pendientes" className="h-9 px-3 text-xs data-[state=on]:bg-primary data-[state=on]:text-primary-foreground">
+                  Pendientes
+                </ToggleGroupItem>
+                <ToggleGroupItem value="todas" className="h-9 px-3 text-xs data-[state=on]:bg-primary data-[state=on]:text-primary-foreground">
+                  Todas
+                </ToggleGroupItem>
+              </ToggleGroup>
+              {revisarAlcance === "pendientes" && (
+                <Select
+                  value={revisarPendientes}
+                  onValueChange={(v) => setRevisarPendientes(v as RevisarPendientes)}
+                  disabled={revisando !== null}
+                >
+                  <SelectTrigger className="w-auto min-w-[160px] bg-white"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ambas">Ambas</SelectItem>
+                    <SelectItem value="marcadas">Marcadas a mano</SelectItem>
+                    <SelectItem value="desactualizadas">Desactualizadas</SelectItem>
+                  </SelectContent>
+                </Select>
+              )}
+              <Button size="sm" variant="outline" onClick={revisarFuentes} disabled={revisando !== null || q.isLoading || eventosQ.isLoading}>
+                {revisando ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <RefreshCw className="h-4 w-4 mr-1" />}
+                {revisando ? `Revisando ${revisando.hecho} de ${revisando.total}…` : "Revisar fuentes"}
+              </Button>
+            </div>
+          )}
           <span className="text-sm text-muted-foreground">
             {totalFuentesMarcadas} fuente{totalFuentesMarcadas === 1 ? "" : "s"} marcada{totalFuentesMarcadas === 1 ? "" : "s"} para revisar
           </span>

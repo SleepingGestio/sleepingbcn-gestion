@@ -134,7 +134,8 @@ export async function confirmarEvento(id: string): Promise<void> {
   if (error) throw error;
 }
 
-export type FuenteEstadoVerificacion = "ok" | "roto";
+/** "dudosa": the URL responds, but the page doesn't mention the plantilla's name and the año being checked. */
+export type FuenteEstadoVerificacion = "ok" | "roto" | "dudosa";
 
 export type PlantillaFuente = {
   id: string;
@@ -142,7 +143,7 @@ export type PlantillaFuente = {
   url: string;
   descripcion: string | null;
   created_at: string;
-  /** Verification is manual: Claude opens the URL and sets these two via direct SQL when asked. */
+  /** Set by the "Revisar fuentes" check (updateFuenteVerificacion). */
   ultima_verificacion: string | null;
   estado_verificacion: FuenteEstadoVerificacion | null;
   /** Ramon flags a fuente for an out-of-cycle check, independent of how stale ultima_verificacion is. */
@@ -190,13 +191,33 @@ export async function deleteFuente(id: string): Promise<void> {
   if (error) throw error;
 }
 
-/**
- * Toggles a fuente's revision_forzada flag from the UI. ultima_verificacion and estado_verificacion
- * are not settable here: those are only ever written by Claude via direct SQL, after actually opening
- * the URL.
- */
+/** Toggles a fuente's revision_forzada flag from the UI (the "Marcar para revisar" button). */
 export async function updateFuenteRevisionForzada(id: string, revisionForzada: boolean): Promise<void> {
   const { error } = await pricingDb().from("plantillas_fuentes").update({ revision_forzada: revisionForzada }).eq("id", id);
+  if (error) throw error;
+}
+
+/** Due for the annual September review: never verified, or verified more than 11 months ago. */
+export function esFuenteDesactualizada(f: PlantillaFuente): boolean {
+  if (!f.ultima_verificacion) return true;
+  const limite = new Date();
+  limite.setMonth(limite.getMonth() - 11);
+  return new Date(f.ultima_verificacion) < limite;
+}
+
+/**
+ * Persists an automatic check. revision_forzada follows the result: cleared on "ok", raised on
+ * "roto"/"dudosa" so those fuentes show up in the list's "solo marcadas" filter and counter.
+ */
+export async function updateFuenteVerificacion(id: string, estado: FuenteEstadoVerificacion): Promise<void> {
+  const { error } = await pricingDb()
+    .from("plantillas_fuentes")
+    .update({
+      estado_verificacion: estado,
+      ultima_verificacion: new Date().toISOString(),
+      revision_forzada: estado !== "ok",
+    })
+    .eq("id", id);
   if (error) throw error;
 }
 
@@ -273,6 +294,20 @@ export function anotarEstadoEdiciones(
       : e.principal.fecha_inicio < today ? "pasada"
       : "futura",
   }));
+}
+
+/**
+ * The año whose edition a fuente's page should mention: the current año while its row isn't
+ * "pasada", otherwise the "proxima" row's año — the same rows the "Próxima edición" column uses.
+ * null when the plantilla has no such edition.
+ */
+export function anioAComprobar(
+  ediciones: (EdicionAnio & { estadoFila: EdicionAnioEstado })[],
+  anioActual: number,
+): number | null {
+  const actual = ediciones.find((e) => e.anio === anioActual);
+  if (actual && actual.estadoFila !== "pasada") return anioActual;
+  return ediciones.find((e) => e.estadoFila === "proxima")?.anio ?? null;
 }
 
 export type NuevaPlantillaInput = Pick<Plantilla, "nombre" | "categoria" | "aplica_a" | "periodicidad">;
