@@ -153,6 +153,13 @@ function TemporadasTab({ anio, aplicaA, temporadas: all, loading, error, onSaved
     });
   }, [all, anio, aplicaA, sortKey, sortDir]);
 
+  // Passive watchdog: same definition as the manual click (temporada_periodos ranges vs. the año).
+  const coverageGaps = useMemo(
+    () => findCoverageGaps(temporadas.flatMap((t) => t.temporada_periodos), anio),
+    [temporadas, anio],
+  );
+  const hasCoverageGaps = !loading && !error && coverageGaps.length > 0;
+
   const toggleSort = (k: SortKey) => {
     if (sortKey === k) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
     else { setSortKey(k); setSortDir("asc"); }
@@ -174,7 +181,7 @@ function TemporadasTab({ anio, aplicaA, temporadas: all, loading, error, onSaved
   return (
     <>
       <div className="flex justify-end gap-2 mb-4">
-        <Button size="sm" variant="outline" onClick={() => setGaps(findCoverageGaps(temporadas.flatMap((t) => t.temporada_periodos), anio))}>
+        <Button size="sm" variant={hasCoverageGaps ? "destructive" : "outline"} onClick={() => setGaps(coverageGaps)}>
           <CalendarCheck className="h-4 w-4 mr-1" /> Comprobar cobertura
         </Button>
         {canEditTemporadas && (
