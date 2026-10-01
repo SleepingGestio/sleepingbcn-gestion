@@ -818,14 +818,14 @@ function GenerarDialog({
   canGenerate: boolean;
 }) {
   const today = toISO(new Date());
-  const [mode, setMode] = useState<"hoy" | "3d" | "5d" | "custom">("hoy");
+  const [mode, setMode] = useState<"3d" | "4d" | "5d" | "custom">("3d");
   const [from, setFrom] = useState(today);
   const [to, setTo] = useState(today);
   const [running, setRunning] = useState(false);
 
   function effectiveRange(): { from: string; to: string } {
-    if (mode === "hoy") return { from: today, to: today };
     if (mode === "3d") return { from: today, to: toISO(addDays(new Date(), 3)) };
+    if (mode === "4d") return { from: today, to: toISO(addDays(new Date(), 4)) };
     if (mode === "5d") return { from: today, to: toISO(addDays(new Date(), 5)) };
     return { from, to };
   }
@@ -858,8 +858,8 @@ function GenerarDialog({
         <div className="space-y-3">
           <div className="grid grid-cols-2 gap-2">
             {[
-              { id: "hoy", label: "Hoy" },
               { id: "3d", label: "Próximos 3 días" },
+              { id: "4d", label: "Próximos 4 días" },
               { id: "5d", label: "Próximos 5 días" },
               { id: "custom", label: "Personalizar" },
             ].map((opt) => (
