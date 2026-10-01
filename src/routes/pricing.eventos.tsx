@@ -24,6 +24,7 @@ import { CategoriaBadge, EventoEstadoBadge } from "@/components/pricing-badges";
 import { EventoFormDialog } from "@/components/evento-form-dialog";
 import { SortHeader } from "@/components/sort-header";
 import { FilterField } from "@/components/filter-field";
+import { FuentesPendientesNotice } from "@/components/fuentes-pendientes-notice";
 
 type SortKey = "nombre" | "categoria" | "fechas" | "afluencia" | "ubicacion" | "efecto" | "min_noches" | "estado";
 
@@ -193,6 +194,7 @@ function EventosPage() {
 
   return (
     <AppShell title="Eventos-calendario">
+      <FuentesPendientesNotice />
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
         <div className="flex flex-wrap items-end gap-3">
           <FilterField label="Grupo">

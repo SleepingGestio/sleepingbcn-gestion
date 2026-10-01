@@ -205,6 +205,30 @@ export function esFuenteDesactualizada(f: PlantillaFuente): boolean {
   return new Date(f.ultima_verificacion) < limite;
 }
 
+/** Needs a look: flagged by hand (or by a roto/dudosa check) or due for the annual review. */
+export function esFuentePendiente(f: PlantillaFuente): boolean {
+  return f.revision_forzada || esFuenteDesactualizada(f);
+}
+
+/**
+ * Every pending fuente of the active plantillas, flattened. Single source of truth for the
+ * "Revisar fuentes" button's "ambas" scope, the "Fuentes a revisar" tab and the pending notice.
+ */
+export function fuentesPendientes(plantillas: Plantilla[]): { plantilla: Plantilla; fuente: PlantillaFuente }[] {
+  return plantillas
+    .filter((p) => p.activo)
+    .flatMap((p) => p.plantillas_fuentes.map((fuente) => ({ plantilla: p, fuente })))
+    .filter(({ fuente }) => esFuentePendiente(fuente));
+}
+
+/** Worst status among a plantilla's fuentes: roto > dudosa/stale > ok; null when it has none. */
+export function estadoPeorFuente(fuentes: PlantillaFuente[]): FuenteEstadoVerificacion | null {
+  if (fuentes.length === 0) return null;
+  if (fuentes.some((f) => f.estado_verificacion === "roto")) return "roto";
+  if (fuentes.some((f) => f.estado_verificacion === "dudosa" || esFuenteDesactualizada(f))) return "dudosa";
+  return "ok";
+}
+
 /**
  * Persists an automatic check. revision_forzada follows the result: cleared on "ok", raised on
  * "roto"/"dudosa" so those fuentes show up in the list's "solo marcadas" filter and counter.

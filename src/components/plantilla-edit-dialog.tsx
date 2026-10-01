@@ -16,6 +16,7 @@ import {
 } from "@/lib/pricing";
 import { fmtDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { ESTADO_VERIFICACION_LABEL, ESTADO_VERIFICACION_STYLES, type EstadoBadge } from "@/lib/pricing-styles";
 
 export function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -54,19 +55,6 @@ export function isHttpUrl(s: string): boolean {
     return false;
   }
 }
-
-type EstadoBadge = "ok" | "dudosa" | "roto" | "sin_verificar";
-
-const ESTADO_VERIFICACION_LABEL: Record<EstadoBadge, string> = {
-  ok: "Ok", dudosa: "Dudosa", roto: "Roto", sin_verificar: "Sin verificar",
-};
-
-const ESTADO_VERIFICACION_STYLES: Record<EstadoBadge, string> = {
-  ok: "border-transparent bg-emerald-600 text-white hover:bg-emerald-600",
-  dudosa: "border-transparent bg-amber-500 text-white hover:bg-amber-500",
-  roto: "border-transparent bg-red-600 text-white hover:bg-red-600",
-  sin_verificar: "border-transparent bg-slate-400 text-white hover:bg-slate-400",
-};
 
 /**
  * Combined edit dialog for a plantilla: core fields save with the button in

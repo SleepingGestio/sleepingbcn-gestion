@@ -8,6 +8,7 @@ import { Card } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { ChevronRight, CircleCheck, Clock, Loader2, Pencil, Plus, RefreshCw } from "lucide-react";
@@ -17,7 +18,7 @@ import { usePermissions } from "@/hooks/use-permissions";
 import {
   fetchPlantillas, fetchEventos, fetchTemporadas, formatEfecto,
   edicionesPorAnio, proximaEdicionPlantilla, anotarEstadoEdiciones, anioAComprobar,
-  esFuenteDesactualizada, updateFuenteVerificacion, type FuenteEstadoVerificacion,
+  esFuenteDesactualizada, fuentesPendientes, estadoPeorFuente, updateFuenteVerificacion, type FuenteEstadoVerificacion,
   type EventoCategoria, type EventoPeriodicidad, type EventoEstado, type Evento,
   type Plantilla, type EdicionAnioEstado,
 } from "@/lib/pricing";
@@ -29,13 +30,22 @@ import { FilterField } from "@/components/filter-field";
 import { PlantillaCreateDialog } from "@/components/plantilla-create-dialog";
 import { SortHeader } from "@/components/sort-header";
 import { comprobarFuente } from "@/lib/api/fuentes.functions";
+import { FuentesPendientesNotice } from "@/components/fuentes-pendientes-notice";
+import {
+  ESTADO_VERIFICACION_DOT, ESTADO_VERIFICACION_LABEL, ESTADO_VERIFICACION_STYLES, type EstadoBadge,
+} from "@/lib/pricing-styles";
 
 type RevisarAlcance = "todas" | "pendientes";
 type RevisarPendientes = "marcadas" | "desactualizadas" | "ambas";
 
 type SortKey = "nombre" | "categoria" | "aplica_a" | "periodicidad" | "activo" | "fuentes" | "proxima";
 
+type PlantillasTab = "plantillas" | "fuentes";
+
 export const Route = createFileRoute("/pricing/plantillas")({
+  // ?tab=fuentes deep-links to the "Fuentes a revisar" tab (used by the pending notice).
+  validateSearch: (search: Record<string, unknown>): { tab?: "fuentes" } =>
+    search.tab === "fuentes" ? { tab: "fuentes" } : {},
   component: PlantillasPage,
 });
 
@@ -102,10 +112,24 @@ const ROW_BG: Record<EdicionAnioEstado, string> = {
   futura: "",
 };
 
+/** Worst-fuente indicator for the Fuentes cell; stale counts as amber, like in the edit dialog. */
+function EstadoDot({ estado }: { estado: FuenteEstadoVerificacion | null }) {
+  if (!estado) return null;
+  return (
+    <span
+      title={ESTADO_VERIFICACION_LABEL[estado]}
+      aria-label={`Estado de las fuentes: ${ESTADO_VERIFICACION_LABEL[estado]}`}
+      className={cn("inline-block h-2.5 w-2.5 shrink-0 rounded-full", ESTADO_VERIFICACION_DOT[estado])}
+    />
+  );
+}
+
 function PlantillasPage() {
   const { canEdit } = usePermissions();
   const canEditPlantillas = canEdit("pricing_plantillas");
   const canEditEventos = canEdit("pricing_eventos");
+  const navigate = Route.useNavigate();
+  const tab: PlantillasTab = Route.useSearch().tab ?? "plantillas";
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
@@ -153,6 +177,8 @@ function PlantillasPage() {
     [q.data],
   );
 
+  const pendientes = useMemo(() => fuentesPendientes(q.data ?? []), [q.data]);
+
   // Computed once for every plantilla (not just expanded ones): the sortable "Próxima edición"
   // column needs it regardless of which rows are expanded.
   const proximaByPlantilla = useMemo(() => {
@@ -198,15 +224,17 @@ function PlantillasPage() {
   // One server call per fuente (looped here) keeps each request small and gives per-item progress.
   async function revisarFuentes() {
     const eventos = eventosQ.data ?? [];
-    const fuentes = (q.data ?? [])
+    const activas = (q.data ?? [])
       .filter((p) => p.activo)
-      .flatMap((p) => p.plantillas_fuentes.map((f) => ({ plantilla: p, fuente: f })))
-      .filter(({ fuente: f }) => {
-        if (revisarAlcance === "todas") return true;
-        const marcada = f.revision_forzada;
-        const vieja = esFuenteDesactualizada(f);
-        return revisarPendientes === "marcadas" ? marcada : revisarPendientes === "desactualizadas" ? vieja : marcada || vieja;
-      });
+      .flatMap((p) => p.plantillas_fuentes.map((f) => ({ plantilla: p, fuente: f })));
+    const fuentes =
+      revisarAlcance === "todas"
+        ? activas
+        : revisarPendientes === "ambas"
+          ? pendientes
+          : activas.filter(({ fuente: f }) =>
+              revisarPendientes === "marcadas" ? f.revision_forzada : esFuenteDesactualizada(f),
+            );
     if (fuentes.length === 0) {
       toast.info("No hay fuentes que revisar con este alcance");
       return;
@@ -244,6 +272,17 @@ function PlantillasPage() {
 
   return (
     <AppShell title="Eventos-plantillas">
+      <FuentesPendientesNotice />
+      <Tabs
+        value={tab}
+        onValueChange={(v) => navigate({ search: v === "fuentes" ? { tab: "fuentes" } : {}, replace: true })}
+        className="w-full"
+      >
+      <TabsList className="mb-4">
+        <TabsTrigger value="plantillas">Plantillas</TabsTrigger>
+        <TabsTrigger value="fuentes">Fuentes a revisar ({pendientes.length})</TabsTrigger>
+      </TabsList>
+      <TabsContent value="plantillas" className="mt-0">
       <div className="flex items-end justify-between gap-3 mb-4">
         <div className="flex flex-wrap items-end gap-3">
           <FilterField label="Categoría">
@@ -395,7 +434,10 @@ function PlantillasPage() {
                       {n === 0 ? (
                         <span className="text-muted-foreground">Sin fuentes</span>
                       ) : (
-                        `${n} ${n === 1 ? "fuente" : "fuentes"}`
+                        <div className="flex items-center gap-1.5">
+                          <EstadoDot estado={estadoPeorFuente(p.plantillas_fuentes)} />
+                          {n} {n === 1 ? "fuente" : "fuentes"}
+                        </div>
                       )}
                     </TableCell>
                     <TableCell>
@@ -552,6 +594,71 @@ function PlantillasPage() {
           </TableBody>
         </Table>
       </Card>
+      </TabsContent>
+
+      <TabsContent value="fuentes" className="mt-0">
+        <Card className="overflow-hidden bg-white">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Plantilla</TableHead>
+                <TableHead>URL</TableHead>
+                <TableHead>Estado</TableHead>
+                <TableHead>Última verificación</TableHead>
+                {canEditPlantillas && <TableHead className="text-right">Acciones</TableHead>}
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {q.isLoading && (
+                <TableRow>
+                  <TableCell colSpan={canEditPlantillas ? 5 : 4} className="text-center py-8 text-muted-foreground">
+                    Cargando…
+                  </TableCell>
+                </TableRow>
+              )}
+              {!q.isLoading && pendientes.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={canEditPlantillas ? 5 : 4} className="text-center py-8 text-muted-foreground">
+                    No hay fuentes pendientes de revisar
+                  </TableCell>
+                </TableRow>
+              )}
+              {pendientes.map(({ plantilla, fuente }) => {
+                const estado: EstadoBadge = fuente.estado_verificacion ?? "sin_verificar";
+                return (
+                  <TableRow key={fuente.id}>
+                    <TableCell className="font-medium">{plantilla.nombre}</TableCell>
+                    <TableCell className="max-w-[360px]">
+                      <a
+                        href={fuente.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-blue-600 hover:underline break-all"
+                      >
+                        {fuente.url}
+                      </a>
+                    </TableCell>
+                    <TableCell>
+                      <Badge className={ESTADO_VERIFICACION_STYLES[estado]}>{ESTADO_VERIFICACION_LABEL[estado]}</Badge>
+                    </TableCell>
+                    <TableCell>{fuente.ultima_verificacion ? fmtDate(fuente.ultima_verificacion) : "Nunca"}</TableCell>
+                    {canEditPlantillas && (
+                      <TableCell>
+                        <div className="flex justify-end">
+                          <Button size="sm" variant="outline" onClick={() => setEditingId(plantilla.id)}>
+                            <Pencil className="h-4 w-4 mr-1" /> Editar
+                          </Button>
+                        </div>
+                      </TableCell>
+                    )}
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+        </Card>
+      </TabsContent>
+      </Tabs>
 
       {creating && (
         <PlantillaCreateDialog

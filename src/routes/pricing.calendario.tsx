@@ -20,6 +20,7 @@ import {
 } from "@/lib/pricing";
 import { calcularAnio, calcularRango, diaDeLaSemana, eventosActivosDia, type DiaCalculado } from "@/lib/pricing-calc";
 import { cn } from "@/lib/utils";
+import { FuentesPendientesNotice } from "@/components/fuentes-pendientes-notice";
 
 export const Route = createFileRoute("/pricing/calendario")({
   component: CalendarioPage,
@@ -987,6 +988,7 @@ function CalendarioPage() {
   return (
     <AppShell title="Vista Calendario">
       <div className="print:hidden">
+      <FuentesPendientesNotice />
       <div className="mb-4 flex flex-wrap items-end gap-4">
         <div className="grid gap-1">
           <span className="text-xs text-muted-foreground">Año</span>
