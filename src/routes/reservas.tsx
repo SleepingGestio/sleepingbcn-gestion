@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { fetchReservas, type DateMode } from "@/lib/reservas";
 import {
   fetchApartamentosRef, fetchCanalesReserva, fetchTarifasCobroCanal, fetchTarifasComisionOta,
-  fetchTarifasLimpieza, type ApartamentoRef, type CanalReserva,
+  fetchTarifasLimpieza, resolveCosteLimpieza, type ApartamentoRef, type CanalReserva, type TarifaLimpieza,
 } from "@/lib/tarifas";
 import {
   comisionBase, computeComision, computeKbComparison, hasKbMismatch, pagadoEstanciaEfectivo,
@@ -50,7 +50,7 @@ function noCuadra(
   r: Reserva,
   canales: CanalReserva[] | undefined,
   apartamentos: ApartamentoRef[] | undefined,
-  tarifasLimpieza: { id_categoria_limpieza: number; costo_limpieza: number }[] | undefined,
+  tarifasLimpieza: TarifaLimpieza[] | undefined,
   tarifasComision: { id_tipo_licencia: number; id_canal: number; pct_comision: number }[] | undefined,
   tarifasCobro: { id_canal: number; pct_cobro: number }[] | undefined,
 ): boolean {
@@ -60,7 +60,7 @@ function noCuadra(
 
   const propuestaLimpieza =
     apto?.id_categoria_limpieza != null
-      ? tarifasLimpieza?.find((t) => t.id_categoria_limpieza === apto.id_categoria_limpieza)?.costo_limpieza ?? null
+      ? resolveCosteLimpieza(tarifasLimpieza, apto.id_categoria_limpieza, r["Check-out"])
       : null;
   const propuestaComision =
     apto?.id_tipo_licencia != null && canal?.id_canal != null

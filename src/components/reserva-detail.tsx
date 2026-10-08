@@ -18,7 +18,7 @@ import { fetchAgentes } from "@/lib/catalogos";
 import { usePersonalLite } from "@/hooks/use-mantenimiento";
 import { usePermissions } from "@/hooks/use-permissions";
 import {
-  fetchCanalesReserva, fetchTarifasCobroCanal, fetchTarifasComisionOta, fetchTarifasLimpieza,
+  fetchCanalesReserva, fetchTarifasCobroCanal, fetchTarifasComisionOta, fetchTarifasLimpieza, resolveCosteLimpieza,
 } from "@/lib/tarifas";
 import {
   fullName, type Reserva, type ReservaGestio, type ReservaExtra, type ReservaExtraDraft,
@@ -138,7 +138,7 @@ export function ReservaDetail({
   const propuestaLimpieza = useMemo(() => {
     const idCategoriaLimpieza = reserva?.apartamento?.id_categoria_limpieza;
     if (idCategoriaLimpieza == null) return null;
-    return tarifasLimpiezaQ.data?.find((t) => t.id_categoria_limpieza === idCategoriaLimpieza)?.costo_limpieza ?? null;
+    return resolveCosteLimpieza(tarifasLimpiezaQ.data, idCategoriaLimpieza, reserva?.["Check-out"]);
   }, [reserva, tarifasLimpiezaQ.data]);
 
   const propuestaComision = useMemo(() => {

@@ -2464,6 +2464,7 @@ export type Database = {
           creado_en: string | null
           id_categoria_limpieza: number
           id_tarifa_limpieza: number
+          vigente_desde: string
         }
         Insert: {
           activo?: boolean
@@ -2471,6 +2472,7 @@ export type Database = {
           creado_en?: string | null
           id_categoria_limpieza: number
           id_tarifa_limpieza?: never
+          vigente_desde?: string
         }
         Update: {
           activo?: boolean
@@ -2478,12 +2480,13 @@ export type Database = {
           creado_en?: string | null
           id_categoria_limpieza?: number
           id_tarifa_limpieza?: never
+          vigente_desde?: string
         }
         Relationships: [
           {
             foreignKeyName: "tarifas_limpieza_id_categoria_limpieza_fkey"
             columns: ["id_categoria_limpieza"]
-            isOneToOne: true
+            isOneToOne: false
             referencedRelation: "tipos_categoria_limpieza"
             referencedColumns: ["id_categoria_limpieza"]
           },

@@ -10,7 +10,7 @@ export type CanalReserva = {
   id_canal: number; nombre: string; activo: boolean; modo_comision: ModoComision;
 };
 export type TipoCategoriaLimpieza = { id_categoria_limpieza: number; nombre: string; activo: boolean };
-export type TarifaLimpieza = { id_categoria_limpieza: number; costo_limpieza: number };
+export type TarifaLimpieza = { id_categoria_limpieza: number; costo_limpieza: number; vigente_desde: string };
 export type TarifaComisionOta = { id_tipo_licencia: number; id_canal: number; pct_comision: number };
 export type TarifaCobroCanal = { id_canal: number; pct_cobro: number };
 
@@ -68,10 +68,29 @@ export async function fetchTiposCategoriaLimpieza(): Promise<TipoCategoriaLimpie
 export async function fetchTarifasLimpieza(): Promise<TarifaLimpieza[]> {
   const { data, error } = await supabase
     .from("tarifas_limpieza")
-    .select("id_categoria_limpieza, costo_limpieza")
+    .select("id_categoria_limpieza, costo_limpieza, vigente_desde")
     .eq("activo", true);
   if (error) throw error;
   return (data ?? []) as TarifaLimpieza[];
+}
+
+/** Cleaning cost in force for a category on the reservation's Check-out date:
+ *  the step with the latest `vigente_desde` <= check-out. Null (no suggestion)
+ *  when category/check-out are unknown or no step is in force yet. */
+export function resolveCosteLimpieza(
+  tarifas: Pick<TarifaLimpieza, "id_categoria_limpieza" | "costo_limpieza" | "vigente_desde">[] | undefined,
+  idCategoriaLimpieza: number | null | undefined,
+  checkOut: string | null | undefined,
+): number | null {
+  if (!tarifas || idCategoriaLimpieza == null || !checkOut) return null;
+  const dia = checkOut.slice(0, 10);
+  let best: { vigente_desde: string; costo_limpieza: number } | null = null;
+  for (const t of tarifas) {
+    if (t.id_categoria_limpieza !== idCategoriaLimpieza) continue;
+    if (t.vigente_desde > dia) continue;
+    if (!best || t.vigente_desde > best.vigente_desde) best = t;
+  }
+  return best ? Number(best.costo_limpieza) : null;
 }
 
 export async function fetchTarifasComisionOta(): Promise<TarifaComisionOta[]> {

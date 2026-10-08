@@ -9,6 +9,7 @@ import {
   fetchTarifasCobroCanal,
   fetchTarifasComisionOta,
   fetchTarifasLimpieza,
+  resolveCosteLimpieza,
   type ApartamentoRef,
   type CanalReserva,
   type TarifaCobroCanal,
@@ -122,8 +123,7 @@ function calcularFila(
 
   const propuestaLimpieza =
     apto?.id_categoria_limpieza != null
-      ? (tarifasLimpieza?.find((t) => t.id_categoria_limpieza === apto.id_categoria_limpieza)
-          ?.costo_limpieza ?? null)
+      ? resolveCosteLimpieza(tarifasLimpieza, apto.id_categoria_limpieza, r["Check-out"])
       : null;
   const propuestaComision =
     apto?.id_tipo_licencia != null && canal?.id_canal != null
