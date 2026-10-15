@@ -153,15 +153,21 @@ CAMPOS_EXCLUIDOS_HASH = {"fecha_ultima_importacion", "ID"}
 # Estados de reserva que Krossbooking considera cancelación/no-show
 ESTADOS_CANCELADAS = {"Cancelada", "No show"}
 
-# Detección de "candidatas a eliminadas" DESACTIVADA (jul 2026): con rangos
-# de exportación variables (el usuario elige fechas distintas cada vez), esta
-# detección genera falsos positivos constantes — una reserva fuera del rango
-# de hoy no significa que haya desaparecido de Krossbooking, ya que las
-# reservas nunca se eliminan de verdad allí (como mucho pasan a "Cancelada").
-# La función obtener_eliminadas_candidatas() se deja intacta por si algún día
-# cambia el flujo de exportación (p.ej. rango siempre fijo/creciente) y vuelve
-# a tener sentido reactivarla.
-DETECTAR_ELIMINADAS = False
+# Detección de "candidatas a eliminadas" / reservas que han desaparecido del
+# fichero. Estuvo DESACTIVADA (jul 2026) porque con rangos de exportación
+# variables generaba falsos positivos constantes. REACTIVADA (oct 2026) con un
+# filtro más estricto: solo se consideran reservas "vivas" (Confirmada /
+# Check-in realizado — ver ESTADOS_VIVAS) cuyo Check in cae dentro del rango
+# del fichero y que NO vienen en él. Es el caso típico de una reserva que ha
+# cambiado de fechas en Krossbooking a un día fuera del rango exportado: no
+# aparece en el Excel y se quedaría con las fechas antiguas en Supabase sin
+# que nadie se enterara. Solo AVISA (fila "eliminado_candidato" en
+# Importaciones: "Ya no aparece — revisar en Krossbooking"); no modifica ni
+# borra nada.
+DETECTAR_ELIMINADAS = True
+
+# Estados que se consideran "vivos" para la detección de arriba.
+ESTADOS_VIVAS = ("Confirmada", "Check-in realizado")
 
 # ============================================================
 # FUNCIONES AUXILIARES
@@ -307,25 +313,29 @@ def obtener_existentes_por_numero(numeros):
     return existentes
 
 def obtener_eliminadas_candidatas(registros_import):
-    """Reservas que ya existían con Check-in dentro del rango de fechas
-    cubierto por ESTA exportación concreta (inferido de las propias fechas
-    de Check-in presentes en el fichero, no una ventana fija — el rango de
-    fechas lo elige manualmente el usuario cada vez en Krossbooking), y que
-    ya NO aparecen en la importación actual.
+    """Reservas VIVAS (ver ESTADOS_VIVAS) que ya existían con Check-in dentro
+    del rango de fechas cubierto por ESTA exportación concreta (inferido de
+    las propias fechas de Check-in presentes en el fichero, no una ventana
+    fija — el rango de fechas lo elige manualmente el usuario cada vez en
+    Krossbooking), y que ya NO aparecen en la importación actual.
 
-    DESACTIVADA por defecto (ver DETECTAR_ELIMINADAS) — se deja intacta
-    para una posible reactivación futura."""
+    Caso típico: una reserva que ha cambiado de fechas en Krossbooking a un
+    día fuera del rango exportado. Solo se avisa; no se toca nada.
+
+    Se activa con DETECTAR_ELIMINADAS (solo en modo "diario")."""
     fechas_checkin = [r["Check in"] for r in registros_import if r.get("Check in")]
     if not fechas_checkin:
         return []
     desde = min(fechas_checkin)
     hasta = max(fechas_checkin)
+    estados_vivas = ",".join(f'"{e}"' for e in ESTADOS_VIVAS)
     resp = http.get(
         f"{SUPABASE_URL}/rest/v1/{TABLE}",
         headers=HEADERS_PLAIN,
         params={
             "select": "Número,Check in,Estado",
-            "and": f"(\"Check in\".gte.{desde},\"Check in\".lte.{hasta})"
+            "and": f"(\"Check in\".gte.{desde},\"Check in\".lte.{hasta})",
+            "Estado": f"in.({estados_vivas})",
         }
     )
     if not resp.ok:
@@ -710,6 +720,9 @@ def importar(fichero, modo="diario", sync_google=True):
 
         log(f"Control de cambios: {nuevas} nuevas, {modificadas} modificadas, "
             f"{sin_cambios} sin cambios, {len(eliminadas_candidatas)} candidatas a eliminadas")
+        for numero in eliminadas_candidatas:
+            log(f"   ⚠️  {numero}: no viene en el fichero pero su Check in cae dentro del rango "
+                f"(¿cambio de fechas fuera del rango exportado?) — revisar en Krossbooking")
 
         # --- Enviar a Supabase via API REST (upsert) ---
         BATCH = 200
