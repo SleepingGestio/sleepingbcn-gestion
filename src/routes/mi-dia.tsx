@@ -1680,13 +1680,18 @@ function WorkerView({
     return s;
   }, [tabDates, daysWithTasks, mantDaysMap]);
 
-  // Default day: first available if today has none
+  // Default day: first available if the active day has neither a cleaning nor
+  // a mías-maintenance task. Must consider maintenance too — otherwise a worker
+  // with both roles who has only maintenance today gets bounced off "Hoy" back
+  // to the first cleaning day every time they tap it.
   useEffect(() => {
     if (daysWithTasks.length === 0) return;
-    if (!daysWithTasks.some((d) => d.fecha === activeDay)) {
+    const activeHasContent =
+      daysWithTasks.some((d) => d.fecha === activeDay) || (mantDaysMap.get(activeDay)?.length ?? 0) > 0;
+    if (!activeHasContent) {
       setActiveDay(daysWithTasks[0].fecha);
     }
-  }, [daysWithTasks, activeDay]);
+  }, [daysWithTasks, mantDaysMap, activeDay]);
 
   const activeTasks = daysWithTasks.find((d) => d.fecha === activeDay)?.tasks ?? [];
   const pendingCount = activeTasks.filter((t) => t.estado === "comunicada").length;
