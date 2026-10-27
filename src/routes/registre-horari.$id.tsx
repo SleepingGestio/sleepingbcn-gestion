@@ -51,6 +51,12 @@ const DESVIACION_UMBRAL = 0.15;
 
 function pad(n: number) { return String(n).padStart(2, "0"); }
 
+// Día de la semana abreviado de una fecha ISO "YYYY-MM-DD", calculado en UTC (sin desvío horario).
+function dowShortISO(iso: string): string {
+  const [y, m, d] = iso.slice(0, 10).split("-").map(Number);
+  return DOW_SHORT[new Date(Date.UTC(y, m - 1, d)).getUTCDay()];
+}
+
 function monthRange(year: number, month0: number) {
   const start = `${year}-${pad(month0 + 1)}-01`;
   const endDate = new Date(year, month0 + 1, 0);
@@ -2401,7 +2407,12 @@ function VacYearCard({
           <div className="space-y-1 text-sm">
             {consumedDays.map((c) => (
               <div key={c.id_ajuste} className="flex justify-between">
-                <span>{fmtDate(c.fecha)}{c.notas ? ` · ${c.notas}` : ""}</span>
+                <span>
+                  <span className={dowShortISO(c.fecha) === "Sáb" || dowShortISO(c.fecha) === "Dom" ? "font-medium" : "text-muted-foreground"}>
+                    {dowShortISO(c.fecha)}
+                  </span>{" "}
+                  {fmtDate(c.fecha)}{c.notas ? ` · ${c.notas}` : ""}
+                </span>
                 <span className="tabular-nums">1 día</span>
               </div>
             ))}
