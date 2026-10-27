@@ -988,11 +988,24 @@ function DetailPopoverDialog({ row, onClose }: { row: Row | null; onClose: () =>
               value={row.kind === "ajust" ? fmtAjustSigned(row.hores).text : fmtHours(row.hores)}
               valueClassName={row.kind === "ajust" ? fmtAjustSigned(row.hores).className : ""}
             />
-            {(row.raw as { notes?: string | null; notas?: string | null }).notes && (
-              <Field label="Notas" value={String((row.raw as { notes: string }).notes)} />
-            )}
-            {(row.raw as { notas?: string | null }).notas && (
-              <Field label="Notas" value={String((row.raw as { notas: string }).notas)} />
+            {row.kind === "ajust" ? (
+              <Field
+                label="Notas"
+                value={
+                  typeof (row.raw as { notas?: unknown }).notas === "string" && (row.raw as { notas: string }).notas.trim()
+                    ? (row.raw as { notas: string }).notas.trim()
+                    : "—"
+                }
+              />
+            ) : (
+              <>
+                {(row.raw as { notes?: string | null; notas?: string | null }).notes && (
+                  <Field label="Notas" value={String((row.raw as { notes: string }).notes)} />
+                )}
+                {(row.raw as { notas?: string | null }).notas && (
+                  <Field label="Notas" value={String((row.raw as { notas: string }).notas)} />
+                )}
+              </>
             )}
           </div>
         )}
