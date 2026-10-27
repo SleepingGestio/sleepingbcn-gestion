@@ -2229,6 +2229,7 @@ function VacYearCard({
   const today = new Date().toISOString().slice(0, 10);
   const isActive = row.data_inici_any <= today && today <= row.data_fi_any;
   const isPast = row.data_fi_any < today;
+  const [editOpen, setEditOpen] = useState(false);
 
   const consumedQ = useQuery({
     queryKey: ["vac-consumed", idPersona, row.data_inici_any, row.data_fi_any],
@@ -2276,9 +2277,6 @@ function VacYearCard({
   const trackWidth = `${pctAnual(maxim)}%`;
   const consumedOver = consumed > maxim;
 
-  const yearStart = new Date(row.data_inici_any).getFullYear();
-  const yearEnd = new Date(row.data_fi_any).getFullYear();
-
   const status = isActive ? "Activo" : isPast ? "Cerrado" : "Futuro";
   const statusClass = isActive
     ? "bg-emerald-100 text-emerald-800"
@@ -2290,7 +2288,7 @@ function VacYearCard({
       <div className="flex items-center justify-between mb-3">
         <div>
           <div className="flex items-center gap-2">
-            <span className="font-semibold">Año contractual {yearStart}–{yearEnd}</span>
+            <span className="font-semibold">Año contractual {fmtDate(row.data_inici_any)} – {fmtDate(row.data_fi_any)}</span>
             <span className={`rounded-md px-2 py-0.5 text-xs font-medium ${consumed > meritats ? advancedClass : statusClass}`}>
               {consumed > meritats ? "Adelantadas" : status}
             </span>
@@ -2300,14 +2298,11 @@ function VacYearCard({
               </span>
             )}
           </div>
-          <div className="text-xs text-muted-foreground mt-0.5">
-            {fmtDate(row.data_inici_any)} → {fmtDate(row.data_fi_any)}
-          </div>
         </div>
         {isPast ? (
           <Lock className="h-4 w-4 text-muted-foreground" />
         ) : (
-          <button className="text-muted-foreground hover:text-foreground" aria-label="Editar">
+          <button className="text-muted-foreground hover:text-foreground" aria-label="Editar" onClick={() => setEditOpen(true)}>
             <Pencil className="h-4 w-4" />
           </button>
         )}
@@ -2398,7 +2393,140 @@ function VacYearCard({
           </div>
         </div>
       )}
+
+      <EditAnyModal
+        open={editOpen}
+        onClose={() => setEditOpen(false)}
+        row={row}
+        idPersona={idPersona}
+        periods={periods}
+      />
     </div>
+  );
+}
+
+function EditAnyModal({
+  open, onClose, row, idPersona, periods,
+}: {
+  open: boolean; onClose: () => void; row: VacAnyRow; idPersona: number; periods: PeriodRow[];
+}) {
+  const qc = useQueryClient();
+  const settled = row.decisio_saldo != null;
+  const [ini, setIni] = useState(row.data_inici_any);
+  const [fin, setFin] = useState(row.data_fi_any);
+  const [dies, setDies] = useState(String(row.dies_assignats ?? 0));
+  const [notas, setNotas] = useState(row.notas ?? "");
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    setIni(row.data_inici_any);
+    setFin(row.data_fi_any);
+    setDies(String(row.dies_assignats ?? 0));
+    setNotas(row.notas ?? "");
+    setSaving(false);
+  }, [open, row]);
+
+  async function save() {
+    const diesN = Number(dies);
+    let patch: Record<string, unknown>;
+    if (settled) {
+      patch = { notas: notas.trim() || null };
+    } else {
+      if (!ini || !fin) { toast.error("Las fechas de inicio y fin son obligatorias"); return; }
+      if (fin < ini) { toast.error("La fecha de fin debe ser igual o posterior a la de inicio"); return; }
+      if (!isFinite(diesN) || diesN < 0) { toast.error("Los días anuales deben ser 0 o más"); return; }
+      patch = { data_inici_any: ini, data_fi_any: fin, dies_assignats: diesN, notas: notas.trim() || null };
+      if (diesN !== Number(row.dies_assignats)) {
+        const active = periods.find((p) => !p.fecha_fin) ?? periods[periods.length - 1];
+        const horasPerMes = Number(active?.horas_objetivo_mes ?? 0);
+        const horas = Math.round(diesN * (horasPerMes / DIAS_PROMEDIO_MES) * 100) / 100;
+        patch.hores_calculades = horas;
+        patch.hores_assignades = horas;
+      }
+    }
+    setSaving(true);
+    if (!settled) {
+      // No puede solaparse con otro año de vacaciones de la misma persona.
+      const { data: others, error: oErr } = await supabase
+        .from("personal_vacances_any" as never)
+        .select("id_vac_any, data_inici_any, data_fi_any")
+        .eq("id_persona", idPersona)
+        .neq("id_vac_any", row.id_vac_any);
+      if (oErr) { setSaving(false); toast.error(oErr.message); return; }
+      const clash = ((others ?? []) as unknown as Array<{ data_inici_any: string; data_fi_any: string }>)
+        .find((o) => o.data_inici_any <= fin && o.data_fi_any >= ini);
+      if (clash) {
+        setSaving(false);
+        toast.error(`Las fechas se solapan con otro año (${fmtDate(clash.data_inici_any)} – ${fmtDate(clash.data_fi_any)})`);
+        return;
+      }
+      // Días de vacaciones que quedarían fuera del nuevo rango.
+      if (ini !== row.data_inici_any || fin !== row.data_fi_any) {
+        const { data: used, error: uErr } = await supabase
+          .from("personal_ajustos_hores")
+          .select("fecha")
+          .eq("id_persona", idPersona)
+          .eq("tipo", "vacaciones")
+          .gte("fecha", row.data_inici_any)
+          .lte("fecha", row.data_fi_any);
+        if (uErr) { setSaving(false); toast.error(uErr.message); return; }
+        const outside = new Set(
+          (used ?? []).map((r) => r.fecha as string).filter((f) => f < ini || f > fin),
+        ).size;
+        if (outside > 0 && !window.confirm(`${outside} días de vacaciones quedarán fuera de este año. ¿Continuar?`)) {
+          setSaving(false);
+          return;
+        }
+      }
+    }
+    const { error } = await supabase
+      .from("personal_vacances_any" as never)
+      .update(patch as never)
+      .eq("id_vac_any", row.id_vac_any);
+    setSaving(false);
+    if (error) { toast.error(error.message); return; }
+    toast.success("Año actualizado");
+    qc.invalidateQueries({ queryKey: ["vac-any", idPersona] });
+    qc.invalidateQueries({ queryKey: ["vac-consumed", idPersona] });
+    onClose();
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
+      <DialogContent className="max-w-md">
+        <DialogHeader><DialogTitle>Editar año de vacaciones</DialogTitle></DialogHeader>
+        <div className="space-y-3">
+          {settled && (
+            <div className="rounded-md bg-slate-100 px-3 py-2 text-xs text-slate-700">
+              Año saldado: solo se pueden editar las notas
+            </div>
+          )}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-sm font-medium">Inicio del año</label>
+              <Input type="date" value={ini} onChange={(e) => setIni(e.target.value)} disabled={settled} />
+            </div>
+            <div>
+              <label className="text-sm font-medium">Fin del año</label>
+              <Input type="date" value={fin} onChange={(e) => setFin(e.target.value)} disabled={settled} />
+            </div>
+          </div>
+          <div>
+            <label className="text-sm font-medium">Días anuales (naturales)</label>
+            <Input type="number" min={0} step="0.5" value={dies} onChange={(e) => setDies(e.target.value)} disabled={settled} />
+          </div>
+          <div>
+            <label className="text-sm font-medium">Notas</label>
+            <Textarea value={notas} onChange={(e) => setNotas(e.target.value)} rows={2} />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} disabled={saving}>Cancelar</Button>
+          <Button onClick={save} disabled={saving}>Guardar</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
