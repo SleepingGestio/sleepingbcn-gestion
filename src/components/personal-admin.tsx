@@ -27,7 +27,7 @@ import { usePermissions } from "@/hooks/use-permissions";
 import { useCurrentPersonal } from "@/hooks/use-current-personal";
 import { formatHHMM } from "@/lib/utils";
 import { roleColor } from "@/lib/role-colors";
-import { DIAS_PROMEDIO_MES } from "@/lib/vacaciones";
+import { DIAS_PROMEDIO_MES, isFijoDiscontinuo, diesMeritatsFD } from "@/lib/vacaciones";
 import { HHMMInput } from "@/components/hhmm-input";
 
 type Persona = {
@@ -48,16 +48,18 @@ type PersonaRol = { id_persona: number; id_rol: number; fecha_hasta: string | nu
 
 const CONTRATOS: { value: string; label: string }[] = [
   { value: "fijo", label: "Fijo" },
-  { value: "discontinuo", label: "Discontinuo" },
+  { value: "fijo_discontinuo", label: "Fijo discontinuo" },
   { value: "autonomo", label: "Autónomo" },
   { value: "temporal", label: "Temporal" },
   { value: "practicas", label: "Prácticas" },
   { value: "otro", label: "Otro" },
 ];
 
-const CONTRATO_LABEL: Record<string, string> = Object.fromEntries(
-  CONTRATOS.map((c) => [c.value, c.label]),
-);
+const CONTRATO_LABEL: Record<string, string> = {
+  // Alias del valor antiguo, solo para mostrar (no está en el selector).
+  discontinuo: "Fijo discontinuo",
+  ...Object.fromEntries(CONTRATOS.map((c) => [c.value, c.label])),
+};
 
 function ContractBadge({ tipo }: { tipo: string | null | undefined }) {
   if (!tipo || !CONTRATO_LABEL[tipo]) return null;
@@ -443,7 +445,7 @@ function PersonaDialog({
     queryFn: async () => {
       const { data, error } = await (supabase as any)
         .from("personal_vacances_any")
-        .select("id_vac_any, data_inici_any, data_fi_any, hores_calculades, hores_assignades, dies_assignats")
+        .select("id_vac_any, data_inici_any, data_fi_any, hores_calculades, hores_assignades, dies_assignats, dies_meritats, decisio_saldo")
         .eq("id_persona", persona!.id_persona);
       if (error) throw error;
       return (data ?? []) as Array<{
@@ -453,6 +455,8 @@ function PersonaDialog({
         hores_calculades: number | null;
         hores_assignades: number | null;
         dies_assignats: number | null;
+        dies_meritats: number | null;
+        decisio_saldo: string | null;
       }>;
     },
   });
@@ -470,7 +474,9 @@ function PersonaDialog({
     },
   });
   const vacByInici = useMemo(() => {
-    const map = new Map<string, { row: { dies_assignats: number | null }; consumed: number }>();
+    const map = new Map<string, { dies: number; consumed: number }>();
+    const todayISO = new Date().toISOString().slice(0, 10);
+    const isFD = isFijoDiscontinuo(persona?.tipo_contrato);
     const vacRows = vacAnyQ.data ?? [];
     const ajustos = vacAjustosQ.data ?? [];
     for (const p of periodos) {
@@ -483,10 +489,16 @@ function PersonaDialog({
       for (const a of ajustos) {
         if (a.fecha >= row.data_inici_any && a.fecha <= row.data_fi_any) days.add(a.fecha);
       }
-      map.set(p.fecha_inicio, { row, consumed: days.size });
+      // Fijo discontinuo sin saldar: se muestran los días devengados, no el máximo anual.
+      const dies = row.decisio_saldo != null
+        ? Number(row.dies_meritats ?? row.dies_assignats ?? 0)
+        : isFD
+          ? diesMeritatsFD(periodos, row.data_inici_any, row.data_fi_any, Number(row.dies_assignats ?? 0), todayISO)
+          : Number(row.dies_assignats ?? 0);
+      map.set(p.fecha_inicio, { dies, consumed: days.size });
     }
     return map;
-  }, [periodos, vacAnyQ.data, vacAjustosQ.data]);
+  }, [periodos, vacAnyQ.data, vacAjustosQ.data, persona?.tipo_contrato]);
 
   // Período activo (editable)
   const [periodInicio, setPeriodInicio] = useState<string>("");
@@ -528,6 +540,22 @@ function PersonaDialog({
 
   const [novaAltaOpen, setNovaAltaOpen] = useState(false);
   const [baixaOpen, setBaixaOpen] = useState(false);
+  const [finCampanaOpen, setFinCampanaOpen] = useState(false);
+  const isFD = isFijoDiscontinuo(persona?.tipo_contrato);
+  // Para un fijo discontinuo en parón: ¿el contrato sigue vivo (sin fecha de baja)?
+  const bajaQ = useQuery({
+    queryKey: ["personal-fecha-baja", persona?.id_persona],
+    enabled: isEdit && isFD && !!persona?.id_persona,
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("personal")
+        .select("fecha_baja")
+        .eq("id_persona", persona!.id_persona)
+        .maybeSingle();
+      if (error) throw error;
+      return (data?.fecha_baja ?? null) as string | null;
+    },
+  });
   const [editPeriod, setEditPeriod] = useState<PeriodoActividad | null>(null);
 
   const toggleRole = (id: number) =>
@@ -748,6 +776,16 @@ function PersonaDialog({
                         >
                           <Pencil className="h-3.5 w-3.5" />
                         </Button>
+                        {isFD && (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setFinCampanaOpen(true)}
+                          >
+                            Fin de campaña (parón)
+                          </Button>
+                        )}
                         <Button
                           type="button"
                           size="sm"
@@ -785,7 +823,22 @@ function PersonaDialog({
                     </div>
                   </div>
                 ) : (
-                  <p className="text-xs text-muted-foreground">Sin periodo abierto. Crea una nueva alta debajo.</p>
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-xs text-muted-foreground">
+                      {isFD ? "Sin periodo abierto (parón). Reincorpora debajo o finaliza el contrato." : "Sin periodo abierto. Crea una nueva alta debajo."}
+                    </p>
+                    {isFD && bajaQ.data === null && !bajaQ.isLoading && (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="border-rose-300 text-rose-700 hover:bg-rose-50"
+                        onClick={() => setBaixaOpen(true)}
+                      >
+                        Finalizar contrato
+                      </Button>
+                    )}
+                  </div>
                 )}
               </section>
 
@@ -795,7 +848,7 @@ function PersonaDialog({
                 <div className="flex items-center justify-between">
                   <SectionTitle>Historial de periodos</SectionTitle>
                   <Button type="button" size="sm" variant="outline" onClick={() => setNovaAltaOpen(true)}>
-                    <Plus className="h-3.5 w-3.5 mr-1" /> Nueva alta
+                    <Plus className="h-3.5 w-3.5 mr-1" /> {isFD ? "Reincorporación" : "Nueva alta"}
                   </Button>
                 </div>
                 {periodos.length === 0 ? (
@@ -824,7 +877,7 @@ function PersonaDialog({
                             style={{ fontSize: 11 }}
                           >
                             {vac
-                              ? `Vac: ${vac.consumed} / ${Number(vac.row.dies_assignats ?? 0)} d`
+                              ? `Vac: ${vac.consumed} / ${vac.dies} d`
                               : ""}
                           </div>
                           <Button
@@ -894,10 +947,18 @@ function PersonaDialog({
         {isEdit && novaAltaOpen && (
           <NovaAltaDialog
             idPersona={persona!.id_persona}
+            tipoContrato={persona!.tipo_contrato}
             creadoPor={currentUser?.id_persona ?? null}
             currentPeriod={currentPeriod}
             onClose={() => setNovaAltaOpen(false)}
-            onSaved={() => { setNovaAltaOpen(false); periodosQ.refetch(); }}
+            onSaved={() => { setNovaAltaOpen(false); periodosQ.refetch(); bajaQ.refetch(); vacAnyQ.refetch(); onSaved(); }}
+          />
+        )}
+        {isEdit && finCampanaOpen && currentPeriod && (
+          <FinCampanaDialog
+            currentPeriod={currentPeriod}
+            onClose={() => setFinCampanaOpen(false)}
+            onSaved={() => { setFinCampanaOpen(false); periodosQ.refetch(); }}
           />
         )}
         {isEdit && baixaOpen && (
@@ -905,7 +966,7 @@ function PersonaDialog({
             persona={persona!}
             currentPeriod={currentPeriod}
             onClose={() => setBaixaOpen(false)}
-            onSaved={() => { setBaixaOpen(false); periodosQ.refetch(); onSaved(); }}
+            onSaved={() => { setBaixaOpen(false); periodosQ.refetch(); bajaQ.refetch(); vacAnyQ.refetch(); onSaved(); }}
           />
         )}
         {isEdit && editPeriod && (
@@ -925,9 +986,10 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
 }
 
 function NovaAltaDialog({
-  idPersona, creadoPor, currentPeriod, onClose, onSaved,
+  idPersona, tipoContrato, creadoPor, currentPeriod, onClose, onSaved,
 }: {
   idPersona: number;
+  tipoContrato: string | null;
   creadoPor: number | null;
   currentPeriod: PeriodoActividad | null;
   onClose: () => void;
@@ -940,6 +1002,7 @@ function NovaAltaDialog({
   const [horasValid, setHorasValid] = useState(true);
   const [diesVac, setDiesVac] = useState("30");
   const [saving, setSaving] = useState(false);
+  const isFD = isFijoDiscontinuo(tipoContrato);
 
   async function save() {
     if (!fecha) { toast.error("La fecha es obligatoria"); return; }
@@ -965,21 +1028,42 @@ function NovaAltaDialog({
       toast.error(error.code === "23505" ? "Ya hay un período abierto para esta persona." : "Error: " + error.message);
       return;
     }
+    // Un alta nueva significa que la persona vuelve a estar activa.
+    const { error: bErr } = await (supabase as any)
+      .from("personal")
+      .update({ fecha_baja: null, motivo_baja: null })
+      .eq("id_persona", idPersona);
+    if (bErr) toast.error("Error al limpiar la fecha de baja: " + bErr.message);
     try {
-      await insertVacancesAny({
-        id_persona: idPersona,
-        fecha_inicio: fecha,
-        dies: diesN,
-        horasMes: horasN ?? 0,
-        creado_por: creadoPor,
-      });
+      // Fijo discontinuo: si ya hay un año de vacaciones abierto que cubre la fecha, no se duplica.
+      let skipVac = false;
+      if (isFD) {
+        const { data: open } = await (supabase as any)
+          .from("personal_vacances_any")
+          .select("id_vac_any")
+          .eq("id_persona", idPersona)
+          .is("decisio_saldo", null)
+          .lte("data_inici_any", fecha)
+          .gte("data_fi_any", fecha)
+          .limit(1);
+        skipVac = (open ?? []).length > 0;
+      }
+      if (!skipVac) {
+        await insertVacancesAny({
+          id_persona: idPersona,
+          fecha_inicio: fecha,
+          dies: diesN,
+          horasMes: horasN ?? 0,
+          creado_por: creadoPor,
+        });
+      }
     } catch (e) {
       setSaving(false);
       toast.error("Error vacaciones: " + (e as Error).message);
       return;
     }
     setSaving(false);
-    toast.success("Nueva alta creada");
+    toast.success(isFD ? "Reincorporación registrada" : "Nueva alta creada");
     onSaved();
   }
 
@@ -987,7 +1071,7 @@ function NovaAltaDialog({
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-w-sm">
         <DialogHeader>
-          <DialogTitle>Nueva alta</DialogTitle>
+          <DialogTitle>{isFD ? "Reincorporación" : "Nueva alta"}</DialogTitle>
           <DialogDescription className="sr-only">Añadir un nuevo periodo de actividad</DialogDescription>
         </DialogHeader>
         <div className="grid gap-3 text-sm">
@@ -998,7 +1082,61 @@ function NovaAltaDialog({
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={onClose} disabled={saving}>Cancelar</Button>
-          <Button onClick={save} disabled={saving || !horasValid}>{saving ? "Guardando…" : "Crear"}</Button>
+          <Button onClick={save} disabled={saving || !horasValid}>{saving ? "Guardando…" : isFD ? "Reincorporar" : "Crear"}</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function FinCampanaDialog({
+  currentPeriod, onClose, onSaved,
+}: {
+  currentPeriod: PeriodoActividad;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const today = new Date().toISOString().slice(0, 10);
+  const [fecha, setFecha] = useState(today);
+  const [motivo, setMotivo] = useState("Fin de campaña");
+  const [saving, setSaving] = useState(false);
+
+  async function save() {
+    if (!fecha) { toast.error("La fecha es obligatoria"); return; }
+    if (fecha < currentPeriod.fecha_inicio) {
+      toast.error("La fecha de fin no puede ser anterior al inicio del periodo");
+      return;
+    }
+    setSaving(true);
+    // Solo se cierra el periodo: no es una baja ni se salda el saldo de vacaciones.
+    const patch: { fecha_fin: string; motivo?: string } = { fecha_fin: fecha };
+    if (motivo.trim()) patch.motivo = motivo.trim();
+    const { error } = await (supabase as any)
+      .from("personal_periodos_actividad")
+      .update(patch)
+      .eq("id_periodo", currentPeriod.id_periodo);
+    setSaving(false);
+    if (error) { toast.error("Error: " + error.message); return; }
+    toast.success("Parón registrado");
+    onSaved();
+  }
+
+  return (
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle>Fin de campaña (parón)</DialogTitle>
+          <DialogDescription>
+            Se cerrará el periodo activo. La persona sigue en plantilla y su año de vacaciones continúa abierto.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="grid gap-3 text-sm">
+          <Field label="Fecha fin *"><Input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} /></Field>
+          <Field label="Motivo"><Input value={motivo} onChange={(e) => setMotivo(e.target.value)} /></Field>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} disabled={saving}>Cancelar</Button>
+          <Button onClick={save} disabled={saving}>{saving ? "Guardando…" : "Confirmar parón"}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -1018,6 +1156,58 @@ function BaixaDialog({
   const [motivo, setMotivo] = useState("");
   const [saving, setSaving] = useState(false);
 
+  // Año de vacaciones abierto (sin saldar) que cubre la fecha de baja.
+  type OpenYear = { id_vac_any: number; data_inici_any: string; data_fi_any: string; dies_assignats: number };
+  const [yr, setYr] = useState<OpenYear | null>(null);
+  const [devengados, setDevengados] = useState("");
+  const [disfrutados, setDisfrutados] = useState(0);
+  const [decision, setDecision] = useState<"" | "liquidar" | "perdre">("");
+
+  useEffect(() => {
+    if (!fecha) { setYr(null); return; }
+    let cancelled = false;
+    (async () => {
+      const { data: years } = await (supabase as any)
+        .from("personal_vacances_any")
+        .select("id_vac_any, data_inici_any, data_fi_any, dies_assignats")
+        .eq("id_persona", persona.id_persona)
+        .is("decisio_saldo", null)
+        .lte("data_inici_any", fecha)
+        .gte("data_fi_any", fecha)
+        .order("data_inici_any", { ascending: false })
+        .limit(1);
+      if (cancelled) return;
+      const y = ((years ?? [])[0] ?? null) as OpenYear | null;
+      setYr(y);
+      setDecision("");
+      if (!y) return;
+      const [{ data: pers }, { data: ajs }] = await Promise.all([
+        (supabase as any)
+          .from("personal_periodos_actividad")
+          .select("fecha_inicio, fecha_fin")
+          .eq("id_persona", persona.id_persona),
+        (supabase as any)
+          .from("personal_ajustos_hores")
+          .select("fecha")
+          .eq("id_persona", persona.id_persona)
+          .eq("tipo", "vacaciones")
+          .gte("fecha", y.data_inici_any)
+          .lte("fecha", y.data_fi_any),
+      ]);
+      if (cancelled) return;
+      const dev = isFijoDiscontinuo(persona.tipo_contrato)
+        ? diesMeritatsFD(pers ?? [], y.data_inici_any, y.data_fi_any, Number(y.dies_assignats ?? 0), fecha)
+        : Number(y.dies_assignats ?? 0);
+      setDevengados(String(dev));
+      setDisfrutados(new Set((ajs ?? []).map((r: { fecha: string }) => r.fecha)).size);
+    })();
+    return () => { cancelled = true; };
+  }, [fecha, persona.id_persona, persona.tipo_contrato]);
+
+  const devN = Number(devengados) || 0;
+  const saldo = devN - disfrutados;
+  const fmtD = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1));
+
   async function save() {
     if (!fecha) { toast.error("La fecha es obligatoria"); return; }
     setSaving(true);
@@ -1032,6 +1222,23 @@ function BaixaDialog({
         .update({ fecha_fin: fecha, motivo: motivo.trim() || null })
         .eq("id_periodo", currentPeriod.id_periodo);
       if (pErr) { setSaving(false); toast.error("Error periodo: " + pErr.message); return; }
+    }
+    if (yr && decision) {
+      const { error: vErr } = await (supabase as any)
+        .from("personal_vacances_any")
+        .update({
+          data_fi_any: yr.data_fi_any < fecha ? yr.data_fi_any : fecha,
+          dies_meritats: devN,
+          dies_liquidats: decision === "liquidar" ? Math.max(saldo, 0) : 0,
+          decisio_saldo: decision,
+          data_saldo: fecha,
+        })
+        .eq("id_vac_any", yr.id_vac_any);
+      if (vErr) {
+        setSaving(false);
+        toast.error("La baja se registró, pero falló el saldo de vacaciones: " + vErr.message);
+        return;
+      }
     }
     setSaving(false);
     toast.success("Baja registrada");
@@ -1051,10 +1258,37 @@ function BaixaDialog({
             <Input value={motivo} onChange={(e) => setMotivo(e.target.value)} placeholder="Motivo de la baja" />
             {motivo.trim() === "" && <p className="text-xs text-rose-600 mt-1">El motivo es obligatorio</p>}
           </Field>
+          {yr && (
+            <div className="space-y-2 rounded-md border p-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Vacaciones</p>
+              <Field label="Días devengados">
+                <Input type="number" min={0} step="0.5" value={devengados} onChange={(e) => setDevengados(e.target.value)} />
+              </Field>
+              <div className="flex justify-between text-xs">
+                <span className="text-muted-foreground">Días disfrutados</span>
+                <span className="tabular-nums">{fmtD(disfrutados)}</span>
+              </div>
+              <div className="flex justify-between text-xs">
+                <span className="text-muted-foreground">Saldo</span>
+                <span className={cn("tabular-nums font-medium", saldo < 0 && "text-rose-600")}>
+                  {saldo < 0 ? "−" : ""}{fmtD(Math.abs(saldo))}
+                </span>
+              </div>
+              <Field label="Saldo pendiente *">
+                <Select value={decision} onValueChange={(v) => setDecision(v as "liquidar" | "perdre")}>
+                  <SelectTrigger><SelectValue placeholder="Elige una opción" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="liquidar">Liquidar (pagar los días pendientes)</SelectItem>
+                    <SelectItem value="perdre">Perder los días pendientes</SelectItem>
+                  </SelectContent>
+                </Select>
+              </Field>
+            </div>
+          )}
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={onClose} disabled={saving}>Cancelar</Button>
-          <Button variant="destructive" onClick={save} disabled={saving || !motivo.trim()}>{saving ? "Guardando…" : "Confirmar baja"}</Button>
+          <Button variant="destructive" onClick={save} disabled={saving || !motivo.trim() || (!!yr && !decision)}>{saving ? "Guardando…" : "Confirmar baja"}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

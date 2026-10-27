@@ -27,7 +27,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { ArrowLeft, ChevronLeft, ChevronRight, Plus, Trash2, Search, Lock, LockOpen, Eye, Pencil, ArrowUp, ArrowDown } from "lucide-react";
 import { fmtDate } from "@/lib/format";
 import { formatHHMM as fmtHours } from "@/lib/utils";
-import { DIAS_PROMEDIO_MES } from "@/lib/vacaciones";
+import { DIAS_PROMEDIO_MES, DIES_VACANCES_PER_MES, isFijoDiscontinuo, diesMeritatsFD } from "@/lib/vacaciones";
 import { toast } from "sonner";
 import { LimpiezaPopover, type Limpieza } from "@/components/limpieza-popover";
 import { MantenimientoPopover } from "@/components/mantenimiento-popover";
@@ -709,7 +709,8 @@ function DetallPage() {
 
   const CONTRACT_LABELS: Record<string, string> = {
     fijo: "Fijo",
-    discontinuo: "Discontinuo",
+    fijo_discontinuo: "Fijo discontinuo",
+    discontinuo: "Fijo discontinuo",
     autonomo: "Autónomo",
     temporal: "Temporal",
     practicas: "Prácticas",
@@ -1290,15 +1291,6 @@ function AjustModal({
   function horasObjetivoMesForDate(dateISO: string): number {
     const periods = periodsQ.data ?? [];
     if (periods.length === 0) return 0;
-    if (tipoContrato === "fijo_discontinuo") {
-      let sum = 0;
-      for (const p of periods) {
-        const pi = p.fecha_inicio;
-        const pf = p.fecha_fin ?? "9999-12-31";
-        if (pi <= dateISO && dateISO <= pf) sum += Number(p.horas_objetivo_mes ?? 0);
-      }
-      return sum;
-    }
     const exact = periods.find(
       (p) => p.fecha_inicio <= dateISO && (p.fecha_fin == null || dateISO <= p.fecha_fin),
     );
@@ -1416,8 +1408,12 @@ function AjustModal({
             .lte("fecha", year.data_fi_any);
           const usedN = new Set((used ?? []).map((r) => r.fecha as string)).size;
           const newN = dates.filter((d) => d >= year.data_inici_any && d <= year.data_fi_any).length;
-          if (usedN + newN > Number(year.dies_assignats)) {
-            if (!window.confirm(`Con estas vacaciones se superan los ${year.dies_assignats} días del año. ¿Continuar?`)) return;
+          const fd = isFijoDiscontinuo(tipoContrato);
+          const limite = fd
+            ? diesMeritatsFD(periodsQ.data ?? [], year.data_inici_any, year.data_fi_any, Number(year.dies_assignats), dates[dates.length - 1])
+            : Number(year.dies_assignats);
+          if (usedN + newN > limite) {
+            if (!window.confirm(`Con estas vacaciones se superan los ${limite} días ${fd ? "devengados" : "del año"}. ¿Continuar?`)) return;
           }
         }
       }
@@ -2125,6 +2121,10 @@ type VacAnyRow = {
   notas: string | null;
   creado_por: number | null;
   creado_en: string;
+  dies_meritats?: number | null;
+  dies_liquidats?: number | null;
+  decisio_saldo?: string | null;
+  data_saldo?: string | null;
 };
 
 type PeriodRow = {
@@ -2203,7 +2203,7 @@ function VacancesTab({
         </div>
       ) : (
         (vacsQ.data ?? []).map((v) => (
-          <VacYearCard key={v.id_vac_any} row={v} idPersona={idPersona} />
+          <VacYearCard key={v.id_vac_any} row={v} idPersona={idPersona} tipoContrato={tipoContrato} periods={periodsQ.data ?? []} />
         ))
       )}
 
@@ -2224,7 +2224,9 @@ function VacancesTab({
   );
 }
 
-function VacYearCard({ row, idPersona }: { row: VacAnyRow; idPersona: number }) {
+function VacYearCard({
+  row, idPersona, tipoContrato, periods,
+}: { row: VacAnyRow; idPersona: number; tipoContrato: string | null; periods: PeriodRow[] }) {
   const today = new Date().toISOString().slice(0, 10);
   const isActive = row.data_inici_any <= today && today <= row.data_fi_any;
   const isPast = row.data_fi_any < today;
@@ -2252,7 +2254,18 @@ function VacYearCard({ row, idPersona }: { row: VacAnyRow; idPersona: number }) 
   }, [consumedQ.data]);
   const fmtDays = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1));
   const consumed = consumedDays.length;
-  const assigned = Number(row.dies_assignats ?? 0);
+  // Fijo discontinuo: los días se devengan en proporción al tiempo activo;
+  // un año saldado queda congelado con los días devengados en el saldo.
+  const isFD = isFijoDiscontinuo(tipoContrato);
+  const settled = row.decisio_saldo != null;
+  const assigned = settled
+    ? Number(row.dies_meritats ?? row.dies_assignats ?? 0)
+    : isFD
+      ? diesMeritatsFD(periods, row.data_inici_any, row.data_fi_any, Number(row.dies_assignats ?? 0), today)
+      : Number(row.dies_assignats ?? 0);
+  const settledTitle = row.decisio_saldo === "liquidar"
+    ? `Liquidados ${fmtDays(Number(row.dies_liquidats ?? 0))} d`
+    : `Perdidos ${fmtDays(Math.max(0, Number(row.dies_meritats ?? 0) - consumed))} d`;
   const remaining = assigned - consumed;
   const pct = assigned > 0 ? Math.min(120, (consumed / assigned) * 100) : 0;
 
@@ -2283,6 +2296,11 @@ function VacYearCard({ row, idPersona }: { row: VacAnyRow; idPersona: number }) 
             <span className={`rounded-md px-2 py-0.5 text-xs font-medium ${consumed > assigned ? advancedClass : statusClass}`}>
               {consumed > assigned ? "Adelantadas" : status}
             </span>
+            {settled && (
+              <span className="rounded-md bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700" title={settledTitle}>
+                Saldado
+              </span>
+            )}
           </div>
           <div className="text-xs text-muted-foreground mt-0.5">
             {fmtDate(row.data_inici_any)} → {fmtDate(row.data_fi_any)}
@@ -2300,8 +2318,13 @@ function VacYearCard({ row, idPersona }: { row: VacAnyRow; idPersona: number }) 
       <div className="flex items-end gap-4">
         <div className="flex-1 min-w-0">
           <div className="text-xs text-muted-foreground mb-1">
-            {fmtDays(assigned)} días asignados
+            {fmtDays(assigned)} {isFD ? "días devengados" : "días asignados"}
           </div>
+          {isFD && (
+            <div className="text-[11px] text-muted-foreground -mt-0.5 mb-1">
+              Máximo anual {fmtDays(Number(row.dies_assignats ?? 0))} d · {String(DIES_VACANCES_PER_MES).replace(".", ",")} d por mes activo
+            </div>
+          )}
           <div className="relative w-full" style={{ overflow: "visible" }}>
             {/* Thin bar - assigned */}
             <div className="relative w-full" style={{ height: 10 }}>
@@ -2388,20 +2411,10 @@ function NouAnyModal({
   }, [open, activeDies]);
 
   const horesPerMes = useMemo(() => {
-    if (tipoContrato === "fijo_discontinuo") {
-      // Sum horas_objetivo_mes of periods overlapping [inici, fi]
-      let sum = 0;
-      for (const p of periods) {
-        const pi = p.fecha_inicio;
-        const pf = p.fecha_fin ?? "9999-12-31";
-        if (pf >= inici && pi <= fi) sum += Number(p.horas_objetivo_mes ?? 0);
-      }
-      return sum;
-    }
     // Use active period (fecha_fin null) horas_objetivo_mes; fallback last period
     const active = periods.find((p) => !p.fecha_fin) ?? periods[periods.length - 1];
     return Number(active?.horas_objetivo_mes ?? 0);
-  }, [tipoContrato, periods, inici, fi]);
+  }, [periods, inici, fi]);
 
   const diesN = Number(dies) || 0;
   const horesCalc = diesN * (horesPerMes / DIAS_PROMEDIO_MES);
