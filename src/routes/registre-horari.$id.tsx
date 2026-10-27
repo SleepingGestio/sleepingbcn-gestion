@@ -24,7 +24,7 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { SortHeader } from "@/components/sort-header";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { ArrowLeft, ChevronLeft, ChevronRight, Plus, Trash2, Search, Lock, LockOpen, Eye, Pencil, ArrowUp, ArrowDown } from "lucide-react";
+import { ArrowLeft, ChevronLeft, ChevronRight, Plus, Trash2, Search, Lock, LockOpen, Eye, Pencil, ArrowUp, ArrowDown, CheckCircle2 } from "lucide-react";
 import { fmtDate } from "@/lib/format";
 import { formatHHMM as fmtHours } from "@/lib/utils";
 import { DIAS_PROMEDIO_MES, isFijoDiscontinuo, desgloseVacances } from "@/lib/vacaciones";
@@ -2289,15 +2289,28 @@ function VacYearCard({
         <div>
           <div className="flex items-center gap-2">
             <span className="font-semibold">Año contractual {fmtDate(row.data_inici_any)} – {fmtDate(row.data_fi_any)}</span>
-            <span className={`rounded-md px-2 py-0.5 text-xs font-medium ${consumed > meritats ? advancedClass : statusClass}`}>
-              {consumed > meritats ? "Adelantadas" : status}
-            </span>
+            {consumed <= meritats && status === "Cerrado" ? (
+              <span className="inline-flex items-center gap-1 rounded-md bg-slate-700 px-2.5 py-1 text-xs font-semibold text-white">
+                <Lock className="h-3 w-3" />
+                Cerrado
+              </span>
+            ) : (
+              <span className={`rounded-md px-2 py-0.5 text-xs font-medium ${consumed > meritats ? advancedClass : statusClass}`}>
+                {consumed > meritats ? "Adelantadas" : status}
+              </span>
+            )}
             {settled && (
-              <span className="rounded-md bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700" title={settledTitle}>
+              <span className="inline-flex items-center gap-1 rounded-md bg-emerald-700 px-2.5 py-1 text-xs font-semibold text-white" title={settledTitle}>
+                <CheckCircle2 className="h-3 w-3" />
                 Saldado
               </span>
             )}
           </div>
+          {settled && (
+            <div className="text-xs text-muted-foreground mt-1">
+              Saldado{row.data_saldo ? ` el ${fmtDate(row.data_saldo)}` : ""} · {settledTitle.toLowerCase()}
+            </div>
+          )}
         </div>
         {isPast ? (
           <Lock className="h-4 w-4 text-muted-foreground" />
@@ -2363,7 +2376,9 @@ function VacYearCard({
         </div>
         {perduts > 0 && (
           <div className="text-xs text-amber-700">
-            {fmtDays(perduts)} d perdidos {isFD ? "por F.DISC" : "por periodos sin actividad"} → máximo real de este año: {fmtDays(maxim)} d
+            {settled
+              ? `${fmtDays(perduts)} d no devengados por fin de contrato → total devengado del año: ${fmtDays(maxim)} d`
+              : `${fmtDays(perduts)} d perdidos ${isFD ? "por F.DISC" : "por periodos sin actividad"} → máximo real de este año: ${fmtDays(maxim)} d`}
           </div>
         )}
       </div>
