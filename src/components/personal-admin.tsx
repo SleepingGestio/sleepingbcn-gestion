@@ -443,7 +443,7 @@ function PersonaDialog({
     queryFn: async () => {
       const { data, error } = await (supabase as any)
         .from("personal_vacances_any")
-        .select("id_vac_any, data_inici_any, data_fi_any, hores_calculades, hores_assignades")
+        .select("id_vac_any, data_inici_any, data_fi_any, hores_calculades, hores_assignades, dies_assignats")
         .eq("id_persona", persona!.id_persona);
       if (error) throw error;
       return (data ?? []) as Array<{
@@ -452,6 +452,7 @@ function PersonaDialog({
         data_fi_any: string;
         hores_calculades: number | null;
         hores_assignades: number | null;
+        dies_assignats: number | null;
       }>;
     },
   });
@@ -469,7 +470,7 @@ function PersonaDialog({
     },
   });
   const vacByInici = useMemo(() => {
-    const map = new Map<string, { row: { hores_calculades: number | null; hores_assignades: number | null }; consumed: number }>();
+    const map = new Map<string, { row: { dies_assignats: number | null }; consumed: number }>();
     const vacRows = vacAnyQ.data ?? [];
     const ajustos = vacAjustosQ.data ?? [];
     for (const p of periodos) {
@@ -477,13 +478,12 @@ function PersonaDialog({
       const end = addOneYear(start);
       const row = vacRows.find((v) => v.data_inici_any >= start && v.data_inici_any < end);
       if (!row) continue;
-      let consumed = 0;
+      // Días disfrutados = fechas distintas con ajuste de vacaciones dentro del año.
+      const days = new Set<string>();
       for (const a of ajustos) {
-        if (a.fecha >= row.data_inici_any && a.fecha <= row.data_fi_any) {
-          consumed += Math.abs(Number(a.horas ?? 0));
-        }
+        if (a.fecha >= row.data_inici_any && a.fecha <= row.data_fi_any) days.add(a.fecha);
       }
-      map.set(p.fecha_inicio, { row, consumed });
+      map.set(p.fecha_inicio, { row, consumed: days.size });
     }
     return map;
   }, [periodos, vacAnyQ.data, vacAjustosQ.data]);
@@ -493,7 +493,7 @@ function PersonaDialog({
   const [periodMotivo, setPeriodMotivo] = useState<string>("");
   const [periodHoras, setPeriodHoras] = useState<string>("");
   const [periodHorasValid, setPeriodHorasValid] = useState(true);
-  const [periodDiesVac, setPeriodDiesVac] = useState<string>("23");
+  const [periodDiesVac, setPeriodDiesVac] = useState<string>("30");
   useEffect(() => {
     if (currentPeriod) {
       setPeriodInicio(currentPeriod.fecha_inicio ?? "");
@@ -502,13 +502,13 @@ function PersonaDialog({
         currentPeriod.horas_objetivo_mes != null ? String(currentPeriod.horas_objetivo_mes) : "",
       );
       setPeriodDiesVac(
-        currentPeriod.dies_vacances_any != null ? String(currentPeriod.dies_vacances_any) : "23",
+        currentPeriod.dies_vacances_any != null ? String(currentPeriod.dies_vacances_any) : "30",
       );
     } else {
       setPeriodInicio("");
       setPeriodMotivo("");
       setPeriodHoras("");
-      setPeriodDiesVac("23");
+      setPeriodDiesVac("30");
     }
   }, [
     currentPeriod?.id_periodo,
@@ -523,7 +523,7 @@ function PersonaDialog({
   const [firstFechaInicio, setFirstFechaInicio] = useState<string>(todayStr);
   const [firstHoras, setFirstHoras] = useState<string>("");
   const [firstHorasValid, setFirstHorasValid] = useState(true);
-  const [firstDiesVac, setFirstDiesVac] = useState<string>("23");
+  const [firstDiesVac, setFirstDiesVac] = useState<string>("30");
   const [firstMotivo, setFirstMotivo] = useState<string>("Alta inicial");
 
   const [novaAltaOpen, setNovaAltaOpen] = useState(false);
@@ -566,7 +566,7 @@ function PersonaDialog({
               ? Number(periodHoras)
               : null,
           dies_vacances_any:
-            periodDiesVac.trim() !== "" ? Number(periodDiesVac) : 23,
+            periodDiesVac.trim() !== "" ? Number(periodDiesVac) : 30,
         };
         const { error: pErr } = await (supabase as any)
           .from("personal_periodos_actividad")
@@ -598,7 +598,7 @@ function PersonaDialog({
             ? Number(firstHoras)
             : null,
         dies_vacances_any:
-          firstDiesVac.trim() !== "" ? Number(firstDiesVac) : 23,
+          firstDiesVac.trim() !== "" ? Number(firstDiesVac) : 30,
         creado_por: currentUser?.id_persona ?? null,
       };
       const { error: pErr } = await (supabase as any)
@@ -607,7 +607,7 @@ function PersonaDialog({
       if (pErr) { toast.error("Error primera alta: " + pErr.message); return null; }
       // Auto-create vacances any row
       if (tipoContrato !== "autonomo") {
-        const diesN = firstDiesVac.trim() !== "" ? Number(firstDiesVac) : 23;
+        const diesN = firstDiesVac.trim() !== "" ? Number(firstDiesVac) : 30;
         const horasMes = firstHoras.trim() !== "" ? Number(firstHoras) : 0;
         try {
           await insertVacancesAny({
@@ -824,7 +824,7 @@ function PersonaDialog({
                             style={{ fontSize: 11 }}
                           >
                             {vac
-                              ? `Vac: ${formatHHMM(Number(vac.row.hores_calculades ?? vac.row.hores_assignades ?? 0))} / ${formatHHMM(Number(vac.consumed))}`
+                              ? `Vac: ${vac.consumed} / ${Number(vac.row.dies_assignats ?? 0)} d`
                               : ""}
                           </div>
                           <Button
@@ -938,7 +938,7 @@ function NovaAltaDialog({
   const [motivo, setMotivo] = useState("Alta");
   const [horas, setHoras] = useState("");
   const [horasValid, setHorasValid] = useState(true);
-  const [diesVac, setDiesVac] = useState("23");
+  const [diesVac, setDiesVac] = useState("30");
   const [saving, setSaving] = useState(false);
 
   async function save() {
@@ -948,7 +948,7 @@ function NovaAltaDialog({
       return;
     }
     setSaving(true);
-    const diesN = diesVac.trim() !== "" ? Number(diesVac) : 23;
+    const diesN = diesVac.trim() !== "" ? Number(diesVac) : 30;
     const horasN = horas.trim() !== "" ? Number(horas) : null;
     const { error } = await (supabase as any)
       .from("personal_periodos_actividad")
@@ -1085,7 +1085,7 @@ function PeriodEditDialog({
   );
   const [horasValid, setHorasValid] = useState(true);
   const [diesVac, setDiesVac] = useState(
-    period.dies_vacances_any != null ? String(period.dies_vacances_any) : "23",
+    period.dies_vacances_any != null ? String(period.dies_vacances_any) : "30",
   );
   const [saving, setSaving] = useState(false);
 
@@ -1099,7 +1099,7 @@ function PeriodEditDialog({
         fecha_fin: fechaFin.trim() ? fechaFin : null,
         motivo: motivo.trim() || null,
         horas_objetivo_mes: horas.trim() !== "" ? Number(horas) : null,
-        dies_vacances_any: diesVac.trim() !== "" ? Number(diesVac) : 23,
+        dies_vacances_any: diesVac.trim() !== "" ? Number(diesVac) : 30,
       })
       .eq("id_periodo", period.id_periodo);
     setSaving(false);

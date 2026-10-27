@@ -1236,6 +1236,7 @@ function AjustModal({
   const [fecha, setFecha] = useState(defaultDate);
   const [fechaFin, setFechaFin] = useState(defaultDate);
   const [tipusComputa, setTipusComputa] = useState<"treballades" | "objectiu" | "ajust">("ajust");
+  const [tipusComputaTouched, setTipusComputaTouched] = useState(false);
   const [tipo, setTipo] = useState("otro");
   const [horas, setHoras] = useState<string>("");
   const [horasValid, setHorasValid] = useState(true);
@@ -1319,6 +1320,7 @@ function AjustModal({
       setFecha(defaultDate);
       setFechaFin(defaultDate);
       setTipusComputa("ajust");
+      setTipusComputaTouched(false);
       setTipo("otro");
       setHoras("");
       setHorasValid(true);
@@ -1347,6 +1349,12 @@ function AjustModal({
     if (tipo === "vacaciones") setHorasAutoSet(true);
   }, [tipo]);
 
+  // "Cómo computa" sigue al Tipo mientras el usuario no lo haya tocado a mano.
+  useEffect(() => {
+    if (tipusComputaTouched) return;
+    setTipusComputa(tipo === "vacaciones" || tipo === "baja" ? "objectiu" : "ajust");
+  }, [tipo, tipusComputaTouched]);
+
   useEffect(() => {
     if (tipo !== "vacaciones" || !horasAutoSet) return;
     const perDia = horasObjetivoMesForDate(fecha) / DIAS_PROMEDIO_MES;
@@ -1374,6 +1382,45 @@ function AjustModal({
         return;
       }
       const dates = eachDateISO(fecha, fechaFin);
+      if (tipo === "vacaciones") {
+        const { data: dup, error: dupErr } = await supabase
+          .from("personal_ajustos_hores")
+          .select("fecha")
+          .eq("id_persona", idPersona)
+          .eq("tipo", "vacaciones")
+          .in("fecha", dates);
+        if (dupErr) { toast.error(`No se pudo comprobar las vacaciones existentes: ${dupErr.message}`); return; }
+        const dupDates = [...new Set((dup ?? []).map((r) => r.fecha as string))].sort();
+        if (dupDates.length > 0) {
+          const fmt = (d: string) => d.split("-").reverse().join("/");
+          const shown = dupDates.slice(0, 5).map(fmt).join(", ");
+          const more = dupDates.length > 5 ? ` y ${dupDates.length - 5} más` : "";
+          toast.error(`Ya hay vacaciones registradas el ${shown}${more}`);
+          return;
+        }
+        const { data: yr } = await supabase
+          .from("personal_vacances_any" as never)
+          .select("data_inici_any, data_fi_any, dies_assignats")
+          .eq("id_persona", idPersona)
+          .lte("data_inici_any", fecha)
+          .gte("data_fi_any", fecha)
+          .maybeSingle();
+        const year = yr as { data_inici_any: string; data_fi_any: string; dies_assignats: number } | null;
+        if (year) {
+          const { data: used } = await supabase
+            .from("personal_ajustos_hores")
+            .select("fecha")
+            .eq("id_persona", idPersona)
+            .eq("tipo", "vacaciones")
+            .gte("fecha", year.data_inici_any)
+            .lte("fecha", year.data_fi_any);
+          const usedN = new Set((used ?? []).map((r) => r.fecha as string)).size;
+          const newN = dates.filter((d) => d >= year.data_inici_any && d <= year.data_fi_any).length;
+          if (usedN + newN > Number(year.dies_assignats)) {
+            if (!window.confirm(`Con estas vacaciones se superan los ${year.dies_assignats} días del año. ¿Continuar?`)) return;
+          }
+        }
+      }
       if (dates.length > 1) {
         const ok = window.confirm(
           `Se crearán ${dates.length} ajustes, uno por cada día del ${fmtDateLong(fecha)} al ${fmtDateLong(fechaFin)}.`,
@@ -1445,7 +1492,7 @@ function AjustModal({
           )}
           <div>
             <label className="text-sm font-medium">Cómo computa</label>
-            <Select value={tipusComputa} onValueChange={(v) => setTipusComputa(v as "treballades" | "objectiu" | "ajust")}>
+            <Select value={tipusComputa} onValueChange={(v) => { setTipusComputaTouched(true); setTipusComputa(v as "treballades" | "objectiu" | "ajust"); }}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="treballades">Horas trabajadas no registradas</SelectItem>
@@ -2085,6 +2132,7 @@ type PeriodRow = {
   fecha_inicio: string;
   fecha_fin: string | null;
   horas_objetivo_mes: number | null;
+  dies_vacances_any?: number | null;
 };
 
 function addYears(dateISO: string, n: number): string {
@@ -2124,7 +2172,7 @@ function VacancesTab({
     queryFn: async () => {
       const { data, error } = await supabase
         .from("personal_periodos_actividad")
-        .select("id_periodo, fecha_inicio, fecha_fin, horas_objetivo_mes")
+        .select("id_periodo, fecha_inicio, fecha_fin, horas_objetivo_mes, dies_vacances_any")
         .eq("id_persona", idPersona)
         .order("fecha_inicio", { ascending: true });
       if (error) { console.warn(error); return []; }
@@ -2196,8 +2244,15 @@ function VacYearCard({ row, idPersona }: { row: VacAnyRow; idPersona: number }) 
     },
   });
 
-  const consumed = (consumedQ.data ?? []).reduce((s, r) => s + Math.abs(Number(r.horas ?? 0)), 0);
-  const assigned = Number(row.hores_calculades ?? row.hores_assignades ?? 0);
+  // Un día disfrutado = una fecha distinta con ajuste de vacaciones.
+  const consumedDays = useMemo(() => {
+    const seen = new Map<string, { id_ajuste: number; fecha: string; notas: string | null }>();
+    for (const r of consumedQ.data ?? []) if (!seen.has(r.fecha)) seen.set(r.fecha, r);
+    return [...seen.values()].sort((a, b) => a.fecha.localeCompare(b.fecha));
+  }, [consumedQ.data]);
+  const fmtDays = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1));
+  const consumed = consumedDays.length;
+  const assigned = Number(row.dies_assignats ?? 0);
   const remaining = assigned - consumed;
   const pct = assigned > 0 ? Math.min(120, (consumed / assigned) * 100) : 0;
 
@@ -2245,7 +2300,7 @@ function VacYearCard({ row, idPersona }: { row: VacAnyRow; idPersona: number }) 
       <div className="flex items-end gap-4">
         <div className="flex-1 min-w-0">
           <div className="text-xs text-muted-foreground mb-1">
-            Vac. {fmtHours(Number(row.hores_calculades))} asignadas (≈ {row.dies_assignats} días naturales)
+            {fmtDays(assigned)} días asignados
           </div>
           <div className="relative w-full" style={{ overflow: "visible" }}>
             {/* Thin bar - assigned */}
@@ -2256,7 +2311,7 @@ function VacYearCard({ row, idPersona }: { row: VacAnyRow; idPersona: number }) 
             <div className="relative w-full" style={{ height: 18 }}>
               <div className="absolute inset-y-0 left-0 flex items-center justify-end pr-2 text-xs font-semibold text-white"
                 style={{ width: `${assigned > 0 ? (consumed / assigned) * 80 : 0}%`, background: barColor }}>
-                {pct > 10 ? `${fmtHours(consumed)} consumidas` : ""}
+                {pct > 10 ? `${fmtDays(consumed)} días disfrutados` : ""}
               </div>
             </div>
             {/* Vertical marker at 80% */}
@@ -2277,29 +2332,29 @@ function VacYearCard({ row, idPersona }: { row: VacAnyRow; idPersona: number }) 
                 border: "1px solid #26215C",
               }}
             >
-              {fmtHours(Number(row.hores_calculades))}
+              {fmtDays(assigned)} d
             </div>
           </div>
         </div>
         <div className="shrink-0 flex flex-col items-center" style={{ minWidth: 72 }}>
           <div className="rounded-full px-3 py-1 tabular-nums"
             style={{ background: chipStyle.bg, color: chipStyle.fg, fontSize: 16, fontWeight: 700 }}>
-            {remaining >= 0 ? fmtHours(remaining) : `−${fmtHours(Math.abs(remaining))}`}
+            {remaining >= 0 ? fmtDays(remaining) : `−${fmtDays(Math.abs(remaining))}`}
           </div>
           <div className="text-[11px] text-muted-foreground mt-1">
-            {remaining >= 0 ? "por disfrutar" : "adelantadas"}
+            {remaining >= 0 ? "días por disfrutar" : "adelantados"}
           </div>
         </div>
       </div>
 
-      {(consumedQ.data ?? []).length > 0 && (
+      {consumedDays.length > 0 && (
         <div className="mt-4 border-t pt-3">
           <div className="text-xs font-medium text-muted-foreground mb-2">Consumido</div>
           <div className="space-y-1 text-sm">
-            {(consumedQ.data ?? []).map((c) => (
+            {consumedDays.map((c) => (
               <div key={c.id_ajuste} className="flex justify-between">
                 <span>{fmtDate(c.fecha)}{c.notas ? ` · ${c.notas}` : ""}</span>
-                <span className="tabular-nums">{fmtHours(Math.abs(Number(c.horas ?? 0)))}</span>
+                <span className="tabular-nums">1 día</span>
               </div>
             ))}
           </div>
@@ -2325,6 +2380,12 @@ function NouAnyModal({
   const [dies, setDies] = useState<string>("30");
   const [notas, setNotas] = useState("");
   const [saving, setSaving] = useState(false);
+
+  // Por defecto, los días de vacaciones del período activo (o 30).
+  const activeDies = periods.find((p) => !p.fecha_fin)?.dies_vacances_any ?? null;
+  useEffect(() => {
+    if (open) setDies(String(activeDies ?? 30));
+  }, [open, activeDies]);
 
   const horesPerMes = useMemo(() => {
     if (tipoContrato === "fijo_discontinuo") {
@@ -2380,12 +2441,8 @@ function NouAnyModal({
             </div>
           </div>
           <div>
-            <label className="text-sm font-medium">Días asignados</label>
+            <label className="text-sm font-medium">Días asignados (naturales)</label>
             <Input type="number" value={dies} onChange={(e) => setDies(e.target.value)} />
-          </div>
-          <div className="text-xs text-muted-foreground">
-            Horas calculadas: <span className="font-medium">{fmtHours(horesCalc)}</span>
-            {" "}({fmtHours(horesPerMes)} / mes)
           </div>
           <div>
             <label className="text-sm font-medium">Notas</label>
