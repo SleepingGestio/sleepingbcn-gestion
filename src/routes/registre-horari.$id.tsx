@@ -24,7 +24,7 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { SortHeader } from "@/components/sort-header";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { ArrowLeft, ChevronLeft, ChevronRight, Plus, Trash2, Search, Lock, LockOpen, Eye, Pencil } from "lucide-react";
+import { ArrowLeft, ChevronLeft, ChevronRight, Plus, Trash2, Search, Lock, LockOpen, Eye, Pencil, ArrowUp, ArrowDown } from "lucide-react";
 import { fmtDate } from "@/lib/format";
 import { formatHHMM as fmtHours } from "@/lib/utils";
 import { DIAS_PROMEDIO_MES } from "@/lib/vacaciones";
@@ -46,6 +46,8 @@ const MONTH_ES = [
   "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre",
 ];
 const DOW_SHORT = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"];
+// Desviación relativa (sobre el estándar) a partir de la cual se resalta en la tabla.
+const DESVIACION_UMBRAL = 0.15;
 
 function pad(n: number) { return String(n).padStart(2, "0"); }
 
@@ -62,6 +64,47 @@ function diffHours(a: string | null, b: string | null): number {
   const db = new Date(b).getTime();
   if (!isFinite(da) || !isFinite(db)) return 0;
   return Math.max(0, (db - da) / 3_600_000);
+}
+
+function EstandarCells({ std }: { std: Row["std"] }) {
+  if (std === "otra-sesion") {
+    return (<><td className="py-1.5 px-3" /><td className="py-1.5 px-3" /></>);
+  }
+  if (!std) {
+    return (
+      <>
+        <td className="py-1.5 px-3 text-right text-muted-foreground">—</td>
+        <td className="py-1.5 px-3 text-right text-muted-foreground">—</td>
+      </>
+    );
+  }
+  const diff = std.total - std.standard;
+  const ratio = diff / std.standard;
+  const sign = diff < 0 ? "−" : "+";
+  const pct = `${ratio < 0 ? "−" : "+"}${Math.round(Math.abs(ratio) * 100)}%`;
+  let cls = "text-muted-foreground";
+  let icon: React.ReactNode = null;
+  if (ratio > DESVIACION_UMBRAL) {
+    cls = "bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300";
+    icon = <ArrowUp className="h-3 w-3" />;
+  } else if (ratio < -DESVIACION_UMBRAL) {
+    cls = "bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300";
+    icon = <ArrowDown className="h-3 w-3" />;
+  }
+  return (
+    <>
+      <td className="py-1.5 px-3 text-right tabular-nums whitespace-nowrap">{fmtHours(std.standard)}</td>
+      <td className="py-1.5 px-3 text-right tabular-nums whitespace-nowrap">
+        <span
+          className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs ${cls}`}
+          title={`${pct} respecto al estándar`}
+        >
+          {icon}
+          {sign}{fmtHours(Math.abs(diff))}
+        </span>
+      </td>
+    </>
+  );
 }
 
 function fmtAjustSigned(h: number): { text: string; className: string } {
@@ -110,6 +153,8 @@ type Row = {
   tipus: string;
   hores: number;
   tipus_computa?: "treballades" | "objectiu" | "ajust" | null;
+  // undefined = sin estándar; "otra-sesion" = sesión no inicial de una limpieza con varias sesiones.
+  std?: { standard: number; total: number } | "otra-sesion";
   raw: Record<string, unknown>;
 };
 
@@ -214,7 +259,7 @@ function DetallPage() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("limpiezas")
-        .select("id_limpieza, worker, iniciada_en, finalizada_en, estado, fecha_limpieza, tipo, id_apt")
+        .select("id_limpieza, worker, iniciada_en, finalizada_en, estado, fecha_limpieza, tipo, id_apt, sfc_montar")
         .eq("worker", idPersona)
         .eq("estado", "finalizada")
         .gte("fecha_limpieza", start)
@@ -222,7 +267,7 @@ function DetallPage() {
       if (error) throw error;
       return (data ?? []) as Array<{
         id_limpieza: number; worker: number | null; iniciada_en: string | null;
-        finalizada_en: string | null; fecha_limpieza: string; tipo: string | null; id_apt: number;
+        finalizada_en: string | null; fecha_limpieza: string; tipo: string | null; id_apt: number; sfc_montar: boolean | null;
       }>;
     },
   });
@@ -248,7 +293,7 @@ function DetallPage() {
       const { data, error } = await supabase
         .from("limpiezas_registre")
         .select(
-          "id_registre, id_limpieza, id_persona, inici, fi, hores, limpiezas!limpiezas_registre_id_limpieza_fkey(id_apt, tipo, fecha_limpieza)",
+          "id_registre, id_limpieza, id_persona, inici, fi, hores, limpiezas!limpiezas_registre_id_limpieza_fkey(id_apt, tipo, fecha_limpieza, sfc_montar)",
         )
         .eq("id_persona", idPersona)
         .not("fi", "is", null)
@@ -259,7 +304,7 @@ function DetallPage() {
       return (data ?? []) as unknown as Array<{
         id_registre: number; id_limpieza: number; id_persona: number;
         inici: string; fi: string | null; hores: number | null;
-        limpiezas: { id_apt: number; tipo: string | null; fecha_limpieza: string } | null;
+        limpiezas: { id_apt: number; tipo: string | null; fecha_limpieza: string; sfc_montar: boolean | null } | null;
       }>;
     },
   });
@@ -418,10 +463,28 @@ function DetallPage() {
   const rows = useMemo<Row[]>(() => {
     const out: Row[] = [];
     const limpiezasConSesiones = new Set((limpiezasRegistreQ.data ?? []).map((r) => r.id_limpieza));
+    const stdFor = (idApt: number | undefined, isSalida: boolean, sfc: boolean | null | undefined) => {
+      const std = idApt != null ? aptStdById.get(idApt) : undefined;
+      if (!std) return null;
+      const v = isSalida ? (sfc ? std.con_sfc : std.sin_sfc) : std.extra_cr;
+      return v != null && v > 0 ? v : null;
+    };
+    // Por limpieza con sesiones: horas totales y sesión más temprana (por inici).
+    const sesiones = new Map<number, { total: number; first: { id: number; inici: string } }>();
+    for (const r of limpiezasRegistreQ.data ?? []) {
+      const cur = sesiones.get(r.id_limpieza);
+      if (!cur) sesiones.set(r.id_limpieza, { total: Number(r.hores ?? 0), first: { id: r.id_registre, inici: r.inici } });
+      else {
+        cur.total += Number(r.hores ?? 0);
+        if (r.inici < cur.first.inici) cur.first = { id: r.id_registre, inici: r.inici };
+      }
+    }
     for (const l of limpiezasQ.data ?? []) {
       if (limpiezasConSesiones.has(l.id_limpieza)) continue;
       const isSalida = l.tipo === "salida";
       const kind: RowKind = isSalida ? "checkout" : "extra_cr";
+      const hLegacy = diffHours(l.iniciada_en, l.finalizada_en);
+      const stdLegacy = stdFor(l.id_apt, isSalida, l.sfc_montar);
       out.push({
         key: `limp-${l.id_limpieza}`,
         kind,
@@ -430,7 +493,8 @@ function DetallPage() {
         fi: l.finalizada_en,
         propietat: aptName.get(l.id_apt) ?? `Apt #${l.id_apt}`,
         tipus: isSalida ? "Limpieza STD" : "Extra-CR",
-        hores: diffHours(l.iniciada_en, l.finalizada_en),
+        hores: hLegacy,
+        std: stdLegacy != null ? { standard: stdLegacy, total: hLegacy } : undefined,
         raw: l as unknown as Record<string, unknown>,
       });
     }
@@ -438,6 +502,12 @@ function DetallPage() {
       const lim = r.limpiezas;
       const isSalida = lim?.tipo === "salida";
       const kind: RowKind = isSalida ? "checkout" : "extra_cr";
+      const ses = sesiones.get(r.id_limpieza);
+      const stdReg = stdFor(lim?.id_apt, isSalida, lim?.sfc_montar);
+      let stdInfo: Row["std"];
+      if (stdReg != null && ses) {
+        stdInfo = ses.first.id === r.id_registre ? { standard: stdReg, total: ses.total } : "otra-sesion";
+      }
       out.push({
         key: `limpreg-${r.id_registre}`,
         kind,
@@ -447,6 +517,7 @@ function DetallPage() {
         propietat: lim?.id_apt != null ? (aptName.get(lim.id_apt) ?? `Apt #${lim.id_apt}`) : "—",
         tipus: isSalida ? "Limpieza STD" : "Extra-CR",
         hores: Number(r.hores ?? 0),
+        std: stdInfo,
         raw: r as unknown as Record<string, unknown>,
       });
     }
@@ -510,7 +581,7 @@ function DetallPage() {
       });
     }
     return out;
-  }, [limpiezasQ.data, limpiezasRegistreQ.data, genericQ.data, mantenimentQ.data, ajustosQ.data, aptName, mantAptById, mantEspacioById, mantGrupoById]);
+  }, [limpiezasQ.data, limpiezasRegistreQ.data, genericQ.data, mantenimentQ.data, ajustosQ.data, aptName, aptStdById, mantAptById, mantEspacioById, mantGrupoById]);
 
   const filteredRows = useMemo(() => {
     let list = rows;
@@ -528,8 +599,9 @@ function DetallPage() {
       if (va < vb) return -1 * dir;
       if (va > vb) return 1 * dir;
       if (sortKey === "fecha") {
-        const ia = a.inici ?? "";
-        const ib = b.inici ?? "";
+        // Los ajustes van al final cronológico del día.
+        const ia = a.kind === "ajust" ? "\uffff" : (a.inici ?? "");
+        const ib = b.kind === "ajust" ? "\uffff" : (b.inici ?? "");
         if (ia < ib) return -1 * dir;
         if (ia > ib) return 1 * dir;
       }
@@ -537,6 +609,18 @@ function DetallPage() {
     });
     return sorted;
   }, [rows, typeFilter, search, sortKey, sortDir]);
+
+  const grouped = sortKey === "fecha";
+
+  // Total neto por día sobre todas las filas (sin filtros).
+  const dayTotals = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const r of rows) {
+      const h = r.kind === "ajust" && r.tipus_computa === "objectiu" ? 0 : r.hores;
+      m.set(r.fecha, (m.get(r.fecha) ?? 0) + h);
+    }
+    return m;
+  }, [rows]);
 
   // Same query TancamentsTab runs (identical queryKey, so react-query dedupes the
   // network request) — needed here too so prevAcumulat can be folded into
@@ -714,6 +798,9 @@ function DetallPage() {
             <table className="w-full text-sm">
               <thead className="border-b bg-muted/40">
                 <tr>
+                  {grouped && (
+                    <th className="text-right p-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground whitespace-nowrap">Total día</th>
+                  )}
                   <th className="text-left p-3">
                     <SortHeader label="Fecha" active={sortKey === "fecha"} dir={sortDir} onClick={() => toggleSort("fecha")} />
                   </th>
@@ -725,28 +812,42 @@ function DetallPage() {
                   <th className="text-left p-3">
                     <SortHeader label="Tipo / Actividad" active={sortKey === "tipus"} dir={sortDir} onClick={() => toggleSort("tipus")} />
                   </th>
+                  <th className="text-right p-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Estándar</th>
+                  <th className="text-right p-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Desviación</th>
                   <th className="text-right p-3">
-                    <SortHeader label="Horas" active={sortKey === "hores"} dir={sortDir} onClick={() => toggleSort("hores")} />
+                    <SortHeader label="Tiempo" active={sortKey === "hores"} dir={sortDir} onClick={() => toggleSort("hores")} />
                   </th>
                   <th className="w-10" />
                 </tr>
               </thead>
               <tbody>
                 {filteredRows.length === 0 ? (
-                  <tr><td colSpan={7} className="text-center text-muted-foreground py-10">Sin registros este mes.</td></tr>
+                  <tr><td colSpan={grouped ? 10 : 9} className="text-center text-muted-foreground py-10">Sin registros este mes.</td></tr>
                 ) : (
-                  filteredRows.map((r) => (
+                  filteredRows.map((r, idx) => {
+                    const firstOfDay = grouped && (idx === 0 || filteredRows[idx - 1].fecha !== r.fecha);
+                    const dayTotal = firstOfDay ? (dayTotals.get(r.fecha) ?? 0) : 0;
+                    const sepClass = firstOfDay && idx > 0 ? " border-t-2 border-t-muted-foreground/40" : "";
+                    return (
                     <Popover key={r.key}>
                       <PopoverTrigger asChild>
-                         <tr className="border-b hover:bg-muted/40 cursor-pointer" onClick={() => openRow(r)}>
-                          <td className="py-1.5 px-3">{DOW_SHORT[new Date(r.fecha + "T00:00:00").getDay()]} {fmtDate(r.fecha)}</td>
-                          <td className="py-1.5 px-3">{r.kind === "ajust" ? "—" : fmtHM(r.inici)}</td>
-                          <td className="py-1.5 px-3">{r.kind === "ajust" ? "—" : fmtHM(r.fi)}</td>
+                         <tr className={`border-b hover:bg-muted/40 cursor-pointer${sepClass}`} onClick={() => openRow(r)}>
+                          {grouped && (
+                            <td className="py-1.5 px-3 text-right tabular-nums whitespace-nowrap bg-muted/30 border-r">
+                              {firstOfDay ? `${dayTotal < 0 ? "−" : ""}${fmtHours(Math.abs(dayTotal))}` : ""}
+                            </td>
+                          )}
+                          <td className="py-1.5 px-3">
+                            {(!grouped || firstOfDay) ? `${DOW_SHORT[new Date(r.fecha + "T00:00:00").getDay()]} ${r.fecha.slice(8, 10)}` : ""}
+                          </td>
+                          <td className="py-1.5 px-3 tabular-nums whitespace-nowrap">{r.kind === "ajust" ? "—" : fmtHM(r.inici)}</td>
+                          <td className="py-1.5 px-3 tabular-nums whitespace-nowrap">{r.kind === "ajust" ? "—" : fmtHM(r.fi)}</td>
                           <td className="py-1.5 px-3">{r.propietat}</td>
                           <td className="py-1.5 px-3">
                             <RowTypeBadge kind={r.kind} label={r.tipus} />
                           </td>
-                          <td className={`py-1.5 px-3 text-right tabular-nums ${ajustCellClass(r)}`}>
+                          <EstandarCells std={r.std} />
+                          <td className={`py-1.5 px-3 text-right tabular-nums whitespace-nowrap ${ajustCellClass(r)}`}>
                             {ajustCellText(r)}
                           </td>
                           <td className="py-1.5 px-3">
@@ -768,7 +869,8 @@ function DetallPage() {
                         </tr>
                       </PopoverTrigger>
                     </Popover>
-                  ))
+                    );
+                  })
                 )}
               </tbody>
             </table>
