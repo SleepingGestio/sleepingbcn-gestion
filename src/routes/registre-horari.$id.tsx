@@ -27,7 +27,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { ArrowLeft, ChevronLeft, ChevronRight, Plus, Trash2, Search, Lock, LockOpen, Eye, Pencil, ArrowUp, ArrowDown } from "lucide-react";
 import { fmtDate } from "@/lib/format";
 import { formatHHMM as fmtHours } from "@/lib/utils";
-import { DIAS_PROMEDIO_MES, DIES_VACANCES_PER_MES, isFijoDiscontinuo, diesMeritatsFD } from "@/lib/vacaciones";
+import { DIAS_PROMEDIO_MES, isFijoDiscontinuo, desgloseVacances } from "@/lib/vacaciones";
 import { toast } from "sonner";
 import { LimpiezaPopover, type Limpieza } from "@/components/limpieza-popover";
 import { MantenimientoPopover } from "@/components/mantenimiento-popover";
@@ -1408,12 +1408,11 @@ function AjustModal({
             .lte("fecha", year.data_fi_any);
           const usedN = new Set((used ?? []).map((r) => r.fecha as string)).size;
           const newN = dates.filter((d) => d >= year.data_inici_any && d <= year.data_fi_any).length;
-          const fd = isFijoDiscontinuo(tipoContrato);
-          const limite = fd
-            ? diesMeritatsFD(periodsQ.data ?? [], year.data_inici_any, year.data_fi_any, Number(year.dies_assignats), dates[dates.length - 1])
-            : Number(year.dies_assignats);
+          const limite = desgloseVacances(
+            periodsQ.data ?? [], year.data_inici_any, year.data_fi_any, Number(year.dies_assignats), dates[dates.length - 1],
+          ).meritats;
           if (usedN + newN > limite) {
-            if (!window.confirm(`Con estas vacaciones se superan los ${limite} días ${fd ? "devengados" : "del año"}. ¿Continuar?`)) return;
+            if (!window.confirm(`Con estas vacaciones se superan los ${limite} días devengados. ¿Continuar?`)) return;
           }
         }
       }
@@ -2254,29 +2253,28 @@ function VacYearCard({
   }, [consumedQ.data]);
   const fmtDays = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1));
   const consumed = consumedDays.length;
-  // Fijo discontinuo: los días se devengan en proporción al tiempo activo;
+  // Días devengados en proporción al tiempo activo (todos los tipos de contrato);
   // un año saldado queda congelado con los días devengados en el saldo.
   const isFD = isFijoDiscontinuo(tipoContrato);
   const settled = row.decisio_saldo != null;
-  const assigned = settled
-    ? Number(row.dies_meritats ?? row.dies_assignats ?? 0)
-    : isFD
-      ? diesMeritatsFD(periods, row.data_inici_any, row.data_fi_any, Number(row.dies_assignats ?? 0), today)
-      : Number(row.dies_assignats ?? 0);
+  const anual = Number(row.dies_assignats ?? 0);
+  let meritats: number, perduts: number, maxim: number;
+  if (settled) {
+    meritats = Number(row.dies_meritats ?? row.dies_assignats ?? 0);
+    maxim = meritats;
+    perduts = Math.max(0, anual - maxim);
+  } else {
+    ({ meritats, perduts, maxim } = desgloseVacances(periods, row.data_inici_any, row.data_fi_any, anual, today));
+  }
+  const disponibles = meritats - consumed;
   const settledTitle = row.decisio_saldo === "liquidar"
     ? `Liquidados ${fmtDays(Number(row.dies_liquidats ?? 0))} d`
     : `Perdidos ${fmtDays(Math.max(0, Number(row.dies_meritats ?? 0) - consumed))} d`;
-  const remaining = assigned - consumed;
-  const pct = assigned > 0 ? Math.min(120, (consumed / assigned) * 100) : 0;
-
-  let barColor = "#1D9E75";
-  if (consumed > assigned) barColor = "#A32D2D";
-  else if (assigned > 0 && consumed >= assigned) barColor = "#9CA3AF";
-  else if (assigned > 0 && consumed >= 0.8 * assigned) barColor = "#EF9F27";
-
-  const chipStyle = remaining >= 0
-    ? { bg: "#E1F5EE", fg: "#085041" }
-    : { bg: "#FDEAEA", fg: "#A32D2D" };
+  // Las tres barras comparten la escala 0…anual y van alineadas a la izquierda.
+  const pctAnual = (n: number) => (anual > 0 ? Math.max(0, Math.min(100, (n / anual) * 100)) : 0);
+  const pctMaxim = (n: number) => (maxim > 0 ? Math.max(0, Math.min(100, (n / maxim) * 100)) : 0);
+  const trackWidth = `${pctAnual(maxim)}%`;
+  const consumedOver = consumed > maxim;
 
   const yearStart = new Date(row.data_inici_any).getFullYear();
   const yearEnd = new Date(row.data_fi_any).getFullYear();
@@ -2285,7 +2283,7 @@ function VacYearCard({
   const statusClass = isActive
     ? "bg-emerald-100 text-emerald-800"
     : isPast ? "bg-gray-100 text-gray-700" : "bg-blue-100 text-blue-800";
-  const advancedClass = consumed > assigned ? "bg-red-100 text-red-800" : "";
+  const advancedClass = consumed > meritats ? "bg-red-100 text-red-800" : "";
 
   return (
     <div className="rounded-xl border bg-card p-5">
@@ -2293,8 +2291,8 @@ function VacYearCard({
         <div>
           <div className="flex items-center gap-2">
             <span className="font-semibold">Año contractual {yearStart}–{yearEnd}</span>
-            <span className={`rounded-md px-2 py-0.5 text-xs font-medium ${consumed > assigned ? advancedClass : statusClass}`}>
-              {consumed > assigned ? "Adelantadas" : status}
+            <span className={`rounded-md px-2 py-0.5 text-xs font-medium ${consumed > meritats ? advancedClass : statusClass}`}>
+              {consumed > meritats ? "Adelantadas" : status}
             </span>
             {settled && (
               <span className="rounded-md bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700" title={settledTitle}>
@@ -2315,58 +2313,75 @@ function VacYearCard({
         )}
       </div>
 
-      <div className="flex items-end gap-4">
-        <div className="flex-1 min-w-0">
-          <div className="text-xs text-muted-foreground mb-1">
-            {fmtDays(assigned)} {isFD ? "días devengados" : "días asignados"}
+      <div className="space-y-2">
+        {/* Anuales: toda la barra = días de la ficha; la parte perdida en ámbar */}
+        <div className="grid grid-cols-[110px_minmax(0,1fr)_78px] items-center gap-3">
+          <div>
+            <div className="text-sm font-medium">Anuales</div>
+            <div className="text-[11px] text-muted-foreground">de la ficha</div>
           </div>
-          {isFD && (
-            <div className="text-[11px] text-muted-foreground -mt-0.5 mb-1">
-              Máximo anual {fmtDays(Number(row.dies_assignats ?? 0))} d · {String(DIES_VACANCES_PER_MES).replace(".", ",")} d por mes activo
+          <div className="flex h-3 w-full overflow-hidden rounded-full bg-muted min-w-0">
+            <div style={{ width: `${pctAnual(maxim)}%`, background: "#D3D1C7" }} />
+            <div style={{ width: `${pctAnual(perduts)}%`, background: "#EF9F27" }} />
+          </div>
+          <div className="text-right text-sm font-semibold tabular-nums">{fmtDays(anual)} d</div>
+        </div>
+        {/* Devengados */}
+        <div className="grid grid-cols-[110px_minmax(0,1fr)_78px] items-center gap-3">
+          <div>
+            <div className="text-sm font-medium">Devengados</div>
+            <div className="text-[11px] text-muted-foreground">a fecha de hoy</div>
+          </div>
+          <div className="min-w-0">
+            <div className="h-3 overflow-hidden rounded-full bg-muted" style={{ width: trackWidth }}>
+              <div className="h-full" style={{ width: `${pctMaxim(meritats)}%`, background: "#1D9E75" }} />
             </div>
-          )}
-          <div className="relative w-full" style={{ overflow: "visible" }}>
-            {/* Thin bar - assigned */}
-            <div className="relative w-full" style={{ height: 10 }}>
-              <div className="absolute inset-y-0 left-0" style={{ width: `80%`, background: "#D3D1C7" }} />
-            </div>
-            {/* Thick bar - consumed */}
-            <div className="relative w-full" style={{ height: 18 }}>
-              <div className="absolute inset-y-0 left-0 flex items-center justify-end pr-2 text-xs font-semibold text-white"
-                style={{ width: `${assigned > 0 ? (consumed / assigned) * 80 : 0}%`, background: barColor }}>
-                {pct > 10 ? `${fmtDays(consumed)} días disfrutados` : ""}
-              </div>
-            </div>
-            {/* Vertical marker at 80% */}
-            <div className="absolute pointer-events-none" style={{ left: `80%`, top: 0, bottom: 0, width: 2, background: "#26215C", transform: "translateX(-1px)" }} />
-            <div
-              className="absolute"
-              style={{
-                left: `80%`,
-                top: -28,
-                transform: "translateX(-50%)",
-                fontSize: 13,
-                color: "#26215C",
-                fontWeight: 700,
-                whiteSpace: "nowrap",
-                background: "#fff",
-                padding: "2px 6px",
-                borderRadius: 4,
-                border: "1px solid #26215C",
-              }}
-            >
-              {fmtDays(assigned)} d
-            </div>
+          </div>
+          <div className="text-right text-sm font-semibold tabular-nums">
+            {fmtDays(meritats)}<span className="text-xs font-normal text-muted-foreground"> de {fmtDays(maxim)}</span>
           </div>
         </div>
-        <div className="shrink-0 flex flex-col items-center" style={{ minWidth: 72 }}>
-          <div className="rounded-full px-3 py-1 tabular-nums"
-            style={{ background: chipStyle.bg, color: chipStyle.fg, fontSize: 16, fontWeight: 700 }}>
-            {remaining >= 0 ? fmtDays(remaining) : `−${fmtDays(Math.abs(remaining))}`}
+        {/* Disfrutados */}
+        <div className="grid grid-cols-[110px_minmax(0,1fr)_78px] items-center gap-3">
+          <div>
+            <div className="text-sm font-medium">Disfrutados</div>
+            <div className="text-[11px] text-muted-foreground">en este año</div>
           </div>
-          <div className="text-[11px] text-muted-foreground mt-1">
-            {remaining >= 0 ? "días por disfrutar" : "adelantados"}
+          <div className="min-w-0">
+            <div className="h-3 overflow-hidden rounded-full bg-muted" style={{ width: trackWidth }}>
+              <div className="h-full" style={{ width: `${pctMaxim(Math.min(consumed, maxim))}%`, background: consumedOver ? "#A32D2D" : "#0F6E56" }} />
+            </div>
           </div>
+          <div className={`text-right text-sm font-semibold tabular-nums ${consumedOver ? "text-red-600" : ""}`}>
+            {fmtDays(consumed)}<span className="text-xs font-normal text-muted-foreground"> de {fmtDays(maxim)}</span>
+          </div>
+        </div>
+        {/* Eje */}
+        <div className="grid grid-cols-[110px_minmax(0,1fr)_78px] gap-3">
+          <div />
+          <div className="flex justify-between text-[10px] text-muted-foreground tabular-nums">
+            <span>0</span>
+            <span>{fmtDays(anual / 2)}</span>
+            <span>{fmtDays(anual)}</span>
+          </div>
+          <div />
+        </div>
+        {perduts > 0 && (
+          <div className="text-xs text-amber-700">
+            {fmtDays(perduts)} d perdidos {isFD ? "por F.DISC" : "por periodos sin actividad"} → máximo real de este año: {fmtDays(maxim)} d
+          </div>
+        )}
+      </div>
+
+      <div
+        className="mt-4 flex items-center gap-3 rounded-lg px-4 py-3"
+        style={disponibles >= 0 ? { background: "#E1F5EE", color: "#085041" } : { background: "#FDEAEA", color: "#A32D2D" }}
+      >
+        <div className="tabular-nums" style={{ fontSize: 28, fontWeight: 700, lineHeight: 1 }}>
+          {disponibles >= 0 ? fmtDays(disponibles) : `−${fmtDays(Math.abs(disponibles))}`}
+        </div>
+        <div className="text-sm">
+          {disponibles >= 0 ? "días disponibles hoy (devengados − disfrutados)" : "días adelantados"}
         </div>
       </div>
 

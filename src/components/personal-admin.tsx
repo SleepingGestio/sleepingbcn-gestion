@@ -27,7 +27,7 @@ import { usePermissions } from "@/hooks/use-permissions";
 import { useCurrentPersonal } from "@/hooks/use-current-personal";
 import { formatHHMM } from "@/lib/utils";
 import { roleColor } from "@/lib/role-colors";
-import { DIAS_PROMEDIO_MES, isFijoDiscontinuo, diesMeritatsFD } from "@/lib/vacaciones";
+import { DIAS_PROMEDIO_MES, isFijoDiscontinuo, desgloseVacances } from "@/lib/vacaciones";
 import { HHMMInput } from "@/components/hhmm-input";
 
 type Persona = {
@@ -476,7 +476,6 @@ function PersonaDialog({
   const vacByInici = useMemo(() => {
     const map = new Map<string, { dies: number; consumed: number }>();
     const todayISO = new Date().toISOString().slice(0, 10);
-    const isFD = isFijoDiscontinuo(persona?.tipo_contrato);
     const vacRows = vacAnyQ.data ?? [];
     const ajustos = vacAjustosQ.data ?? [];
     for (const p of periodos) {
@@ -489,16 +488,14 @@ function PersonaDialog({
       for (const a of ajustos) {
         if (a.fecha >= row.data_inici_any && a.fecha <= row.data_fi_any) days.add(a.fecha);
       }
-      // Fijo discontinuo sin saldar: se muestran los días devengados, no el máximo anual.
+      // Días devengados (proporcionales al tiempo activo) para todos los tipos de contrato.
       const dies = row.decisio_saldo != null
         ? Number(row.dies_meritats ?? row.dies_assignats ?? 0)
-        : isFD
-          ? diesMeritatsFD(periodos, row.data_inici_any, row.data_fi_any, Number(row.dies_assignats ?? 0), todayISO)
-          : Number(row.dies_assignats ?? 0);
+        : desgloseVacances(periodos, row.data_inici_any, row.data_fi_any, Number(row.dies_assignats ?? 0), todayISO).meritats;
       map.set(p.fecha_inicio, { dies, consumed: days.size });
     }
     return map;
-  }, [periodos, vacAnyQ.data, vacAjustosQ.data, persona?.tipo_contrato]);
+  }, [periodos, vacAnyQ.data, vacAjustosQ.data]);
 
   // Período activo (editable)
   const [periodInicio, setPeriodInicio] = useState<string>("");
@@ -1195,14 +1192,12 @@ function BaixaDialog({
           .lte("fecha", y.data_fi_any),
       ]);
       if (cancelled) return;
-      const dev = isFijoDiscontinuo(persona.tipo_contrato)
-        ? diesMeritatsFD(pers ?? [], y.data_inici_any, y.data_fi_any, Number(y.dies_assignats ?? 0), fecha)
-        : Number(y.dies_assignats ?? 0);
+      const dev = desgloseVacances(pers ?? [], y.data_inici_any, y.data_fi_any, Number(y.dies_assignats ?? 0), fecha).meritats;
       setDevengados(String(dev));
       setDisfrutados(new Set((ajs ?? []).map((r: { fecha: string }) => r.fecha)).size);
     })();
     return () => { cancelled = true; };
-  }, [fecha, persona.id_persona, persona.tipo_contrato]);
+  }, [fecha, persona.id_persona]);
 
   const devN = Number(devengados) || 0;
   const saldo = devN - disfrutados;

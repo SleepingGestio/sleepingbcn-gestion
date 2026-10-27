@@ -20,21 +20,30 @@ function diaUTC(iso: string): number {
   return Math.round(Date.UTC(y, m - 1, d) / MS_DIA);
 }
 
-// Días de vacaciones devengados por un fijo discontinuo en un año contractual,
-// hasta `asOf`. Fórmula: 2,5 d × (días activos / DIAS_PROMEDIO_MES), redondeado
-// al día y limitado al máximo anual. Ej.: 6 meses activos → 15 días.
+// Desglose de vacaciones de un año contractual para CUALQUIER tipo de contrato.
+// Los días devengados son proporcionales al tiempo ACTIVO dentro del año
+// (cubierto por algún período de actividad): 2,5 d por mes activo, redondeado al
+// día y limitado a los días anuales. Se calcula hasta `asOf` (hoy en el año en
+// curso; el fin de año en los pasados). Un parón o cualquier hueco entre períodos
+// es simplemente tiempo sin período activo.
+//   meritats: días devengados hasta `asOf`.
+//   perduts:  días no devengados por tiempo inactivo ya transcurrido.
+//   maxim:    máximo real del año = anual − perdidos (nunca menos que lo devengado).
 // Los períodos se recortan a la ventana [anyIni, min(anyFi, asOf)] y se fusionan
-// si se solapan o son contiguos para no contar ningún día dos veces.
-export function diesMeritatsFD(
+// si se solapan o son contiguos, para no contar ningún día dos veces.
+// Ejemplos: contrato continuo activo toda la ventana → perduts 0 y maxim = anual;
+// 3 meses activos + 3 inactivos transcurridos → meritats 8 (7,5 redondeado), perduts 8.
+export function desgloseVacances(
   periods: { fecha_inicio: string; fecha_fin: string | null }[],
   anyIni: string,
   anyFi: string,
-  maxDies: number,
+  anual: number,
   asOf: string,
-): number {
+): { meritats: number; perduts: number; maxim: number } {
   const lo = diaUTC(anyIni);
   const hi = diaUTC(anyFi < asOf ? anyFi : asOf);
-  if (hi < lo) return 0;
+  if (hi < lo) return { meritats: 0, perduts: 0, maxim: anual };
+  const elapsedDays = hi - lo + 1;
   const ivs: [number, number][] = [];
   for (const p of periods) {
     const s = Math.max(diaUTC(p.fecha_inicio), lo);
@@ -52,6 +61,10 @@ export function diesMeritatsFD(
     }
   }
   if (cur) activeDays += cur[1] - cur[0] + 1;
-  const earned = Math.round(DIES_VACANCES_PER_MES * (activeDays / DIAS_PROMEDIO_MES));
-  return Math.min(earned, maxDies);
+  const meritats = Math.min(Math.round(DIES_VACANCES_PER_MES * (activeDays / DIAS_PROMEDIO_MES)), anual);
+  const perduts = Math.max(
+    0,
+    Math.min(Math.round(DIES_VACANCES_PER_MES * ((elapsedDays - activeDays) / DIAS_PROMEDIO_MES)), anual - meritats),
+  );
+  return { meritats, perduts, maxim: Math.max(meritats, anual - perduts) };
 }
