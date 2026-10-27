@@ -14,6 +14,89 @@ export type Database = {
   }
   pricing: {
     Tables: {
+      ajustes_dia: {
+        Row: {
+          aplica_a: string
+          created_at: string
+          estancia_minima: number | null
+          fecha: string
+          id: string
+          id_negocio: string
+          precio_manual: number | null
+          temporada_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          aplica_a: string
+          created_at?: string
+          estancia_minima?: number | null
+          fecha: string
+          id?: string
+          id_negocio?: string
+          precio_manual?: number | null
+          temporada_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          aplica_a?: string
+          created_at?: string
+          estancia_minima?: number | null
+          fecha?: string
+          id?: string
+          id_negocio?: string
+          precio_manual?: number | null
+          temporada_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ajustes_dia_temporada_id_fkey"
+            columns: ["temporada_id"]
+            isOneToOne: false
+            referencedRelation: "temporadas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      dia_semana_periodos: {
+        Row: {
+          anio: number
+          aplica_a: string
+          coef_entresemana: number
+          coef_finsemana: number
+          created_at: string
+          fecha_fin: string
+          fecha_inicio: string
+          id: string
+          id_negocio: string
+          updated_at: string
+        }
+        Insert: {
+          anio: number
+          aplica_a: string
+          coef_entresemana: number
+          coef_finsemana: number
+          created_at?: string
+          fecha_fin: string
+          fecha_inicio: string
+          id?: string
+          id_negocio?: string
+          updated_at?: string
+        }
+        Update: {
+          anio?: number
+          aplica_a?: string
+          coef_entresemana?: number
+          coef_finsemana?: number
+          created_at?: string
+          fecha_fin?: string
+          fecha_inicio?: string
+          id?: string
+          id_negocio?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       eventos: {
         Row: {
           afluencia_estimada: number | null
@@ -111,6 +194,39 @@ export type Database = {
           },
         ]
       }
+      festivos: {
+        Row: {
+          ambitos: string[]
+          created_at: string
+          detalle: string | null
+          fecha: string
+          id: string
+          id_negocio: string
+          nombre: string
+          updated_at: string
+        }
+        Insert: {
+          ambitos?: string[]
+          created_at?: string
+          detalle?: string | null
+          fecha: string
+          id?: string
+          id_negocio?: string
+          nombre: string
+          updated_at?: string
+        }
+        Update: {
+          ambitos?: string[]
+          created_at?: string
+          detalle?: string | null
+          fecha?: string
+          id?: string
+          id_negocio?: string
+          nombre?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       plantillas_eventos: {
         Row: {
           activo: boolean
@@ -151,22 +267,31 @@ export type Database = {
         Row: {
           created_at: string
           descripcion: string | null
+          estado_verificacion: string | null
           id: string
           plantilla_id: string
+          revision_forzada: boolean
+          ultima_verificacion: string | null
           url: string
         }
         Insert: {
           created_at?: string
           descripcion?: string | null
+          estado_verificacion?: string | null
           id?: string
           plantilla_id: string
+          revision_forzada?: boolean
+          ultima_verificacion?: string | null
           url: string
         }
         Update: {
           created_at?: string
           descripcion?: string | null
+          estado_verificacion?: string | null
           id?: string
           plantilla_id?: string
+          revision_forzada?: boolean
+          ultima_verificacion?: string | null
           url?: string
         }
         Relationships: [
@@ -178,6 +303,36 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      precio_base: {
+        Row: {
+          anio: number
+          aplica_a: string
+          created_at: string
+          id: string
+          id_negocio: string
+          precio: number
+          updated_at: string
+        }
+        Insert: {
+          anio: number
+          aplica_a: string
+          created_at?: string
+          id?: string
+          id_negocio?: string
+          precio: number
+          updated_at?: string
+        }
+        Update: {
+          anio?: number
+          aplica_a?: string
+          created_at?: string
+          id?: string
+          id_negocio?: string
+          precio?: number
+          updated_at?: string
+        }
+        Relationships: []
       }
       temporada_periodos: {
         Row: {
@@ -255,7 +410,20 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      asignar_temporada_rango: {
+        Args: {
+          p_anio: number
+          p_aplica_a: string
+          p_codigo?: string
+          p_coeficiente?: number
+          p_estancia_minima?: number
+          p_fecha_fin: string
+          p_fecha_inicio: string
+          p_nombre?: string
+          p_temporada_id?: string
+        }
+        Returns: string
+      }
     }
     Enums: {
       [_ in never]: never
@@ -1717,7 +1885,11 @@ export type Database = {
           creado_por: number | null
           data_fi_any: string
           data_inici_any: string
+          data_saldo: string | null
+          decisio_saldo: string | null
           dies_assignats: number | null
+          dies_liquidats: number | null
+          dies_meritats: number | null
           hores_assignades: number
           hores_calculades: number | null
           id_persona: number
@@ -1729,7 +1901,11 @@ export type Database = {
           creado_por?: number | null
           data_fi_any: string
           data_inici_any: string
+          data_saldo?: string | null
+          decisio_saldo?: string | null
           dies_assignats?: number | null
+          dies_liquidats?: number | null
+          dies_meritats?: number | null
           hores_assignades: number
           hores_calculades?: number | null
           id_persona: number
@@ -1741,7 +1917,11 @@ export type Database = {
           creado_por?: number | null
           data_fi_any?: string
           data_inici_any?: string
+          data_saldo?: string | null
+          decisio_saldo?: string | null
           dies_assignats?: number | null
+          dies_liquidats?: number | null
+          dies_meritats?: number | null
           hores_assignades?: number
           hores_calculades?: number | null
           id_persona?: number
