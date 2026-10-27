@@ -1558,6 +1558,165 @@ export type Database = {
         }
         Relationships: []
       }
+      partee_establiment: {
+        Row: {
+          activo: boolean
+          creado_en: string | null
+          id_apt: number
+          nombre_partee: string | null
+          partee_est_id: number
+        }
+        Insert: {
+          activo?: boolean
+          creado_en?: string | null
+          id_apt: number
+          nombre_partee?: string | null
+          partee_est_id: number
+        }
+        Update: {
+          activo?: boolean
+          creado_en?: string | null
+          id_apt?: number
+          nombre_partee?: string | null
+          partee_est_id?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "partee_establiment_id_apt_fkey"
+            columns: ["id_apt"]
+            isOneToOne: true
+            referencedRelation: "apartamentos"
+            referencedColumns: ["id_apt"]
+          },
+        ]
+      }
+      partee_reclamacio: {
+        Row: {
+          canal: string | null
+          creado_en: string | null
+          creado_por: number | null
+          enviada_en: string
+          id_reclamacion: number
+          id_registre: number
+          nota: string | null
+        }
+        Insert: {
+          canal?: string | null
+          creado_en?: string | null
+          creado_por?: number | null
+          enviada_en?: string
+          id_reclamacion?: never
+          id_registre: number
+          nota?: string | null
+        }
+        Update: {
+          canal?: string | null
+          creado_en?: string | null
+          creado_por?: number | null
+          enviada_en?: string
+          id_reclamacion?: never
+          id_registre?: number
+          nota?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "partee_reclamacio_creado_por_fkey"
+            columns: ["creado_por"]
+            isOneToOne: false
+            referencedRelation: "personal"
+            referencedColumns: ["id_persona"]
+          },
+          {
+            foreignKeyName: "partee_reclamacio_id_registre_fkey"
+            columns: ["id_registre"]
+            isOneToOne: false
+            referencedRelation: "partee_registre"
+            referencedColumns: ["id_registre"]
+          },
+        ]
+      }
+      partee_registre: {
+        Row: {
+          actualizado_en: string | null
+          checkin_url: string | null
+          creado_en: string | null
+          estado: string
+          fecha_checkin: string
+          id_apt: number
+          id_registre: number
+          is_borrador: boolean | null
+          num_lote: string | null
+          num_viajeros: number | null
+          numero_reserva: string
+          parte_enviado_en: string | null
+          parte_id: number | null
+          partee_reservation_id: number | null
+          ses_codigo_estado: number | null
+          ses_desc: string | null
+          ultimo_sync: string | null
+        }
+        Insert: {
+          actualizado_en?: string | null
+          checkin_url?: string | null
+          creado_en?: string | null
+          estado?: string
+          fecha_checkin: string
+          id_apt: number
+          id_registre?: never
+          is_borrador?: boolean | null
+          num_lote?: string | null
+          num_viajeros?: number | null
+          numero_reserva: string
+          parte_enviado_en?: string | null
+          parte_id?: number | null
+          partee_reservation_id?: number | null
+          ses_codigo_estado?: number | null
+          ses_desc?: string | null
+          ultimo_sync?: string | null
+        }
+        Update: {
+          actualizado_en?: string | null
+          checkin_url?: string | null
+          creado_en?: string | null
+          estado?: string
+          fecha_checkin?: string
+          id_apt?: number
+          id_registre?: never
+          is_borrador?: boolean | null
+          num_lote?: string | null
+          num_viajeros?: number | null
+          numero_reserva?: string
+          parte_enviado_en?: string | null
+          parte_id?: number | null
+          partee_reservation_id?: number | null
+          ses_codigo_estado?: number | null
+          ses_desc?: string | null
+          ultimo_sync?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "partee_registre_id_apt_fkey"
+            columns: ["id_apt"]
+            isOneToOne: false
+            referencedRelation: "apartamentos"
+            referencedColumns: ["id_apt"]
+          },
+          {
+            foreignKeyName: "partee_registre_numero_reserva_fkey"
+            columns: ["numero_reserva"]
+            isOneToOne: false
+            referencedRelation: "reservas_kb"
+            referencedColumns: ["Número"]
+          },
+          {
+            foreignKeyName: "partee_registre_numero_reserva_fkey"
+            columns: ["numero_reserva"]
+            isOneToOne: false
+            referencedRelation: "v_reservas_por_apartamento"
+            referencedColumns: ["Número"]
+          },
+        ]
+      }
       personal: {
         Row: {
           activo: boolean | null
