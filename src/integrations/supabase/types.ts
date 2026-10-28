@@ -1590,6 +1590,52 @@ export type Database = {
           },
         ]
       }
+      partee_exclusion: {
+        Row: {
+          creado_en: string
+          creado_por: number | null
+          motivo: string
+          nota: string | null
+          numero_reserva: string
+        }
+        Insert: {
+          creado_en?: string
+          creado_por?: number | null
+          motivo: string
+          nota?: string | null
+          numero_reserva: string
+        }
+        Update: {
+          creado_en?: string
+          creado_por?: number | null
+          motivo?: string
+          nota?: string | null
+          numero_reserva?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "partee_exclusion_creado_por_fkey"
+            columns: ["creado_por"]
+            isOneToOne: false
+            referencedRelation: "personal"
+            referencedColumns: ["id_persona"]
+          },
+          {
+            foreignKeyName: "partee_exclusion_numero_reserva_fkey"
+            columns: ["numero_reserva"]
+            isOneToOne: true
+            referencedRelation: "reservas_kb"
+            referencedColumns: ["Número"]
+          },
+          {
+            foreignKeyName: "partee_exclusion_numero_reserva_fkey"
+            columns: ["numero_reserva"]
+            isOneToOne: true
+            referencedRelation: "v_reservas_por_apartamento"
+            referencedColumns: ["Número"]
+          },
+        ]
+      }
       partee_reclamacio: {
         Row: {
           canal: string | null
