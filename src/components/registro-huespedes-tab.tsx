@@ -27,6 +27,7 @@ import {
 } from "@/components/partee-registre-bits";
 import { ReclamacionesBlock } from "@/components/registro-reclamaciones";
 import { ExclusionHeader, useExclusiones } from "@/components/registro-exclusion";
+import { RefreshBar } from "@/components/registro-refresh";
 
 export function RegistroHuespedesTab({
   numero,
@@ -70,6 +71,7 @@ export function RegistroHuespedesTab({
       <TooltipProvider delayDuration={200}>
         <div className="space-y-3">
           <ExclusionHeader numero={numero} exclusion={exclusion} />
+          <RefreshBar numero={numero} lastSync={null} excluded={!!exclusion} />
           <div className="rounded-md border border-dashed p-6 text-center text-sm text-muted-foreground">
             Sin datos de Partee todavía (la sincronización cubre las entradas de ayer a 7 días vista).
           </div>
@@ -79,12 +81,14 @@ export function RegistroHuespedesTab({
   }
 
   const today = todayMadrid();
+  const lastSync = rows.reduce<string | null>((max, r) => (r.ultimo_sync && (!max || r.ultimo_sync > max) ? r.ultimo_sync : max), null);
   const expected = expectedViajeros({ huespedes, menores, exentos }, countRooms(habitaciones));
 
   return (
     <TooltipProvider delayDuration={200}>
       <div className="space-y-3">
         <ExclusionHeader numero={numero} exclusion={exclusion} />
+        <RefreshBar numero={numero} lastSync={lastSync} excluded={!!exclusion} />
         {rows.map((r) => {
           const rowIn = { ...r, excluida: !!exclusion };
           const alert = alertLevel(rowIn, { today, expected });

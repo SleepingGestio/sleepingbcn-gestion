@@ -3339,6 +3339,7 @@ export type Database = {
         Returns: undefined
       }
       is_gestor_or_admin: { Args: never; Returns: boolean }
+      partee_refresh_upsert: { Args: { p_rows: Json }; Returns: Json }
       personal_codigos_by_ids: {
         Args: { p_ids: number[] }
         Returns: {

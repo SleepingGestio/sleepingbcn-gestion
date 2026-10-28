@@ -6,6 +6,7 @@ import { AppShell } from "@/components/app-shell";
 import { ReservaDetail } from "@/components/reserva-detail";
 import { AddReclamacionDialog } from "@/components/registro-reclamaciones";
 import { ExcluirReservaDialog, IncluirReservaDialog, useExclusiones } from "@/components/registro-exclusion";
+import { RefreshButton } from "@/components/registro-refresh";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -475,6 +476,7 @@ function RegistreHostesPage() {
                             <Button variant="ghost" size="icon" aria-label="Ver registro de huéspedes" onClick={() => setSelected(r.numero_reserva)}>
                               <Eye className="h-4 w-4" />
                             </Button>
+                            {editor && !exclusion && <RefreshButton numero={r.numero_reserva} compact />}
                             {editor && (
                               <ExclusionAction
                                 excluded={!!exclusion}
@@ -542,6 +544,7 @@ function RegistreHostesPage() {
                             <Button variant="ghost" size="icon" aria-label="Ver registro de huéspedes" onClick={() => setSelected(r.numero_reserva)}>
                               <Eye className="h-4 w-4" />
                             </Button>
+                            {editor && !exclusion && <RefreshButton numero={r.numero_reserva} compact />}
                             {editor && (
                               <ExclusionAction
                                 excluded={!!exclusion}

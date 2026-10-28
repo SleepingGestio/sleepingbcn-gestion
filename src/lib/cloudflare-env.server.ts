@@ -8,6 +8,8 @@ interface CloudflareEnv {
   // caer a process.env y fallar con un mensaje claro si tampoco están ahí.
   PCLOUD_TOKEN?: string;
   GITHUB_TOKEN?: string;
+  // Token de la API de Partee para "Actualizar ahora" (solo secreto del Worker, nunca vars).
+  PARTEE_API_TOKEN?: string;
 }
 
 export function getCloudflareEnv(): CloudflareEnv {
