@@ -465,3 +465,103 @@ export function sortRows<T>(rows: readonly T[], key: SortKey, dir: SortDir, pick
     .sort((a, b) => cmp(a.s, b.s) || a.i - b.i)
     .map((x) => x.row);
 }
+
+// ---------- one visible "situación" per row ----------
+
+export type SituacionCode =
+  | "excluida"
+  | "anulado"
+  | "error"
+  | "manual"
+  | "finalizado"
+  | "no_generado"
+  | "generado_sin_registros"
+  | "completado"
+  | "parcial"
+  | "en_curso"
+  | "otro";
+
+export interface Situacion {
+  code: SituacionCode;
+  label: string;
+}
+
+export const SITUACION_LABEL: Record<Exclude<SituacionCode, "otro">, string> = {
+  excluida: "Excluida",
+  anulado: "Anulado",
+  error: "Error de sincronización",
+  manual: "Marcado a mano",
+  finalizado: "Finalizado",
+  no_generado: "No generado",
+  generado_sin_registros: "Generado sin registros",
+  completado: "Completado",
+  parcial: "Parcial (Faltan registros)",
+  en_curso: "En curso",
+};
+
+/** Options of the "Estado" filter select (short labels), in display order. */
+export const SITUACIONES_FILTRO: { code: SituacionCode; label: string }[] = [
+  { code: "no_generado", label: "No generado" },
+  { code: "generado_sin_registros", label: "Generado sin registros" },
+  { code: "parcial", label: "Parcial" },
+  { code: "completado", label: "Completado" },
+  { code: "en_curso", label: "En curso" },
+  { code: "finalizado", label: "Finalizado" },
+  { code: "anulado", label: "Anulado" },
+  { code: "error", label: "Error" },
+  { code: "manual", label: "Marcado a mano" },
+];
+
+/**
+ * The single, action-oriented label shown for a row (instead of Partee's raw estado + a second
+ * interpretation line). The colour still comes from alertLevel; this only decides the words.
+ */
+export function situacionRegistro(row: AlertRowInput, ctx: { expected: Expected }): Situacion {
+  const mk = (code: Exclude<SituacionCode, "otro">): Situacion => ({ code, label: SITUACION_LABEL[code] });
+  if (row.excluida) return mk("excluida");
+  switch (row.estado) {
+    case "anulado":
+      return mk("anulado");
+    case "error":
+      return mk("error");
+    case "manual":
+      return mk("manual");
+    case "finalizado":
+      return mk("finalizado");
+    case "sin_registro":
+      return mk("no_generado");
+    case "iniciado":
+      return mk("generado_sin_registros");
+    case "borrador": {
+      const n = row.num_viajeros ?? 0;
+      if (n === 0) return mk("generado_sin_registros");
+      if (row.registro_confirmado) return mk("completado");
+      const ex = ctx.expected.expected;
+      if (ex === null) return mk("en_curso");
+      return n >= ex ? mk("completado") : mk("parcial");
+    }
+  }
+  // Defensive default: a state we do not know yet shows its raw label.
+  return { code: "otro", label: ESTADO_LABEL[row.estado] ?? row.estado };
+}
+
+/**
+ * Colour of the situation pill: green for "Completado" (even if the alert is only informational,
+ * e.g. "Se finaliza esta noche"), but an overdue parte keeps its alert colour.
+ */
+export function situacionLevel(situacion: Situacion, alert: Alert): AlertLevel {
+  return situacion.code === "completado" && alert.code !== "vencido" ? "ok" : alert.level;
+}
+
+/** Tooltip of the situation pill: the technical detail that the label hides. */
+export function situacionTooltip(row: AlertRowInput, expected: Expected): string {
+  const parts = [`Estado en Partee: ${row.estado}`];
+  if (row.num_viajeros !== null && row.num_viajeros !== undefined) {
+    const n = row.num_viajeros;
+    const registrados = n === 1 ? "1 viajero registrado" : `${n} viajeros registrados`;
+    const ex = expected.expected;
+    if (ex === null) parts.push(registrados);
+    else parts.push(`${registrados} de ${ex === 1 ? "1 previsto" : `${ex} previstos`}`);
+  }
+  return parts.join(". ") + ".";
+}

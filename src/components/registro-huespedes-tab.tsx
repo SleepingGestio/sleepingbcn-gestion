@@ -10,6 +10,9 @@ import {
   countRooms,
   expectedViajeros,
   fmtAgo,
+  situacionLevel,
+  situacionRegistro,
+  situacionTooltip,
   todayMadrid,
   viajerosTone,
 } from "@/lib/partee-registre";
@@ -19,7 +22,7 @@ import {
   LEVEL_TEXT,
   noLinkReason,
   OpenLinkButton,
-  RegistreEstadoBadge,
+  SituacionPill,
   ViajerosCell,
 } from "@/components/partee-registre-bits";
 import { ReclamacionesBlock } from "@/components/registro-reclamaciones";
@@ -85,12 +88,19 @@ export function RegistroHuespedesTab({
         {rows.map((r) => {
           const rowIn = { ...r, excluida: !!exclusion };
           const alert = alertLevel(rowIn, { today, expected });
+          const situacion = situacionRegistro(rowIn, { expected });
           return (
             <div key={r.id_registre} className="space-y-2 rounded-md border p-3">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="text-sm font-medium">{r.apartamentos?.nombre ?? `Apartamento ${r.id_apt}`}</span>
-                <RegistreEstadoBadge estado={r.estado} level={alert.level} />
-                <span className={`text-sm ${LEVEL_TEXT[alert.level]}`}>{alert.label}</span>
+                <SituacionPill
+                  situacion={situacion}
+                  level={situacionLevel(situacion, alert)}
+                  tooltip={situacionTooltip(rowIn, expected)}
+                />
+                {alert.code === "vencido" && (
+                  <span className={`text-sm ${LEVEL_TEXT[alert.level]}`}>{alert.label}</span>
+                )}
               </div>
 
               <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">

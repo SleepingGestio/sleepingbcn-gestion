@@ -12,6 +12,11 @@ import {
   fmtMadridDateTime,
   isStaleRegistre,
   MOTIVO_EXCLUSION_LABEL,
+  SITUACION_LABEL,
+  SITUACIONES_FILTRO,
+  situacionLevel,
+  situacionRegistro,
+  situacionTooltip,
   MOTIVOS_EXCLUSION,
   madridLocalToIso,
   reclamacionHint,
@@ -534,5 +539,135 @@ describe("reservas excluidas (No requiere registro)", () => {
     assert.equal(MOTIVO_EXCLUSION_LABEL.extension, "Extensión");
     assert.equal(MOTIVO_EXCLUSION_LABEL.reserva_privada, "Reserva privada");
     assert.equal(MOTIVO_EXCLUSION_LABEL.otros, "Otros");
+  });
+});
+
+describe("situacionRegistro (one visible label)", () => {
+  const sit = (estado: string, n: number | null, ex: Expected = UNKNOWN, extra: Record<string, unknown> = {}) =>
+    situacionRegistro({ estado, num_viajeros: n, fecha_checkin: day(2), ...extra }, { expected: ex });
+  const pair = (r: { code: string; label: string }) => [r.code, r.label];
+
+  it("excluded beats everything", () => {
+    for (const estado of ["sin_registro", "iniciado", "borrador", "finalizado", "anulado", "error", "manual"]) {
+      assert.deepEqual(pair(sit(estado, 2, exact(2), { excluida: true, registro_confirmado: true })), ["excluida", "Excluida"]);
+    }
+  });
+  it("anulado / error / manual / finalizado", () => {
+    assert.deepEqual(pair(sit("anulado", 2)), ["anulado", "Anulado"]);
+    assert.deepEqual(pair(sit("error", null)), ["error", "Error de sincronización"]);
+    assert.deepEqual(pair(sit("manual", null)), ["manual", "Marcado a mano"]);
+    assert.deepEqual(pair(sit("finalizado", 3, exact(3))), ["finalizado", "Finalizado"]);
+    assert.deepEqual(pair(sit("finalizado", 0, exact(3))), ["finalizado", "Finalizado"]);
+  });
+  it("sin_registro -> No generado", () => {
+    assert.deepEqual(pair(sit("sin_registro", null)), ["no_generado", "No generado"]);
+  });
+  it("iniciado, and borrador with 0 viajeros -> Generado sin registros", () => {
+    assert.deepEqual(pair(sit("iniciado", null)), ["generado_sin_registros", "Generado sin registros"]);
+    assert.deepEqual(pair(sit("borrador", 0, exact(2))), ["generado_sin_registros", "Generado sin registros"]);
+    assert.deepEqual(pair(sit("borrador", null, exact(2))), ["generado_sin_registros", "Generado sin registros"]);
+    // even if somebody confirmed it by hand, with no viajeros nothing was registered
+    assert.equal(sit("borrador", 0, exact(2), { registro_confirmado: true }).code, "generado_sin_registros");
+  });
+  it("borrador with viajeros: manual confirmation -> Completado, even if fewer than expected", () => {
+    assert.deepEqual(pair(sit("borrador", 1, exact(3), { registro_confirmado: true })), ["completado", "Completado"]);
+    assert.equal(sit("borrador", 1, UNKNOWN, { registro_confirmado: true }).code, "completado");
+  });
+  it("borrador with viajeros: n >= expected -> Completado (also n > expected)", () => {
+    assert.deepEqual(pair(sit("borrador", 3, exact(3))), ["completado", "Completado"]);
+    assert.deepEqual(pair(sit("borrador", 4, exact(3))), ["completado", "Completado"]);
+    assert.deepEqual(pair(sit("borrador", 5, approx(4))), ["completado", "Completado"]);
+  });
+  it("borrador with viajeros: n < expected -> Parcial (Faltan registros)", () => {
+    assert.deepEqual(pair(sit("borrador", 1, exact(2))), ["parcial", "Parcial (Faltan registros)"]);
+    assert.deepEqual(pair(sit("borrador", 1, approx(6))), ["parcial", "Parcial (Faltan registros)"]);
+  });
+  it("borrador with viajeros and unknown expected (multi-unit) -> En curso", () => {
+    assert.deepEqual(pair(sit("borrador", 2, UNKNOWN)), ["en_curso", "En curso"]);
+  });
+  it("unknown estado falls back to its raw label", () => {
+    assert.deepEqual(pair(sit("algo_nuevo", 1)), ["otro", "algo_nuevo"]);
+  });
+  it("no situation label contains 'Borrador'", () => {
+    const combos: Array<[string, number | null, Expected, Record<string, unknown>]> = [];
+    for (const estado of ["sin_registro", "iniciado", "borrador", "finalizado", "anulado", "error", "manual"]) {
+      for (const n of [null, 0, 1, 3]) {
+        for (const ex of [UNKNOWN, exact(2), approx(2)]) {
+          for (const extra of [{}, { registro_confirmado: true }, { excluida: true }]) combos.push([estado, n, ex, extra]);
+        }
+      }
+    }
+    for (const [estado, n, ex, extra] of combos) {
+      assert.ok(!/borrador/i.test(sit(estado, n, ex, extra).label), `${estado}/${n}`);
+    }
+    for (const label of Object.values(SITUACION_LABEL)) assert.ok(!/borrador/i.test(label));
+    for (const o of SITUACIONES_FILTRO) assert.ok(!/borrador/i.test(o.label));
+  });
+  it("the filter options cover every situation code except excluida and otro", () => {
+    const codes = SITUACIONES_FILTRO.map((o) => o.code).sort();
+    const all = (Object.keys(SITUACION_LABEL) as string[]).filter((c) => c !== "excluida").sort();
+    assert.deepEqual(codes, all);
+  });
+  it("alertLevel is untouched by the new label (same level/code as before)", () => {
+    const a1 = alertLevel({ estado: "borrador", num_viajeros: 1, fecha_checkin: day(2) }, { today: TODAY, expected: exact(3) });
+    assert.deepEqual([a1.level, a1.code, a1.label], ["info", "faltan_viajeros", "Faltan viajeros por registrar (1 de 3)"]);
+    const a2 = alertLevel({ estado: "borrador", num_viajeros: 0, fecha_checkin: day(-1) }, { today: TODAY, expected: UNKNOWN });
+    assert.deepEqual([a2.level, a2.code, a2.label], ["danger", "vencido", "Parte vencido sin finalizar"]);
+  });
+});
+
+describe("situacionTooltip", () => {
+  it("shows the raw Partee estado and the viajeros when known", () => {
+    assert.equal(
+      situacionTooltip({ estado: "borrador", num_viajeros: 1, fecha_checkin: day(2) }, exact(2)),
+      "Estado en Partee: borrador. 1 viajero registrado de 2 previstos.",
+    );
+    assert.equal(
+      situacionTooltip({ estado: "borrador", num_viajeros: 2, fecha_checkin: day(2) }, UNKNOWN),
+      "Estado en Partee: borrador. 2 viajeros registrados.",
+    );
+    assert.equal(
+      situacionTooltip({ estado: "sin_registro", num_viajeros: null, fecha_checkin: day(2) }, exact(2)),
+      "Estado en Partee: sin_registro.",
+    );
+  });
+  it("singular for 1 viajero and for 1 previsto, plural otherwise", () => {
+    const row = (n: number | null) => ({ estado: "borrador", num_viajeros: n, fecha_checkin: day(2) });
+    assert.equal(situacionTooltip(row(1), UNKNOWN), "Estado en Partee: borrador. 1 viajero registrado.");
+    assert.equal(situacionTooltip(row(1), exact(1)), "Estado en Partee: borrador. 1 viajero registrado de 1 previsto.");
+    assert.equal(situacionTooltip(row(2), exact(1)), "Estado en Partee: borrador. 2 viajeros registrados de 1 previsto.");
+    assert.equal(situacionTooltip(row(0), exact(3)), "Estado en Partee: borrador. 0 viajeros registrados de 3 previstos.");
+  });
+});
+
+describe("situacionLevel (pill colour)", () => {
+  const both = (estado: string, d: number, n: number | null, ex: Expected, extra: Record<string, unknown> = {}) => {
+    const row = { estado, num_viajeros: n, fecha_checkin: day(d), ...extra };
+    return { s: situacionRegistro(row, { expected: ex }), a: alertLevel(row, { today: TODAY, expected: ex }) };
+  };
+  it("completado with an informational alert is green", () => {
+    const { s, a } = both("borrador", 0, 2, exact(2)); // n >= expected on entry day -> info "Se finaliza esta noche"
+    assert.deepEqual([s.code, a.level], ["completado", "info"]);
+    assert.equal(situacionLevel(s, a), "ok");
+  });
+  it("completado with an overdue alert keeps the danger colour", () => {
+    const { s, a } = both("borrador", -1, 2, exact(2));
+    assert.deepEqual([s.code, a.code, a.level], ["completado", "vencido", "danger"]);
+    assert.equal(situacionLevel(s, a), "danger");
+  });
+  it("any other situation keeps the alert level unchanged", () => {
+    const cases: Array<[string, number, number | null, Expected]> = [
+      ["sin_registro", 1, null, UNKNOWN], // no_generado, danger
+      ["borrador", 0, 1, exact(2)], // parcial, warning
+      ["borrador", 2, 0, exact(2)], // generado_sin_registros, warning
+      ["borrador", 2, 2, UNKNOWN], // en_curso, ok
+      ["finalizado", 2, 2, exact(2)], // finalizado, ok
+      ["anulado", 2, null, UNKNOWN], // anulado, info
+    ];
+    for (const [estado, d, n, ex] of cases) {
+      const { s, a } = both(estado, d, n, ex);
+      assert.notEqual(s.code, "completado");
+      assert.equal(situacionLevel(s, a), a.level);
+    }
   });
 });

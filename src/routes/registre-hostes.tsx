@@ -20,7 +20,7 @@ import {
   LEVEL_LABEL,
   LEVEL_TEXT,
   noLinkReason,
-  RegistreEstadoBadge,
+  SituacionPill,
   ViajerosCell,
 } from "@/components/partee-registre-bits";
 import { usePermissions } from "@/hooks/use-permissions";
@@ -32,13 +32,16 @@ import {
   countRooms,
   CANAL_LABEL,
   DEFAULT_SORT,
-  ESTADO_LABEL,
   MOTIVO_EXCLUSION_LABEL,
+  SITUACIONES_FILTRO,
   expectedViajeros,
   fmtAgo,
   isValidIso,
   reclamacionHint,
   SORT_OPTIONS,
+  situacionLevel,
+  situacionRegistro,
+  situacionTooltip,
   sortRows,
   todayMadrid,
   viajerosTone,
@@ -46,6 +49,7 @@ import {
   type ViajerosTone,
   type AlertLevel,
   type Expected,
+  type Situacion,
   type SortableRow,
   type SortDir,
   type SortKey,
@@ -66,6 +70,8 @@ interface Row {
   last: { enviada_en: string; canal: string | null } | null;
   /** Row of partee_exclusion for this reservation (all its units), or null. */
   exclusion: Exclusion | null;
+  /** The single visible label (No generado, Parcial, Completado, ...). */
+  situacion: Situacion;
 }
 
 function toSortable({ r, alert, last }: Row): SortableRow {
@@ -112,16 +118,28 @@ function SortHead({
   );
 }
 
-/** Estado pill; excluded reservations show "Excluida · {motivo}" instead. */
+/**
+ * The row's single situation pill (color = alert level). Excluded reservations show
+ * "Excluida · {motivo}". Only an overdue parte keeps a second line: it is a legal risk.
+ */
 function EstadoPill({ row }: { row: Row }) {
-  if (row.exclusion) {
-    return (
-      <Badge variant="secondary" className="whitespace-nowrap">
-        Excluida · {MOTIVO_EXCLUSION_LABEL[row.exclusion.motivo] ?? row.exclusion.motivo}
-      </Badge>
-    );
-  }
-  return <RegistreEstadoBadge estado={row.r.estado} level={row.alert.level} />;
+  const { r, alert, exclusion, situacion, expected } = row;
+  return (
+    <div className="flex flex-col items-start gap-1">
+      {exclusion ? (
+        <Badge variant="secondary" className="whitespace-nowrap">
+          Excluida · {MOTIVO_EXCLUSION_LABEL[exclusion.motivo] ?? exclusion.motivo}
+        </Badge>
+      ) : (
+        <SituacionPill
+          situacion={situacion}
+          level={situacionLevel(situacion, alert)}
+          tooltip={situacionTooltip({ ...r, excluida: false }, expected)}
+        />
+      )}
+      {alert.code === "vencido" && <span className={cn("text-xs", LEVEL_TEXT[alert.level])}>{alert.label}</span>}
+    </div>
+  );
 }
 
 /** Icon action: "No requiere registro" (reservation level) or, if already excluded, "Volver a incluir". */
@@ -179,19 +197,19 @@ function ReclamacionCell({
   );
 }
 
-type Quick = "danger" | "warning" | "sin_registro" | "borrador0" | "finalizado" | null;
+type Quick = "danger" | "warning" | "no_generado" | "generado" | "finalizado" | null;
 
 const QUICK: { key: Exclude<Quick, null>; label: string; test: (x: Row) => boolean; tone: string }[] = [
   { key: "danger", label: "Urgentes", test: (x) => x.alert.level === "danger", tone: "text-red-700" },
   { key: "warning", label: "Avisos", test: (x) => x.alert.level === "warning", tone: "text-orange-700" },
-  { key: "sin_registro", label: "Sin registro", test: (x) => x.r.estado === "sin_registro", tone: "" },
+  { key: "no_generado", label: "No generado", test: (x) => x.situacion.code === "no_generado", tone: "" },
   {
-    key: "borrador0",
-    label: "Borrador sin viajeros",
-    test: (x) => x.r.estado === "borrador" && !(x.r.num_viajeros ?? 0),
+    key: "generado",
+    label: "Generado sin registros",
+    test: (x) => x.situacion.code === "generado_sin_registros",
     tone: "",
   },
-  { key: "finalizado", label: "Finalizados", test: (x) => x.r.estado === "finalizado", tone: "text-green-700" },
+  { key: "finalizado", label: "Finalizados", test: (x) => x.situacion.code === "finalizado", tone: "text-green-700" },
 ];
 
 const ALL = "all";
@@ -245,6 +263,7 @@ function RegistreHostesPage() {
       const exclusion = exclusiones.map.get(r.numero_reserva) ?? null;
       const rowIn = { ...r, excluida: !!exclusion };
       const alert = alertLevel(rowIn, { today, expected });
+      const situacion = situacionRegistro(rowIn, { expected });
       const last = r.partee_reclamacio?.[0] ?? null;
       return {
         r,
@@ -254,6 +273,7 @@ function RegistreHostesPage() {
         hint: reclamacionHint(alert.level, last?.enviada_en ?? null, now),
         last,
         exclusion,
+        situacion,
       };
     });
   }, [q.data, today, exclusiones.map]);
@@ -269,10 +289,10 @@ function RegistreHostesPage() {
   // Filters other than the clickable counters. Excluded rows are only here when the switch is on.
   const base = useMemo(() => {
     const t = search.trim().toLowerCase();
-    return rows.filter(({ r, alert, exclusion }) => {
+    return rows.filter(({ alert, exclusion, situacion, r }) => {
       if (exclusion && !showExcluidas) return false;
       if (level !== ALL && alert.level !== level) return false;
-      if (estado !== ALL && r.estado !== estado) return false;
+      if (estado !== ALL && situacion.code !== estado) return false;
       if (unit !== ALL && String(r.id_apt) !== unit) return false;
       if (t) {
         const hay = `${r.numero_reserva} ${r.reservas_kb?.Referencia ?? ""}`.toLowerCase();
@@ -371,8 +391,8 @@ function RegistreHostesPage() {
               <SelectTrigger><SelectValue placeholder="Estado" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value={ALL}>Todos los estados</SelectItem>
-                {Object.entries(ESTADO_LABEL).map(([k, v]) => (
-                  <SelectItem key={k} value={k}>{v}</SelectItem>
+                {SITUACIONES_FILTRO.map((o) => (
+                  <SelectItem key={o.code} value={o.code}>{o.label}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -436,10 +456,7 @@ function RegistreHostesPage() {
                           <TableCell>{r.reservas_kb?.Referencia ?? "—"}</TableCell>
                           <TableCell>{r.reservas_kb?.Portal ?? "—"}</TableCell>
                           <TableCell>
-                            <div className="flex flex-col items-start gap-1">
-                              <EstadoPill row={row} />
-                              <span className={cn("text-xs", LEVEL_TEXT[alert.level])}>{alert.label}</span>
-                            </div>
+                            <EstadoPill row={row} />
                           </TableCell>
                           <TableCell><ViajerosCell n={r.num_viajeros} expected={expected} tone={tone} /></TableCell>
                           <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
@@ -514,7 +531,6 @@ function RegistreHostesPage() {
                           </div>
                           <EstadoPill row={row} />
                         </div>
-                        <div className={cn("text-sm", LEVEL_TEXT[alert.level])}>{alert.label}</div>
                         <ReclamacionCell
                           hint={hint}
                           last={last}

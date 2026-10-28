@@ -6,10 +6,10 @@ import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import {
-  ESTADO_LABEL,
   viajerosTooltip,
   type AlertLevel,
   type Expected,
+  type Situacion,
   type ViajerosTone,
 } from "@/lib/partee-registre";
 
@@ -34,10 +34,25 @@ export const LEVEL_LABEL: Record<AlertLevel, string> = {
   ok: "Correcto",
 };
 
-/** Estado pill, coloured by the alert level of the row. */
-export function RegistreEstadoBadge({ estado, level }: { estado: string; level: AlertLevel }) {
+/** The single situation pill, coloured by the alert level of the row; the tooltip has the technical detail. */
+export function SituacionPill({
+  situacion,
+  level,
+  tooltip,
+}: {
+  situacion: Situacion;
+  level: AlertLevel;
+  tooltip: string;
+}) {
   return (
-    <Badge className={cn("whitespace-nowrap", LEVEL_STYLE[level])}>{ESTADO_LABEL[estado] ?? estado}</Badge>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span className="inline-flex cursor-help">
+          <Badge className={cn("whitespace-nowrap", LEVEL_STYLE[level])}>{situacion.label}</Badge>
+        </span>
+      </TooltipTrigger>
+      <TooltipContent className="max-w-xs">{tooltip}</TooltipContent>
+    </Tooltip>
   );
 }
 
