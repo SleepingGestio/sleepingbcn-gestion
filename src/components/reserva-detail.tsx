@@ -32,6 +32,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { fmtDate, fmtEUR, fmtNum2, resolveTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { TimeBadge } from "@/components/time-badge";
+import { RegistroHuespedesTab } from "@/components/registro-huespedes-tab";
 
 /** Nights between two "Check in"/"Check-out" ISO date strings (YYYY-MM-DD, same
  * format used everywhere else this pair is diffed, e.g. generar-limpiezas.ts's
@@ -50,6 +51,7 @@ export function ReservaDetail({
   onOpenChange,
   onSaved,
   readOnly = false,
+  initialTab,
 }: {
   numero: string | null;
   open: boolean;
@@ -57,6 +59,8 @@ export function ReservaDetail({
   onSaved?: () => void;
   /** View-only: hides/disables every mutation path (fields + save button). */
   readOnly?: boolean;
+  /** Tab to show when the dialog opens (e.g. "huespedes" from /registre-hostes). */
+  initialTab?: "gestion" | "economica" | "huespedes";
 }) {
   const [reserva, setReserva] = useState<Reserva | null>(null);
   const [g, setG] = useState<Partial<ReservaGestio>>({});
@@ -64,6 +68,9 @@ export function ReservaDetail({
   const [extrasOriginal, setExtrasOriginal] = useState<ReservaExtra[]>([]);
   const [saving, setSaving] = useState(false);
   const [activeTab, setActiveTab] = useState<"gestion" | "economica" | "huespedes">("gestion");
+  useEffect(() => {
+    if (open && initialTab) setActiveTab(initialTab);
+  }, [open, numero, initialTab]);
   const [editingLimpieza, setEditingLimpieza] = useState<Limpieza | null>(null);
   const [limpiezaLoadKey, setLimpiezaLoadKey] = useState(0);
 
@@ -786,9 +793,13 @@ export function ReservaDetail({
               </TabsContent>
 
               <TabsContent value="huespedes">
-                <div className="rounded-md border border-dashed p-8 text-center text-sm text-muted-foreground">
-                  Sin diseñar todavía — pendiente de definir qué campos van aquí.
-                </div>
+                <RegistroHuespedesTab
+                  numero={reserva["Número"]}
+                  huespedes={reserva["Huéspedes"]}
+                  menores={reserva["Huéspedes menores de edad"] ?? null}
+                  exentos={reserva["Huéspedes exentos"] ?? null}
+                  habitaciones={reserva["Habitaciones"]}
+                />
               </TabsContent>
             </Tabs>
 

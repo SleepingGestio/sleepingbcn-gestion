@@ -7,6 +7,8 @@ export type ReservaKB = {
   "Portal": string | null;
   "Estado": string | null;
   "Huéspedes": number | null;
+  "Huéspedes menores de edad"?: number | null;
+  "Huéspedes exentos"?: number | null;
   "Cobros": number | null;
   "Email": string | null;
   "Teléfono": string | null;

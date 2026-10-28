@@ -1,0 +1,222 @@
+// Registre hostes (Partee): pure logic shared by the reservation tab and the
+// /registre-hostes page. No I/O and no aliased imports, so it can be unit-tested
+// with `node --test` (see partee-registre.test.ts).
+//
+// Operational facts behind the rules:
+//  - Partee auto-finalizes a parte at 03:45 the night after the entry day, so a
+//    draft on the entry day is normal. The legal deadline is 24 h from entry.
+//  - A draft only means a check-in link was generated; num_viajeros = 0 means the
+//    guest has not started.
+//  - Partee only requires guests over 14, while the KB "Huéspedes" count sometimes
+//    includes children, so "registrados vs previstos" is approximate and is never
+//    a hard alert before the entry day.
+
+// ---------- configuration (everything tweakable lives here) ----------
+
+export const PARTEE_RULES = {
+  /** Days-before-entry windows. d = days from today to fecha_checkin. */
+  sinRegistroDangerMaxDays: 3, // d 1..3 sin_registro -> danger
+  sinRegistroWarningMaxDays: 7, // d 4..7 sin_registro -> warning (beyond: info)
+  noIniciadoWarningMaxDays: 3, // d 1..3 not started -> warning
+  noIniciadoInfoMaxDays: 7, // d 4..7 not started -> info (beyond: info too)
+  /** Time Partee finalizes the parte (shown in the entry-day label). */
+  autoFinalizeTime: "03:45",
+  /** Suffix added to comparison labels when the expected count may include children. */
+  childrenSuffix: " — puede incluir niños",
+} as const;
+
+export const COMPARISON_TOOLTIP =
+  "El número previsto viene de la reserva y puede incluir niños; Partee solo exige registrar a los mayores de 14 años";
+
+export type AlertLevel = "ok" | "info" | "warning" | "danger";
+
+export type AlertCode =
+  | "finalizado"
+  | "anulado"
+  | "error"
+  | "manual"
+  | "vencido"
+  | "hoy_se_finaliza"
+  | "hoy_incompleto"
+  | "hoy_sin_registro"
+  | "sin_enlace"
+  | "no_iniciado"
+  | "mas_de_los_previstos"
+  | "completo"
+  | "faltan_viajeros"
+  | "en_curso";
+
+export interface Alert {
+  level: AlertLevel;
+  code: AlertCode;
+  label: string;
+  /** Lower = more urgent. level rank * 1e6 + days since epoch of fecha_checkin. */
+  priority: number;
+}
+
+export const LEVEL_RANK: Record<AlertLevel, number> = { danger: 0, warning: 1, info: 2, ok: 3 };
+
+export const ESTADO_LABEL: Record<string, string> = {
+  sin_registro: "Sin registro",
+  iniciado: "Iniciado",
+  borrador: "Borrador",
+  finalizado: "Finalizado",
+  anulado: "Anulado",
+  error: "Error",
+  manual: "Manual",
+};
+
+export const ESTADOS_KB_EXCLUIDOS: ReadonlySet<string> = new Set(["Cancelada", "No show"]);
+
+// ---------- dates (Europe/Madrid) ----------
+
+const ISO_RE = /^\d{4}-\d{2}-\d{2}/;
+
+/** Today's calendar date in Europe/Madrid, YYYY-MM-DD. */
+export function todayMadrid(now: Date = new Date()): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Europe/Madrid",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(now);
+}
+
+const epochDays = (iso: string): number => Math.round(Date.parse(iso.slice(0, 10) + "T00:00:00Z") / 86_400_000);
+
+/** Whole days from `fromIso` to `toIso` (negative if `toIso` is earlier). */
+export function diffDays(fromIso: string, toIso: string): number {
+  return epochDays(toIso) - epochDays(fromIso);
+}
+
+/** YYYY-MM-DD plus n days (UTC math, no DST drift). */
+export function addDaysIso(iso: string, n: number): string {
+  const d = new Date(iso.slice(0, 10) + "T00:00:00Z");
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+}
+
+/** "hace 5 min", "hace 3 h", "hace 2 d" (null/invalid -> "nunca"). */
+export function fmtAgo(iso: string | null | undefined, now: Date = new Date()): string {
+  if (!iso) return "nunca";
+  const t = Date.parse(iso);
+  if (Number.isNaN(t)) return "nunca";
+  const min = Math.max(0, Math.round((now.getTime() - t) / 60_000));
+  if (min < 1) return "hace un momento";
+  if (min < 60) return `hace ${min} min`;
+  const h = Math.round(min / 60);
+  if (h < 48) return `hace ${h} h`;
+  return `hace ${Math.round(h / 24)} d`;
+}
+
+// ---------- expected viajeros ----------
+
+export interface KbGuests {
+  huespedes: number | null | undefined;
+  menores: number | null | undefined;
+  exentos: number | null | undefined;
+}
+
+export interface Expected {
+  /** null = unknown (multi-unit reservation or no guest count). */
+  expected: number | null;
+  /** true when children/exempt were subtracted using real KB data. */
+  exact: boolean;
+}
+
+/** Number of rooms in the comma-separated KB "Habitaciones" (0 when empty). */
+export function countRooms(habitaciones: string | null | undefined): number {
+  return (habitaciones ?? "").split(",").filter((s) => s.trim()).length;
+}
+
+/**
+ * Expected registered guests from a KB row, only for single-unit reservations.
+ * KB columns: "Huéspedes", "Huéspedes menores de edad", "Huéspedes exentos".
+ */
+export function expectedViajeros(kb: KbGuests | null | undefined, unitCount: number): Expected {
+  if (!kb || unitCount !== 1 || kb.huespedes == null || !Number.isFinite(kb.huespedes)) {
+    return { expected: null, exact: false };
+  }
+  const menores = kb.menores ?? 0;
+  const exentos = kb.exentos ?? 0;
+  if (menores > 0 || exentos > 0) {
+    return { expected: Math.max(0, kb.huespedes - menores - exentos), exact: true };
+  }
+  return { expected: kb.huespedes, exact: false };
+}
+
+// ---------- alerts ----------
+
+export interface AlertRowInput {
+  estado: string;
+  num_viajeros: number | null;
+  fecha_checkin: string;
+}
+
+export interface AlertContext {
+  /** Today in Madrid, YYYY-MM-DD. */
+  today: string;
+  expected: Expected;
+}
+
+function make(row: AlertRowInput, level: AlertLevel, code: AlertCode, label: string): Alert {
+  return { level, code, label, priority: LEVEL_RANK[level] * 1_000_000 + epochDays(row.fecha_checkin) };
+}
+
+export function alertLevel(row: AlertRowInput, ctx: AlertContext): Alert {
+  const R = PARTEE_RULES;
+  const d = diffDays(ctx.today, row.fecha_checkin);
+  const n = row.num_viajeros ?? 0;
+  const { expected, exact } = ctx.expected;
+  const suffix = !exact ? R.childrenSuffix : "";
+
+  switch (row.estado) {
+    case "finalizado":
+      return make(row, "ok", "finalizado", "Finalizado");
+    case "anulado":
+      return make(row, "info", "anulado", "Anulado");
+    case "error":
+      return make(row, "danger", "error", "Error de sincronización");
+    case "manual":
+      return make(row, "info", "manual", "Marcado a mano");
+  }
+
+  if (d < 0) return make(row, "danger", "vencido", "Parte vencido sin finalizar");
+
+  const notStarted = row.estado === "sin_registro" || row.estado === "iniciado" || (row.estado === "borrador" && n === 0);
+
+  if (d === 0) {
+    if (notStarted) return make(row, "danger", "hoy_sin_registro", "Entra hoy sin registro");
+    if (expected !== null && n < expected) {
+      return make(row, "warning", "hoy_incompleto", `Posible registro incompleto (${n} de ${expected})${suffix}`);
+    }
+    return make(row, "info", "hoy_se_finaliza", `Se finaliza esta noche (${R.autoFinalizeTime})`);
+  }
+
+  // d >= 1
+  if (row.estado === "sin_registro") {
+    if (d <= R.sinRegistroDangerMaxDays) return make(row, "danger", "sin_enlace", "Sin enlace de registro");
+    if (d <= R.sinRegistroWarningMaxDays) return make(row, "warning", "sin_enlace", "Sin enlace de registro");
+    return make(row, "info", "sin_enlace", "Sin enlace de registro");
+  }
+  if (notStarted) {
+    // iniciado, or borrador with 0 viajeros
+    if (d <= R.noIniciadoWarningMaxDays) return make(row, "warning", "no_iniciado", "Registro no iniciado");
+    return make(row, "info", "no_iniciado", "Registro no iniciado");
+  }
+
+  // borrador with n > 0
+  if (expected === null) return make(row, "ok", "en_curso", `Registro en curso (${n} registrados)`);
+  if (n > expected && exact) return make(row, "info", "mas_de_los_previstos", "Más viajeros que los previstos");
+  if (n >= expected) return make(row, "ok", "completo", `Completo, pendiente de finalizar${suffix}`);
+  return make(row, "info", "faltan_viajeros", `Faltan viajeros por registrar (${n} de ${expected})${suffix}`);
+}
+
+/** "3 registrados · 4 previstos" / "3 registrados · 4 previstos*" / "3 registrados". */
+export function viajerosText(numViajeros: number | null, ex: Expected): string {
+  const n = numViajeros ?? 0;
+  if (ex.expected === null) return `${n} registrados`;
+  return `${n} registrados · ${ex.expected} previstos${ex.exact ? "" : "*"}`;
+}
+
+export const isValidIso = (s: string | null | undefined): s is string => !!s && ISO_RE.test(s);

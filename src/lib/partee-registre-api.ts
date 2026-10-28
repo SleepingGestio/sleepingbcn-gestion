@@ -1,0 +1,96 @@
+// Read-only queries for the Registre hostes screens. Nothing here writes.
+import { supabase } from "@/integrations/supabase/client";
+import { ESTADOS_KB_EXCLUIDOS } from "@/lib/partee-registre";
+
+export interface RegistreKb {
+  "Número": string;
+  Referencia: string | null;
+  Portal: string | null;
+  "Huéspedes": number | null;
+  "Huéspedes menores de edad": number | null;
+  "Huéspedes exentos": number | null;
+  "Check-out": string | null;
+  Estado: string | null;
+  Habitaciones: string | null;
+}
+
+export interface RegistreRowFull {
+  id_registre: number;
+  numero_reserva: string;
+  id_apt: number;
+  fecha_checkin: string;
+  estado: string;
+  is_borrador: boolean | null;
+  num_viajeros: number | null;
+  num_lote: string | null;
+  checkin_url: string | null;
+  ultimo_sync: string | null;
+  apartamentos: { nombre: string | null } | null;
+  reservas_kb: RegistreKb | null;
+}
+
+// Typed as plain string so supabase-js does not try to parse the quoted column names.
+const SELECT_FULL: string =
+  "id_registre, numero_reserva, id_apt, fecha_checkin, estado, is_borrador, num_viajeros, num_lote, checkin_url, ultimo_sync, " +
+  'apartamentos(nombre), reservas_kb("Número", Referencia, Portal, "Huéspedes", "Huéspedes menores de edad", "Huéspedes exentos", "Check-out", Estado, Habitaciones)';
+
+const PAGE = 1000; // PostgREST row cap: always page
+
+async function pageAll<T>(build: (from: number, to: number) => PromiseLike<{ data: unknown; error: unknown }>): Promise<T[]> {
+  const out: T[] = [];
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await build(from, from + PAGE - 1);
+    if (error) throw error;
+    const rows = (data ?? []) as T[];
+    out.push(...rows);
+    if (rows.length < PAGE) return out;
+  }
+}
+
+/** Rows of one reservation (one per unit), with the unit name. */
+export async function fetchRegistreByReserva(numero: string): Promise<RegistreRowFull[]> {
+  const { data, error } = await supabase
+    .from("partee_registre")
+    .select(SELECT_FULL)
+    .eq("numero_reserva", numero)
+    .order("id_apt");
+  if (error) throw error;
+  return (data ?? []) as unknown as RegistreRowFull[];
+}
+
+/**
+ * Rows for the page: every row with fecha_checkin in [from, to], PLUS every older row that is
+ * not finalizado/anulado (second query), so overdue partes never disappear from the list.
+ * Rows whose KB reservation is cancelled / no-show are dropped.
+ */
+export async function fetchRegistreWindow(from: string, to: string): Promise<RegistreRowFull[]> {
+  const inWindow = pageAll<RegistreRowFull>((a, b) =>
+    supabase
+      .from("partee_registre")
+      .select(SELECT_FULL)
+      .gte("fecha_checkin", from)
+      .lte("fecha_checkin", to)
+      .order("id_registre")
+      .range(a, b),
+  );
+  const overdue = pageAll<RegistreRowFull>((a, b) =>
+    supabase
+      .from("partee_registre")
+      .select(SELECT_FULL)
+      .lt("fecha_checkin", from)
+      .not("estado", "in", "(finalizado,anulado)")
+      .order("id_registre")
+      .range(a, b),
+  );
+  const [w, o] = await Promise.all([inWindow, overdue]);
+  const seen = new Set<number>();
+  const rows: RegistreRowFull[] = [];
+  for (const r of [...w, ...o]) {
+    if (seen.has(r.id_registre)) continue;
+    seen.add(r.id_registre);
+    const kbEstado = r.reservas_kb?.Estado;
+    if (kbEstado && ESTADOS_KB_EXCLUIDOS.has(kbEstado)) continue;
+    rows.push(r);
+  }
+  return rows;
+}
