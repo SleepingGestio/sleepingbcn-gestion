@@ -126,6 +126,32 @@ export function fmtAgo(iso: string | null | undefined, now: Date = new Date()): 
   return `hace ${Math.round(h / 24)} d`;
 }
 
+export interface SyncRowInput {
+  fecha_checkin: string | null;
+  ultimo_sync: string | null;
+  excluida?: boolean | null;
+}
+
+/**
+ * When the last GENERAL sync (full or hourly job, or "Actualizar todo") ran. It is the MEDIAN of `ultimo_sync`
+ * over the rows every general sync touches (check-in from today-1 to today+3 in Madrid, not excluded), so one
+ * reservation refreshed on its own does not move it. Even count: the later of the two middle values.
+ * Null when there are no such rows.
+ */
+export function lastGeneralSync(rows: SyncRowInput[], today: string): string | null {
+  const times: number[] = [];
+  for (const r of rows) {
+    if (r.excluida || !r.ultimo_sync || !r.fecha_checkin || !ISO_RE.test(r.fecha_checkin)) continue;
+    const d = diffDays(today, r.fecha_checkin);
+    if (d < -1 || d > 3) continue;
+    const t = Date.parse(r.ultimo_sync);
+    if (!Number.isNaN(t)) times.push(t);
+  }
+  if (times.length === 0) return null;
+  times.sort((a, b) => a - b);
+  return new Date(times[Math.floor(times.length / 2)]).toISOString();
+}
+
 // ---------- expected viajeros ----------
 
 export interface KbGuests {

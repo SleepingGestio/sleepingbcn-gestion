@@ -40,6 +40,7 @@ import {
   fmtAgo,
   isValidIso,
   isReclamable,
+  lastGeneralSync,
   SORT_OPTIONS,
   situacionRegistro,
   situacionTone,
@@ -312,11 +313,19 @@ function RegistreHostesPage() {
     return sortRows(list, sortKey, sortDir, toSortable);
   }, [base, counted, quick, sortKey, sortDir]);
 
-  const lastSync = useMemo(() => {
-    let max: string | null = null;
-    for (const { r } of rows) if (r.ultimo_sync && (!max || r.ultimo_sync > max)) max = r.ultimo_sync;
-    return max;
-  }, [rows]);
+  // Last GENERAL sync: robust to single-reservation refreshes (see lastGeneralSync).
+  const lastSync = useMemo(
+    () =>
+      lastGeneralSync(
+        rows.map(({ r, exclusion }) => ({
+          fecha_checkin: r.fecha_checkin,
+          ultimo_sync: r.ultimo_sync,
+          excluida: !!exclusion,
+        })),
+        today,
+      ),
+    [rows, today],
+  );
 
   const counts = QUICK.map((c) => ({ ...c, n: counted.filter(c.test).length }));
 
@@ -326,7 +335,7 @@ function RegistreHostesPage() {
         <div className="space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <p className="text-xs text-muted-foreground">
-              Última sincronización:{" "}
+              Última sincronización general:{" "}
               {lastSync ? (
                 <Tooltip>
                   <TooltipTrigger asChild>

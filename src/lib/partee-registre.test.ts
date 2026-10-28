@@ -11,6 +11,7 @@ import {
   fmtAgo,
   fmtMadridDateTime,
   isStaleRegistre,
+  lastGeneralSync,
   MOTIVO_EXCLUSION_LABEL,
   SITUACION_LABEL,
   SITUACIONES_FILTRO,
@@ -60,6 +61,48 @@ describe("dates", () => {
     assert.equal(fmtAgo("2026-10-28T11:55:00Z", now), "hace 5 min");
     assert.equal(fmtAgo("2026-10-28T09:00:00Z", now), "hace 3 h");
     assert.equal(fmtAgo("2026-10-25T12:00:00Z", now), "hace 3 d");
+  });
+});
+
+describe("lastGeneralSync", () => {
+  const T10 = "2026-10-28T10:00:00.000Z";
+  const row = (d: number, ultimo_sync: string | null, excluida = false) => ({ fecha_checkin: day(d), ultimo_sync, excluida });
+
+  it("rows in the window with the same time -> that time", () => {
+    assert.equal(lastGeneralSync([row(0, T10), row(1, T10), row(3, T10)], TODAY), T10);
+  });
+  it("one individually refreshed row (much newer) does not move the result", () => {
+    const rows = [row(0, T10), row(1, T10), row(2, T10), row(1, "2026-10-28T21:49:00.000Z")];
+    assert.equal(lastGeneralSync(rows, TODAY), T10);
+  });
+  it("a general sync (touches all rows) does move it", () => {
+    const T21 = "2026-10-28T21:00:00.000Z";
+    assert.equal(lastGeneralSync([row(0, T21), row(1, T21), row(2, T21)], TODAY), T21);
+  });
+  it("window is today-1 .. today+3: rows outside are ignored", () => {
+    const old = "2026-10-20T08:00:00.000Z";
+    assert.equal(lastGeneralSync([row(-1, T10), row(3, T10), row(-2, old), row(4, old), row(10, old)], TODAY), T10);
+  });
+  it("excluded rows are ignored", () => {
+    const old = "2026-10-20T08:00:00.000Z";
+    assert.equal(lastGeneralSync([row(0, T10), row(1, old, true), row(2, old, true)], TODAY), T10);
+  });
+  it("null ultimo_sync (and invalid dates) are ignored", () => {
+    assert.equal(lastGeneralSync([row(0, T10), row(1, null), row(2, "not a date")], TODAY), T10);
+    assert.equal(lastGeneralSync([{ fecha_checkin: null, ultimo_sync: T10 }], TODAY), null);
+  });
+  it("no eligible rows -> null", () => {
+    assert.equal(lastGeneralSync([], TODAY), null);
+    assert.equal(lastGeneralSync([row(0, null), row(9, T10), row(1, T10, true)], TODAY), null);
+  });
+  it("odd count: the middle value; even count: the later of the two middle values", () => {
+    const t = (h: number) => `2026-10-28T0${h}:00:00.000Z`;
+    assert.equal(lastGeneralSync([row(0, t(3)), row(1, t(1)), row(2, t(2))], TODAY), t(2));
+    assert.equal(lastGeneralSync([row(0, t(4)), row(1, t(1)), row(2, t(3)), row(3, t(2))], TODAY), t(3));
+    assert.equal(lastGeneralSync([row(0, t(1)), row(1, t(2))], TODAY), t(2));
+  });
+  it("accepts a check-in with a time part", () => {
+    assert.equal(lastGeneralSync([{ fecha_checkin: `${day(1)}T15:00:00`, ultimo_sync: T10 }], TODAY), T10);
   });
 });
 
