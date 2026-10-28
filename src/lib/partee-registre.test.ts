@@ -9,6 +9,7 @@ import {
   diffDays,
   expectedViajeros,
   fmtAgo,
+  isStaleRegistre,
   todayMadrid,
   viajerosText,
   type Expected,
@@ -181,5 +182,21 @@ describe("viajerosText", () => {
     assert.equal(viajerosText(3, exact(4)), "3 registrados · 4 previstos");
     assert.equal(viajerosText(3, approx(4)), "3 registrados · 4 previstos*");
     assert.equal(viajerosText(null, UNKNOWN), "0 registrados");
+  });
+});
+
+describe("isStaleRegistre", () => {
+  it("is stale when the KB check-in differs from fecha_checkin", () => {
+    assert.equal(isStaleRegistre("2026-10-28", "2026-10-30"), true);
+  });
+  it("compares only the first 10 characters of the KB date", () => {
+    assert.equal(isStaleRegistre("2026-10-28", "2026-10-28T00:00:00"), false);
+    assert.equal(isStaleRegistre("2026-10-28", "2026-10-29T00:00:00"), true);
+  });
+  it("is not stale when the dates match or the KB date is unknown", () => {
+    assert.equal(isStaleRegistre("2026-10-28", "2026-10-28"), false);
+    assert.equal(isStaleRegistre("2026-10-28", null), false);
+    assert.equal(isStaleRegistre("2026-10-28", undefined), false);
+    assert.equal(isStaleRegistre("2026-10-28", ""), false);
   });
 });

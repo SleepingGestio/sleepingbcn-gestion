@@ -1,6 +1,6 @@
 // Read-only queries for the Registre hostes screens. Nothing here writes.
 import { supabase } from "@/integrations/supabase/client";
-import { ESTADOS_KB_EXCLUIDOS } from "@/lib/partee-registre";
+import { ESTADOS_KB_EXCLUIDOS, isStaleRegistre } from "@/lib/partee-registre";
 
 export interface RegistreKb {
   "Número": string;
@@ -9,6 +9,7 @@ export interface RegistreKb {
   "Huéspedes": number | null;
   "Huéspedes menores de edad": number | null;
   "Huéspedes exentos": number | null;
+  "Check in": string | null;
   "Check-out": string | null;
   Estado: string | null;
   Habitaciones: string | null;
@@ -32,7 +33,7 @@ export interface RegistreRowFull {
 // Typed as plain string so supabase-js does not try to parse the quoted column names.
 const SELECT_FULL: string =
   "id_registre, numero_reserva, id_apt, fecha_checkin, estado, is_borrador, num_viajeros, num_lote, checkin_url, ultimo_sync, " +
-  'apartamentos(nombre), reservas_kb("Número", Referencia, Portal, "Huéspedes", "Huéspedes menores de edad", "Huéspedes exentos", "Check-out", Estado, Habitaciones)';
+  'apartamentos(nombre), reservas_kb("Número", Referencia, Portal, "Huéspedes", "Huéspedes menores de edad", "Huéspedes exentos", "Check in", "Check-out", Estado, Habitaciones)';
 
 const PAGE = 1000; // PostgREST row cap: always page
 
@@ -61,7 +62,8 @@ export async function fetchRegistreByReserva(numero: string): Promise<RegistreRo
 /**
  * Rows for the page: every row with fecha_checkin in [from, to], PLUS every older row that is
  * not finalizado/anulado (second query), so overdue partes never disappear from the list.
- * Rows whose KB reservation is cancelled / no-show are dropped.
+ * Rows whose KB reservation is cancelled / no-show are dropped, and so are stale rows: the KB
+ * "Check in" no longer matches fecha_checkin (the reservation date changed after the sync).
  */
 export async function fetchRegistreWindow(from: string, to: string): Promise<RegistreRowFull[]> {
   const inWindow = pageAll<RegistreRowFull>((a, b) =>
@@ -90,6 +92,7 @@ export async function fetchRegistreWindow(from: string, to: string): Promise<Reg
     seen.add(r.id_registre);
     const kbEstado = r.reservas_kb?.Estado;
     if (kbEstado && ESTADOS_KB_EXCLUIDOS.has(kbEstado)) continue;
+    if (isStaleRegistre(r.fecha_checkin, r.reservas_kb?.["Check in"])) continue;
     rows.push(r);
   }
   return rows;

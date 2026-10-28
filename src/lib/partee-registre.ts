@@ -219,4 +219,13 @@ export function viajerosText(numViajeros: number | null, ex: Expected): string {
   return `${n} registrados · ${ex.expected} previstos${ex.exact ? "" : "*"}`;
 }
 
+/**
+ * True when the KB check-in date no longer matches the row's fecha_checkin: the reservation date
+ * changed after the sync created the row, so the row is stale and must not be shown.
+ * Unknown KB date (null/empty) is not stale.
+ */
+export function isStaleRegistre(fechaCheckin: string, kbCheckIn: string | null | undefined): boolean {
+  return !!kbCheckIn && kbCheckIn.slice(0, 10) !== fechaCheckin.slice(0, 10);
+}
+
 export const isValidIso = (s: string | null | undefined): s is string => !!s && ISO_RE.test(s);
