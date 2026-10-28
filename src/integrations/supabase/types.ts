@@ -1651,6 +1651,10 @@ export type Database = {
           parte_enviado_en: string | null
           parte_id: number | null
           partee_reservation_id: number | null
+          registro_confirmado: boolean
+          registro_confirmado_en: string | null
+          registro_confirmado_nota: string | null
+          registro_confirmado_por: number | null
           ses_codigo_estado: number | null
           ses_desc: string | null
           ultimo_sync: string | null
@@ -1670,6 +1674,10 @@ export type Database = {
           parte_enviado_en?: string | null
           parte_id?: number | null
           partee_reservation_id?: number | null
+          registro_confirmado?: boolean
+          registro_confirmado_en?: string | null
+          registro_confirmado_nota?: string | null
+          registro_confirmado_por?: number | null
           ses_codigo_estado?: number | null
           ses_desc?: string | null
           ultimo_sync?: string | null
@@ -1689,6 +1697,10 @@ export type Database = {
           parte_enviado_en?: string | null
           parte_id?: number | null
           partee_reservation_id?: number | null
+          registro_confirmado?: boolean
+          registro_confirmado_en?: string | null
+          registro_confirmado_nota?: string | null
+          registro_confirmado_por?: number | null
           ses_codigo_estado?: number | null
           ses_desc?: string | null
           ultimo_sync?: string | null
@@ -1714,6 +1726,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "v_reservas_por_apartamento"
             referencedColumns: ["Número"]
+          },
+          {
+            foreignKeyName: "partee_registre_registro_confirmado_por_fkey"
+            columns: ["registro_confirmado_por"]
+            isOneToOne: false
+            referencedRelation: "personal"
+            referencedColumns: ["id_persona"]
           },
         ]
       }
