@@ -23,6 +23,7 @@ import {
   ViajerosCell,
 } from "@/components/partee-registre-bits";
 import { ReclamacionesBlock } from "@/components/registro-reclamaciones";
+import { ExclusionHeader, useExclusiones } from "@/components/registro-exclusion";
 
 export function RegistroHuespedesTab({
   numero,
@@ -39,6 +40,8 @@ export function RegistroHuespedesTab({
 }) {
   const { canView, loading } = usePermissions();
   const allowed = canView("registre_hostes");
+  const exclusiones = useExclusiones(allowed);
+  const exclusion = exclusiones.map.get(numero) ?? null;
 
   const q = useQuery({
     queryKey: ["partee-registre-reserva", numero],
@@ -61,9 +64,14 @@ export function RegistroHuespedesTab({
   const rows = q.data ?? [];
   if (!rows.length) {
     return (
-      <div className="rounded-md border border-dashed p-6 text-center text-sm text-muted-foreground">
-        Sin datos de Partee todavía (la sincronización cubre las entradas de ayer a 7 días vista).
-      </div>
+      <TooltipProvider delayDuration={200}>
+        <div className="space-y-3">
+          <ExclusionHeader numero={numero} exclusion={exclusion} />
+          <div className="rounded-md border border-dashed p-6 text-center text-sm text-muted-foreground">
+            Sin datos de Partee todavía (la sincronización cubre las entradas de ayer a 7 días vista).
+          </div>
+        </div>
+      </TooltipProvider>
     );
   }
 
@@ -73,8 +81,10 @@ export function RegistroHuespedesTab({
   return (
     <TooltipProvider delayDuration={200}>
       <div className="space-y-3">
+        <ExclusionHeader numero={numero} exclusion={exclusion} />
         {rows.map((r) => {
-          const alert = alertLevel(r, { today, expected });
+          const rowIn = { ...r, excluida: !!exclusion };
+          const alert = alertLevel(rowIn, { today, expected });
           return (
             <div key={r.id_registre} className="space-y-2 rounded-md border p-3">
               <div className="flex flex-wrap items-center gap-2">
@@ -84,7 +94,7 @@ export function RegistroHuespedesTab({
               </div>
 
               <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
-                <ViajerosCell n={r.num_viajeros} expected={expected} tone={viajerosTone(r, { today }, expected)} />
+                <ViajerosCell n={r.num_viajeros} expected={expected} tone={viajerosTone(rowIn, { today }, expected)} />
                 {r.num_lote && <span>Lote: {r.num_lote}</span>}
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -106,7 +116,7 @@ export function RegistroHuespedesTab({
                 <p className="text-sm text-muted-foreground">{noLinkReason(r.estado)}</p>
               )}
 
-              <ReclamacionesBlock registre={r} />
+              <ReclamacionesBlock registre={r} readOnly={!!exclusion} />
             </div>
           );
         })}

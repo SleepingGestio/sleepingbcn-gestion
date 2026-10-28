@@ -11,6 +11,8 @@ import {
   fmtAgo,
   fmtMadridDateTime,
   isStaleRegistre,
+  MOTIVO_EXCLUSION_LABEL,
+  MOTIVOS_EXCLUSION,
   madridLocalToIso,
   reclamacionHint,
   todayMadrid,
@@ -480,5 +482,57 @@ describe("sortRows", () => {
     const out = sortRows(input, "reserva", "asc", (r) => ({ ...r, unit: null, fecha_checkin: "2026-10-28", urgency: 0 }));
     assert.deepEqual(out.map((r) => r.unit), ["1", "2", "3", "4"]); // identical keys keep input order
     assert.deepEqual(input.map((r) => r.unit), before);
+  });
+});
+
+describe("reservas excluidas (No requiere registro)", () => {
+  const ex = (estado: string, d: number, n: number | null, e: Expected = UNKNOWN) =>
+    alertLevel({ estado, num_viajeros: n, fecha_checkin: day(d), excluida: true }, { today: TODAY, expected: e });
+  const tn = (estado: string, d: number, n: number | null, e: Expected = UNKNOWN) =>
+    viajerosTone({ estado, num_viajeros: n, fecha_checkin: day(d), excluida: true }, { today: TODAY }, e);
+
+  it("is info / excluida / 'No requiere registro' and beats every other rule", () => {
+    const cases: Array<[string, number, number | null]> = [
+      ["borrador", -3, 1], // overdue
+      ["sin_registro", 0, null], // entry today without registration
+      ["sin_registro", 2, null],
+      ["iniciado", 1, null],
+      ["borrador", 0, 1],
+      ["finalizado", -1, 2],
+      ["error", 2, null],
+      ["anulado", 2, null],
+    ];
+    for (const [estado, d, n] of cases) {
+      const r = ex(estado, d, n, exact(2));
+      assert.deepEqual([r.level, r.code, r.label], ["info", "excluida", "No requiere registro"]);
+    }
+  });
+  it("beats a manual confirmation too", () => {
+    const r = alertLevel(
+      { estado: "borrador", num_viajeros: 1, fecha_checkin: day(2), registro_confirmado: true, excluida: true },
+      { today: TODAY, expected: exact(3) },
+    );
+    assert.equal(r.code, "excluida");
+  });
+  it("tone is muted whatever the state", () => {
+    assert.equal(tn("borrador", -2, 0, exact(2)), "muted");
+    assert.equal(tn("finalizado", 0, 2, exact(2)), "muted");
+    assert.equal(tn("sin_registro", 0, null), "muted");
+  });
+  it("not excluded (or excluida false/null) keeps the normal rules", () => {
+    const base = { estado: "borrador", num_viajeros: 0, fecha_checkin: day(0) };
+    assert.equal(alertLevel({ ...base, excluida: false }, { today: TODAY, expected: UNKNOWN }).code, "hoy_sin_registro");
+    assert.equal(alertLevel({ ...base, excluida: null }, { today: TODAY, expected: UNKNOWN }).code, "hoy_sin_registro");
+    assert.equal(viajerosTone({ ...base, excluida: false }, { today: TODAY }, exact(2)), "danger");
+  });
+  it("reclamacionHint is null for an excluded row (its level is info)", () => {
+    const lvl = ex("sin_registro", 0, null).level;
+    assert.equal(reclamacionHint(lvl, null, new Date("2026-10-28T12:00:00Z")), null);
+  });
+  it("motivo labels", () => {
+    assert.deepEqual([...MOTIVOS_EXCLUSION], ["extension", "reserva_privada", "otros"]);
+    assert.equal(MOTIVO_EXCLUSION_LABEL.extension, "Extensión");
+    assert.equal(MOTIVO_EXCLUSION_LABEL.reserva_privada, "Reserva privada");
+    assert.equal(MOTIVO_EXCLUSION_LABEL.otros, "Otros");
   });
 });

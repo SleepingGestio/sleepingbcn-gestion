@@ -53,7 +53,7 @@ function invalidateRegistre(qc: QueryClient) {
   qc.invalidateQueries({ queryKey: ["partee-reclamaciones"] });
 }
 
-function useNombrePersona() {
+export function useNombrePersona() {
   const q = usePersonalLite();
   const byId = new Map((q.data ?? []).map((p) => [p.id_persona, p]));
   return (id: number | null | undefined): string => {
@@ -160,10 +160,17 @@ export function AddReclamacionDialog({
 
 // ---------- block shown per unit in the reservation tab ----------
 
-export function ReclamacionesBlock({ registre }: { registre: RegistreConfirmable }) {
+export function ReclamacionesBlock({
+  registre,
+  readOnly = false,
+}: {
+  registre: RegistreConfirmable;
+  /** History stays visible but every action is hidden (e.g. the reservation is excluded). */
+  readOnly?: boolean;
+}) {
   const qc = useQueryClient();
   const { canEdit } = usePermissions();
-  const editor = canEdit(MENU);
+  const editor = canEdit(MENU) && !readOnly;
   const { persona } = useCurrentPersonal();
   const nombre = useNombrePersona();
 

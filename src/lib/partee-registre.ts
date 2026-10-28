@@ -34,6 +34,14 @@ export const CANAL_LABEL: Record<string, string> = {
 };
 export const CANALES = ["kb", "whatsapp", "telefono", "email", "otro"] as const;
 
+/** Why a whole reservation does not need a Partee registration (partee_exclusion.motivo). */
+export const MOTIVOS_EXCLUSION = ["extension", "reserva_privada", "otros"] as const;
+export const MOTIVO_EXCLUSION_LABEL: Record<string, string> = {
+  extension: "Extensión",
+  reserva_privada: "Reserva privada",
+  otros: "Otros",
+};
+
 export const COMPARISON_TOOLTIP =
   "El número previsto viene de la reserva y puede incluir niños; Partee solo exige registrar a los mayores de 14 años";
 
@@ -54,7 +62,8 @@ export type AlertCode =
   | "completo"
   | "faltan_viajeros"
   | "en_curso"
-  | "confirmado_manual";
+  | "confirmado_manual"
+  | "excluida";
 
 export interface Alert {
   level: AlertLevel;
@@ -163,6 +172,8 @@ export interface AlertRowInput {
   fecha_checkin: string;
   /** Manually confirmed complete by a user (partee_registre.registro_confirmado). */
   registro_confirmado?: boolean | null;
+  /** The reservation is in partee_exclusion: it does not need a registration. */
+  excluida?: boolean | null;
 }
 
 export interface AlertContext {
@@ -180,6 +191,9 @@ export function alertLevel(row: AlertRowInput, ctx: AlertContext): Alert {
   const d = diffDays(ctx.today, row.fecha_checkin);
   const n = row.num_viajeros ?? 0;
   const { expected, exact } = ctx.expected;
+
+  // Excluded reservations need nothing: this beats every other rule, overdue included.
+  if (row.excluida) return make(row, "info", "excluida", "No requiere registro");
 
   switch (row.estado) {
     case "finalizado":
@@ -240,6 +254,7 @@ export function viajerosTone(row: AlertRowInput, ctx: { today: string }, expecte
   const n = row.num_viajeros ?? 0;
   const ex = expected.expected;
   const d = diffDays(ctx.today, row.fecha_checkin);
+  if (row.excluida) return "muted";
   if (row.estado === "finalizado") return "ok";
   if (ex !== null && n >= ex) return "ok";
   if (row.estado === "borrador" && n > 0 && d >= 0 && row.registro_confirmado) return "ok";

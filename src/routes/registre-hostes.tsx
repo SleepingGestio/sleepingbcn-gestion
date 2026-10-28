@@ -1,14 +1,18 @@
 import { useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowDown, ArrowUp, ChevronsUpDown, Eye } from "lucide-react";
+import { ArrowDown, ArrowUp, Ban, ChevronsUpDown, Eye, RotateCcw } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { ReservaDetail } from "@/components/reserva-detail";
 import { AddReclamacionDialog } from "@/components/registro-reclamaciones";
+import { ExcluirReservaDialog, IncluirReservaDialog, useExclusiones } from "@/components/registro-exclusion";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import {
@@ -21,7 +25,7 @@ import {
 } from "@/components/partee-registre-bits";
 import { usePermissions } from "@/hooks/use-permissions";
 import { fmtDate, fmtDateTime } from "@/lib/format";
-import { fetchRegistreWindow, type RegistreRowFull } from "@/lib/partee-registre-api";
+import { fetchRegistreWindow, type Exclusion, type RegistreRowFull } from "@/lib/partee-registre-api";
 import {
   addDaysIso,
   alertLevel,
@@ -29,6 +33,7 @@ import {
   CANAL_LABEL,
   DEFAULT_SORT,
   ESTADO_LABEL,
+  MOTIVO_EXCLUSION_LABEL,
   expectedViajeros,
   fmtAgo,
   isValidIso,
@@ -59,6 +64,8 @@ interface Row {
   /** "Sin reclamar" / "Reclamado hace …" for warning/danger rows, else null. */
   hint: string | null;
   last: { enviada_en: string; canal: string | null } | null;
+  /** Row of partee_exclusion for this reservation (all its units), or null. */
+  exclusion: Exclusion | null;
 }
 
 function toSortable({ r, alert, last }: Row): SortableRow {
@@ -102,6 +109,41 @@ function SortHead({
         <Icon className={cn("h-3.5 w-3.5", !active && "opacity-40")} />
       </button>
     </TableHead>
+  );
+}
+
+/** Estado pill; excluded reservations show "Excluida · {motivo}" instead. */
+function EstadoPill({ row }: { row: Row }) {
+  if (row.exclusion) {
+    return (
+      <Badge variant="secondary" className="whitespace-nowrap">
+        Excluida · {MOTIVO_EXCLUSION_LABEL[row.exclusion.motivo] ?? row.exclusion.motivo}
+      </Badge>
+    );
+  }
+  return <RegistreEstadoBadge estado={row.r.estado} level={row.alert.level} />;
+}
+
+/** Icon action: "No requiere registro" (reservation level) or, if already excluded, "Volver a incluir". */
+function ExclusionAction({
+  excluded,
+  onExcluir,
+  onIncluir,
+}: {
+  excluded: boolean;
+  onExcluir: () => void;
+  onIncluir: () => void;
+}) {
+  const label = excluded ? "Volver a incluir" : "No requiere registro";
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button variant="ghost" size="icon" aria-label={label} onClick={excluded ? onIncluir : onExcluir}>
+          {excluded ? <RotateCcw className="h-4 w-4" /> : <Ban className="h-4 w-4" />}
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent>{label}</TooltipContent>
+    </Tooltip>
   );
 }
 
@@ -176,6 +218,10 @@ function RegistreHostesPage() {
     }
   };
   const editor = canEdit("registre_hostes");
+  const [showExcluidas, setShowExcluidas] = useState(false);
+  const [excluirFor, setExcluirFor] = useState<string | null>(null);
+  const [incluirFor, setIncluirFor] = useState<string | null>(null);
+  const exclusiones = useExclusiones();
 
   const rangeOk = isValidIso(from) && isValidIso(to) && from <= to;
   const q = useQuery({
@@ -196,18 +242,21 @@ function RegistreHostesPage() {
         },
         countRooms(kb?.Habitaciones),
       );
-      const alert = alertLevel(r, { today, expected });
+      const exclusion = exclusiones.map.get(r.numero_reserva) ?? null;
+      const rowIn = { ...r, excluida: !!exclusion };
+      const alert = alertLevel(rowIn, { today, expected });
       const last = r.partee_reclamacio?.[0] ?? null;
       return {
         r,
         expected,
         alert,
-        tone: viajerosTone(r, { today }, expected),
+        tone: viajerosTone(rowIn, { today }, expected),
         hint: reclamacionHint(alert.level, last?.enviada_en ?? null, now),
         last,
+        exclusion,
       };
     });
-  }, [q.data, today]);
+  }, [q.data, today, exclusiones.map]);
 
   const units = useMemo(() => {
     const m = new Map<number, string>();
@@ -215,10 +264,13 @@ function RegistreHostesPage() {
     return [...m.entries()].sort((a, b) => a[1].localeCompare(b[1], "es"));
   }, [rows]);
 
-  // Filters other than the clickable counters; the counters are computed on this set.
+  const excludedCount = useMemo(() => rows.filter((x) => x.exclusion).length, [rows]);
+
+  // Filters other than the clickable counters. Excluded rows are only here when the switch is on.
   const base = useMemo(() => {
     const t = search.trim().toLowerCase();
-    return rows.filter(({ r, alert }) => {
+    return rows.filter(({ r, alert, exclusion }) => {
+      if (exclusion && !showExcluidas) return false;
       if (level !== ALL && alert.level !== level) return false;
       if (estado !== ALL && r.estado !== estado) return false;
       if (unit !== ALL && String(r.id_apt) !== unit) return false;
@@ -228,14 +280,17 @@ function RegistreHostesPage() {
       }
       return true;
     });
-  }, [rows, level, estado, unit, search]);
+  }, [rows, level, estado, unit, search, showExcluidas]);
+
+  // Excluded rows never count: counters, the Total and the quick filters only see these.
+  const counted = useMemo(() => base.filter((x) => !x.exclusion), [base]);
 
   const visible = useMemo(() => {
     const test = QUICK.find((c) => c.key === quick)?.test;
-    const list = test ? base.filter(test) : base;
+    const list = test ? counted.filter(test) : base;
     // Stable client-side sort over the loaded rows (default: entry date asc, most urgent first).
     return sortRows(list, sortKey, sortDir, toSortable);
-  }, [base, quick, sortKey, sortDir]);
+  }, [base, counted, quick, sortKey, sortDir]);
 
   const lastSync = useMemo(() => {
     let max: string | null = null;
@@ -243,7 +298,7 @@ function RegistreHostesPage() {
     return max;
   }, [rows]);
 
-  const counts = QUICK.map((c) => ({ ...c, n: base.filter(c.test).length }));
+  const counts = QUICK.map((c) => ({ ...c, n: counted.filter(c.test).length }));
 
   return (
     <AppShell title="Registre hostes">
@@ -290,7 +345,7 @@ function RegistreHostesPage() {
                 quick === null && "border-primary ring-1 ring-primary",
               )}
             >
-              <div className="text-2xl font-semibold">{base.length}</div>
+              <div className="text-2xl font-semibold">{counted.length}</div>
               <div className="text-xs text-muted-foreground">Total</div>
             </button>
           </div>
@@ -336,6 +391,12 @@ function RegistreHostesPage() {
           <p className="text-xs text-muted-foreground">
             Entradas del rango elegido; los partes anteriores sin finalizar se muestran siempre.
           </p>
+          <div className="flex items-center gap-2">
+            <Switch id="mostrar-excluidas" checked={showExcluidas} onCheckedChange={setShowExcluidas} />
+            <Label htmlFor="mostrar-excluidas" className="text-sm">
+              Mostrar excluidas ({excludedCount})
+            </Label>
+          </div>
 
           {!rangeOk ? (
             <Card><CardContent className="py-8 text-center text-sm text-muted-foreground">Rango de fechas no válido.</CardContent></Card>
@@ -365,43 +426,53 @@ function RegistreHostesPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {visible.map(({ r, expected, alert, tone, hint, last }) => (
-                      <TableRow key={r.id_registre}>
-                        <TableCell className="whitespace-nowrap">{fmtDate(r.fecha_checkin)}</TableCell>
-                        <TableCell>{r.apartamentos?.nombre ?? `Apartamento ${r.id_apt}`}</TableCell>
-                        <TableCell className="whitespace-nowrap">{r.numero_reserva}</TableCell>
-                        <TableCell>{r.reservas_kb?.Referencia ?? "—"}</TableCell>
-                        <TableCell>{r.reservas_kb?.Portal ?? "—"}</TableCell>
-                        <TableCell>
-                          <div className="flex flex-col items-start gap-1">
-                            <RegistreEstadoBadge estado={r.estado} level={alert.level} />
-                            <span className={cn("text-xs", LEVEL_TEXT[alert.level])}>{alert.label}</span>
-                          </div>
-                        </TableCell>
-                        <TableCell><ViajerosCell n={r.num_viajeros} expected={expected} tone={tone} /></TableCell>
-                        <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
-                          <Tooltip>
-                            <TooltipTrigger asChild><span className="cursor-help">{fmtAgo(r.ultimo_sync)}</span></TooltipTrigger>
-                            <TooltipContent>{fmtDateTime(r.ultimo_sync)}</TooltipContent>
-                          </Tooltip>
-                        </TableCell>
-                        <TableCell>
-                          <ReclamacionCell
-                            hint={hint}
-                            last={last}
-                            level={alert.level}
-                            canClaim={editor && r.estado !== "finalizado" && r.estado !== "anulado"}
-                            onClaim={() => setReclamarFor(r.id_registre)}
-                          />
-                        </TableCell>
-                        <TableCell className="whitespace-nowrap text-right">
-                          <CopyLinkIconButton url={r.checkin_url} noLinkReason={noLinkReason(r.estado)} />
-                          <Button variant="ghost" size="icon" aria-label="Ver registro de huéspedes" onClick={() => setSelected(r.numero_reserva)}>
-                            <Eye className="h-4 w-4" />
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))}
+                    {visible.map((row) => {
+                      const { r, expected, alert, tone, hint, last, exclusion } = row;
+                      return (
+                        <TableRow key={r.id_registre} className={exclusion ? "opacity-60" : undefined}>
+                          <TableCell className="whitespace-nowrap">{fmtDate(r.fecha_checkin)}</TableCell>
+                          <TableCell>{r.apartamentos?.nombre ?? `Apartamento ${r.id_apt}`}</TableCell>
+                          <TableCell className="whitespace-nowrap">{r.numero_reserva}</TableCell>
+                          <TableCell>{r.reservas_kb?.Referencia ?? "—"}</TableCell>
+                          <TableCell>{r.reservas_kb?.Portal ?? "—"}</TableCell>
+                          <TableCell>
+                            <div className="flex flex-col items-start gap-1">
+                              <EstadoPill row={row} />
+                              <span className={cn("text-xs", LEVEL_TEXT[alert.level])}>{alert.label}</span>
+                            </div>
+                          </TableCell>
+                          <TableCell><ViajerosCell n={r.num_viajeros} expected={expected} tone={tone} /></TableCell>
+                          <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
+                            <Tooltip>
+                              <TooltipTrigger asChild><span className="cursor-help">{fmtAgo(r.ultimo_sync)}</span></TooltipTrigger>
+                              <TooltipContent>{fmtDateTime(r.ultimo_sync)}</TooltipContent>
+                            </Tooltip>
+                          </TableCell>
+                          <TableCell>
+                            <ReclamacionCell
+                              hint={hint}
+                              last={last}
+                              level={alert.level}
+                              canClaim={editor && !exclusion && r.estado !== "finalizado" && r.estado !== "anulado"}
+                              onClaim={() => setReclamarFor(r.id_registre)}
+                            />
+                          </TableCell>
+                          <TableCell className="whitespace-nowrap text-right">
+                            <CopyLinkIconButton url={r.checkin_url} noLinkReason={noLinkReason(r.estado)} />
+                            <Button variant="ghost" size="icon" aria-label="Ver registro de huéspedes" onClick={() => setSelected(r.numero_reserva)}>
+                              <Eye className="h-4 w-4" />
+                            </Button>
+                            {editor && (
+                              <ExclusionAction
+                                excluded={!!exclusion}
+                                onExcluir={() => setExcluirFor(r.numero_reserva)}
+                                onIncluir={() => setIncluirFor(r.numero_reserva)}
+                              />
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
                   </TableBody>
                 </Table>
               </Card>
@@ -429,42 +500,52 @@ function RegistreHostesPage() {
                 </Button>
               </div>
               <div className="space-y-2 md:hidden">
-                {visible.map(({ r, expected, alert, tone, hint, last }) => (
-                  <Card key={r.id_registre}>
-                    <CardContent className="space-y-2 p-3">
-                      <div className="flex items-start justify-between gap-2">
-                        <div>
-                          <div className="text-sm font-medium">{r.apartamentos?.nombre ?? `Apartamento ${r.id_apt}`}</div>
-                          <div className="text-xs text-muted-foreground">
-                            Entrada {fmtDate(r.fecha_checkin)} · salida {fmtDate(r.reservas_kb?.["Check-out"])}
+                {visible.map((row) => {
+                  const { r, expected, alert, tone, hint, last, exclusion } = row;
+                  return (
+                    <Card key={r.id_registre} className={exclusion ? "opacity-60" : undefined}>
+                      <CardContent className="space-y-2 p-3">
+                        <div className="flex items-start justify-between gap-2">
+                          <div>
+                            <div className="text-sm font-medium">{r.apartamentos?.nombre ?? `Apartamento ${r.id_apt}`}</div>
+                            <div className="text-xs text-muted-foreground">
+                              Entrada {fmtDate(r.fecha_checkin)} · salida {fmtDate(r.reservas_kb?.["Check-out"])}
+                            </div>
+                          </div>
+                          <EstadoPill row={row} />
+                        </div>
+                        <div className={cn("text-sm", LEVEL_TEXT[alert.level])}>{alert.label}</div>
+                        <ReclamacionCell
+                          hint={hint}
+                          last={last}
+                          level={alert.level}
+                          canClaim={editor && !exclusion && r.estado !== "finalizado" && r.estado !== "anulado"}
+                          onClaim={() => setReclamarFor(r.id_registre)}
+                        />
+                        <div className="text-xs text-muted-foreground">
+                          {r.numero_reserva} · {r.reservas_kb?.Referencia ?? "—"} · {r.reservas_kb?.Portal ?? "—"}
+                        </div>
+                        <div className="flex items-center justify-between gap-2">
+                          <ViajerosCell n={r.num_viajeros} expected={expected} tone={tone} />
+                          <div className="flex items-center">
+                            <CopyLinkIconButton url={r.checkin_url} noLinkReason={noLinkReason(r.estado)} />
+                            <Button variant="ghost" size="icon" aria-label="Ver registro de huéspedes" onClick={() => setSelected(r.numero_reserva)}>
+                              <Eye className="h-4 w-4" />
+                            </Button>
+                            {editor && (
+                              <ExclusionAction
+                                excluded={!!exclusion}
+                                onExcluir={() => setExcluirFor(r.numero_reserva)}
+                                onIncluir={() => setIncluirFor(r.numero_reserva)}
+                              />
+                            )}
                           </div>
                         </div>
-                        <RegistreEstadoBadge estado={r.estado} level={alert.level} />
-                      </div>
-                      <div className={cn("text-sm", LEVEL_TEXT[alert.level])}>{alert.label}</div>
-                      <ReclamacionCell
-                        hint={hint}
-                        last={last}
-                        level={alert.level}
-                        canClaim={editor && r.estado !== "finalizado" && r.estado !== "anulado"}
-                        onClaim={() => setReclamarFor(r.id_registre)}
-                      />
-                      <div className="text-xs text-muted-foreground">
-                        {r.numero_reserva} · {r.reservas_kb?.Referencia ?? "—"} · {r.reservas_kb?.Portal ?? "—"}
-                      </div>
-                      <div className="flex items-center justify-between gap-2">
-                        <ViajerosCell n={r.num_viajeros} expected={expected} tone={tone} />
-                        <div className="flex items-center">
-                          <CopyLinkIconButton url={r.checkin_url} noLinkReason={noLinkReason(r.estado)} />
-                          <Button variant="ghost" size="icon" aria-label="Ver registro de huéspedes" onClick={() => setSelected(r.numero_reserva)}>
-                            <Eye className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </div>
-                      <div className="text-[11px] text-muted-foreground">Sincronizado {fmtAgo(r.ultimo_sync)}</div>
-                    </CardContent>
-                  </Card>
-                ))}
+                        <div className="text-[11px] text-muted-foreground">Sincronizado {fmtAgo(r.ultimo_sync)}</div>
+                      </CardContent>
+                    </Card>
+                  );
+                })}
               </div>
             </>
           )}
@@ -475,6 +556,18 @@ function RegistreHostesPage() {
         idRegistre={reclamarFor}
         open={reclamarFor != null}
         onOpenChange={(o) => !o && setReclamarFor(null)}
+      />
+
+      <ExcluirReservaDialog
+        numero={excluirFor}
+        current={excluirFor ? exclusiones.map.get(excluirFor) ?? null : null}
+        open={excluirFor != null}
+        onOpenChange={(o) => !o && setExcluirFor(null)}
+      />
+      <IncluirReservaDialog
+        numero={incluirFor}
+        open={incluirFor != null}
+        onOpenChange={(o) => !o && setIncluirFor(null)}
       />
 
       <ReservaDetail

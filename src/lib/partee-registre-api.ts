@@ -60,6 +60,25 @@ async function pageAll<T>(build: (from: number, to: number) => PromiseLike<{ dat
   }
 }
 
+export interface Exclusion {
+  numero_reserva: string;
+  motivo: string;
+  nota: string | null;
+  creado_por: number | null;
+  creado_en: string;
+}
+
+/** Every partee_exclusion row (small table; paged at 1000 per the repo convention). */
+export async function fetchExclusiones(): Promise<Exclusion[]> {
+  return pageAll<Exclusion>((a, b) =>
+    supabase
+      .from("partee_exclusion")
+      .select("numero_reserva, motivo, nota, creado_por, creado_en")
+      .order("numero_reserva")
+      .range(a, b),
+  );
+}
+
 /** Rows of one reservation (one per unit), with the unit name. */
 export async function fetchRegistreByReserva(numero: string): Promise<RegistreRowFull[]> {
   const { data, error } = await supabase
