@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { Eye } from "lucide-react";
+import { ArrowDown, ArrowUp, ChevronsUpDown, Eye } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { ReservaDetail } from "@/components/reserva-detail";
 import { AddReclamacionDialog } from "@/components/registro-reclamaciones";
@@ -27,17 +27,23 @@ import {
   alertLevel,
   countRooms,
   CANAL_LABEL,
+  DEFAULT_SORT,
   ESTADO_LABEL,
   expectedViajeros,
   fmtAgo,
   isValidIso,
   reclamacionHint,
+  SORT_OPTIONS,
+  sortRows,
   todayMadrid,
   viajerosTone,
   type Alert,
   type ViajerosTone,
   type AlertLevel,
   type Expected,
+  type SortableRow,
+  type SortDir,
+  type SortKey,
 } from "@/lib/partee-registre";
 import { cn } from "@/lib/utils";
 
@@ -53,6 +59,50 @@ interface Row {
   /** "Sin reclamar" / "Reclamado hace …" for warning/danger rows, else null. */
   hint: string | null;
   last: { enviada_en: string; canal: string | null } | null;
+}
+
+function toSortable({ r, alert, last }: Row): SortableRow {
+  return {
+    fecha_checkin: r.fecha_checkin,
+    urgency: alert.priority,
+    unit: r.apartamentos?.nombre ?? null,
+    numero_reserva: r.numero_reserva,
+    huesped: r.reservas_kb?.Referencia ?? null,
+    portal: r.reservas_kb?.Portal ?? null,
+    viajeros: r.num_viajeros,
+    ultimo_sync: r.ultimo_sync,
+    lastReclamacionAt: last?.enviada_en ?? null,
+  };
+}
+
+/** Clickable column header: a real button inside the th, with aria-sort on the th. */
+function SortHead({
+  label,
+  k,
+  sortKey,
+  sortDir,
+  onSort,
+}: {
+  label: string;
+  k: SortKey;
+  sortKey: SortKey;
+  sortDir: SortDir;
+  onSort: (k: SortKey) => void;
+}) {
+  const active = sortKey === k;
+  const Icon = !active ? ChevronsUpDown : sortDir === "asc" ? ArrowUp : ArrowDown;
+  return (
+    <TableHead aria-sort={active ? (sortDir === "asc" ? "ascending" : "descending") : "none"}>
+      <button
+        type="button"
+        onClick={() => onSort(k)}
+        className="-mx-1 inline-flex items-center gap-1 rounded px-1 font-medium hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      >
+        {label}
+        <Icon className={cn("h-3.5 w-3.5", !active && "opacity-40")} />
+      </button>
+    </TableHead>
+  );
 }
 
 function ReclamacionCell({
@@ -116,6 +166,15 @@ function RegistreHostesPage() {
   const [quick, setQuick] = useState<Quick>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const [reclamarFor, setReclamarFor] = useState<number | null>(null);
+  const [sortKey, setSortKey] = useState<SortKey>(DEFAULT_SORT.key);
+  const [sortDir, setSortDir] = useState<SortDir>(DEFAULT_SORT.dir);
+  const onSort = (k: SortKey) => {
+    if (k === sortKey) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    else {
+      setSortKey(k);
+      setSortDir("asc");
+    }
+  };
   const editor = canEdit("registre_hostes");
 
   const rangeOk = isValidIso(from) && isValidIso(to) && from <= to;
@@ -174,8 +233,9 @@ function RegistreHostesPage() {
   const visible = useMemo(() => {
     const test = QUICK.find((c) => c.key === quick)?.test;
     const list = test ? base.filter(test) : base;
-    return [...list].sort((a, b) => a.alert.priority - b.alert.priority || a.r.id_registre - b.r.id_registre);
-  }, [base, quick]);
+    // Stable client-side sort over the loaded rows (default: entry date asc, most urgent first).
+    return sortRows(list, sortKey, sortDir, toSortable);
+  }, [base, quick, sortKey, sortDir]);
 
   const lastSync = useMemo(() => {
     let max: string | null = null;
@@ -292,15 +352,15 @@ function RegistreHostesPage() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Entrada</TableHead>
-                      <TableHead>Apartamento</TableHead>
-                      <TableHead>Reserva</TableHead>
-                      <TableHead>Huésped</TableHead>
-                      <TableHead>Portal</TableHead>
-                      <TableHead>Estado</TableHead>
-                      <TableHead>Viajeros</TableHead>
-                      <TableHead>Sincronizado</TableHead>
-                      <TableHead>Reclamación</TableHead>
+                      <SortHead label="Entrada" k="entrada" sortKey={sortKey} sortDir={sortDir} onSort={onSort} />
+                      <SortHead label="Apartamento" k="apartamento" sortKey={sortKey} sortDir={sortDir} onSort={onSort} />
+                      <SortHead label="Reserva" k="reserva" sortKey={sortKey} sortDir={sortDir} onSort={onSort} />
+                      <SortHead label="Huésped" k="huesped" sortKey={sortKey} sortDir={sortDir} onSort={onSort} />
+                      <SortHead label="Portal" k="portal" sortKey={sortKey} sortDir={sortDir} onSort={onSort} />
+                      <SortHead label="Estado" k="urgencia" sortKey={sortKey} sortDir={sortDir} onSort={onSort} />
+                      <SortHead label="Viajeros" k="viajeros" sortKey={sortKey} sortDir={sortDir} onSort={onSort} />
+                      <SortHead label="Sincronizado" k="sync" sortKey={sortKey} sortDir={sortDir} onSort={onSort} />
+                      <SortHead label="Reclamación" k="reclamacion" sortKey={sortKey} sortDir={sortDir} onSort={onSort} />
                       <TableHead className="text-right">Acciones</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -346,7 +406,28 @@ function RegistreHostesPage() {
                 </Table>
               </Card>
 
-              {/* Mobile cards */}
+              {/* Mobile: sort control + cards */}
+              <div className="flex items-center gap-2 md:hidden">
+                <span className="shrink-0 text-xs text-muted-foreground">Ordenar por</span>
+                <Select value={sortKey} onValueChange={(v) => setSortKey(v as SortKey)}>
+                  <SelectTrigger className="flex-1" aria-label="Ordenar por">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {SORT_OPTIONS.map((o) => (
+                      <SelectItem key={o.key} value={o.key}>{o.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  aria-label={sortDir === "asc" ? "Orden ascendente" : "Orden descendente"}
+                  onClick={() => setSortDir((d) => (d === "asc" ? "desc" : "asc"))}
+                >
+                  {sortDir === "asc" ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />}
+                </Button>
+              </div>
               <div className="space-y-2 md:hidden">
                 {visible.map(({ r, expected, alert, tone, hint, last }) => (
                   <Card key={r.id_registre}>

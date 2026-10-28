@@ -15,6 +15,11 @@ import {
   reclamacionHint,
   todayMadrid,
   toMadridLocalInput,
+  DEFAULT_SORT,
+  sortRows,
+  type SortableRow,
+  type SortKey,
+  type SortDir,
   viajerosTone,
   viajerosTooltip,
   type Expected,
@@ -360,5 +365,120 @@ describe("Madrid date-time helpers", () => {
     assert.equal(fmtMadridDateTime("2026-10-28T10:30:00Z"), "28/10/26 11:30");
     assert.equal(fmtMadridDateTime("2026-07-14T10:30:00Z"), "14/07/26 12:30");
     assert.equal(fmtMadridDateTime(null), "—");
+  });
+});
+
+describe("sortRows", () => {
+  const mk = (o: Partial<SortableRow> & { numero_reserva: string }): SortableRow => ({
+    fecha_checkin: "2026-10-28",
+    urgency: 3_000_000,
+    unit: "Apt A",
+    huesped: "Ana",
+    portal: "Airbnb",
+    viajeros: 1,
+    ultimo_sync: "2026-10-28T08:00:00Z",
+    lastReclamacionAt: null,
+    ...o,
+  });
+  const ids = (rows: SortableRow[]) => rows.map((r) => r.numero_reserva);
+  const sorted = (rows: SortableRow[], key: SortKey, dir: SortDir) => ids(sortRows(rows, key, dir, (r) => r));
+
+  it("default (entrada asc): date asc, then most urgent first, then unit name", () => {
+    const rows = [
+      mk({ numero_reserva: "late", fecha_checkin: "2026-10-30" }),
+      mk({ numero_reserva: "d2-calm-A", fecha_checkin: "2026-10-28", urgency: 3_000_100, unit: "Apt A" }),
+      mk({ numero_reserva: "d2-urgent-Z", fecha_checkin: "2026-10-28", urgency: 0, unit: "Apt Z" }),
+      mk({ numero_reserva: "d2-calm-B", fecha_checkin: "2026-10-28", urgency: 3_000_100, unit: "Apt B" }),
+      mk({ numero_reserva: "early", fecha_checkin: "2026-10-27" }),
+    ];
+    assert.deepEqual(DEFAULT_SORT, { key: "entrada", dir: "asc" });
+    assert.deepEqual(sorted(rows, DEFAULT_SORT.key, DEFAULT_SORT.dir), ["early", "d2-urgent-Z", "d2-calm-A", "d2-calm-B", "late"]);
+  });
+  it("entrada desc flips the date only; tie-breakers stay (urgent first)", () => {
+    const rows = [
+      mk({ numero_reserva: "a", fecha_checkin: "2026-10-27" }),
+      mk({ numero_reserva: "b-calm", fecha_checkin: "2026-10-28", urgency: 3_000_000 }),
+      mk({ numero_reserva: "b-urgent", fecha_checkin: "2026-10-28", urgency: 5 }),
+    ];
+    assert.deepEqual(sorted(rows, "entrada", "desc"), ["b-urgent", "b-calm", "a"]);
+  });
+  it("urgencia: asc = most urgent first, desc reverses", () => {
+    const rows = [
+      mk({ numero_reserva: "ok", urgency: 3_000_000 }),
+      mk({ numero_reserva: "danger", urgency: 20_000 }),
+      mk({ numero_reserva: "warning", urgency: 1_020_000 }),
+    ];
+    assert.deepEqual(sorted(rows, "urgencia", "asc"), ["danger", "warning", "ok"]);
+    assert.deepEqual(sorted(rows, "urgencia", "desc"), ["ok", "warning", "danger"]);
+  });
+  it("apartamento / reserva / huesped / portal: text asc and desc (natural, accent-insensitive)", () => {
+    const rows = [
+      mk({ numero_reserva: "R10", unit: "Apt 10", huesped: "Álvaro", portal: "Booking" }),
+      mk({ numero_reserva: "R2", unit: "Apt 2", huesped: "Beatriz", portal: "Airbnb" }),
+      mk({ numero_reserva: "R1", unit: "Apt 1", huesped: "Alba", portal: "Directo" }),
+    ];
+    assert.deepEqual(sorted(rows, "apartamento", "asc"), ["R1", "R2", "R10"]);
+    assert.deepEqual(sorted(rows, "apartamento", "desc"), ["R10", "R2", "R1"]);
+    assert.deepEqual(sorted(rows, "reserva", "asc"), ["R1", "R2", "R10"]);
+    assert.deepEqual(sorted(rows, "reserva", "desc"), ["R10", "R2", "R1"]);
+    assert.deepEqual(sorted(rows, "huesped", "asc"), ["R1", "R10", "R2"]); // Alba, Álvaro, Beatriz
+    assert.deepEqual(sorted(rows, "huesped", "desc"), ["R2", "R10", "R1"]);
+    assert.deepEqual(sorted(rows, "portal", "asc"), ["R2", "R10", "R1"]); // Airbnb, Booking, Directo
+    assert.deepEqual(sorted(rows, "portal", "desc"), ["R1", "R10", "R2"]);
+  });
+  it("viajeros: numeric, nulls last in both directions", () => {
+    const rows = [
+      mk({ numero_reserva: "n3", viajeros: 3 }),
+      mk({ numero_reserva: "none", viajeros: null }),
+      mk({ numero_reserva: "n0", viajeros: 0 }),
+      mk({ numero_reserva: "n10", viajeros: 10 }),
+    ];
+    assert.deepEqual(sorted(rows, "viajeros", "asc"), ["n0", "n3", "n10", "none"]);
+    assert.deepEqual(sorted(rows, "viajeros", "desc"), ["n10", "n3", "n0", "none"]);
+  });
+  it("sync: by time, nulls last", () => {
+    const rows = [
+      mk({ numero_reserva: "new", ultimo_sync: "2026-10-28T14:00:00Z" }),
+      mk({ numero_reserva: "never", ultimo_sync: null }),
+      mk({ numero_reserva: "old", ultimo_sync: "2026-10-27T05:00:00Z" }),
+    ];
+    assert.deepEqual(sorted(rows, "sync", "asc"), ["old", "new", "never"]);
+    assert.deepEqual(sorted(rows, "sync", "desc"), ["new", "old", "never"]);
+  });
+  it("reclamacion: by last reclamation date, none last", () => {
+    const rows = [
+      mk({ numero_reserva: "none", lastReclamacionAt: null }),
+      mk({ numero_reserva: "recent", lastReclamacionAt: "2026-10-28T09:00:00Z" }),
+      mk({ numero_reserva: "older", lastReclamacionAt: "2026-10-26T09:00:00Z" }),
+    ];
+    assert.deepEqual(sorted(rows, "reclamacion", "asc"), ["older", "recent", "none"]);
+    assert.deepEqual(sorted(rows, "reclamacion", "desc"), ["recent", "older", "none"]);
+  });
+  it("empty text values (null or empty string) go last", () => {
+    const rows = [
+      mk({ numero_reserva: "empty", huesped: "" }),
+      mk({ numero_reserva: "Z", huesped: "Zoe" }),
+      mk({ numero_reserva: "nul", huesped: null }),
+      mk({ numero_reserva: "A", huesped: "Ana" }),
+    ];
+    assert.deepEqual(sorted(rows, "huesped", "asc").slice(0, 2), ["A", "Z"]);
+    assert.deepEqual(sorted(rows, "huesped", "desc").slice(0, 2), ["Z", "A"]);
+  });
+  it("ties on the key fall back to date, urgency, unit and reservation number", () => {
+    const rows = [
+      mk({ numero_reserva: "b", portal: "Airbnb", fecha_checkin: "2026-10-29" }),
+      mk({ numero_reserva: "a", portal: "Airbnb", fecha_checkin: "2026-10-28", unit: "Apt B" }),
+      mk({ numero_reserva: "c", portal: "Airbnb", fecha_checkin: "2026-10-28", unit: "Apt A" }),
+    ];
+    assert.deepEqual(sorted(rows, "portal", "asc"), ["c", "a", "b"]);
+    assert.deepEqual(sorted(rows, "portal", "desc"), ["c", "a", "b"]); // tie-breakers are not flipped
+  });
+  it("is stable and does not mutate the input", () => {
+    const same = (n: string) => mk({ numero_reserva: "X", unit: n });
+    const input = [same("1"), same("2"), same("3"), same("4")];
+    const before = input.map((r) => r.unit);
+    const out = sortRows(input, "reserva", "asc", (r) => ({ ...r, unit: null, fecha_checkin: "2026-10-28", urgency: 0 }));
+    assert.deepEqual(out.map((r) => r.unit), ["1", "2", "3", "4"]); // identical keys keep input order
+    assert.deepEqual(input.map((r) => r.unit), before);
   });
 });

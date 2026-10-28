@@ -346,3 +346,107 @@ export function isStaleRegistre(fechaCheckin: string, kbCheckIn: string | null |
 }
 
 export const isValidIso = (s: string | null | undefined): s is string => !!s && ISO_RE.test(s);
+
+// ---------- sorting of the /registre-hostes list ----------
+
+export type SortKey =
+  | "entrada"
+  | "urgencia"
+  | "apartamento"
+  | "reserva"
+  | "huesped"
+  | "portal"
+  | "viajeros"
+  | "sync"
+  | "reclamacion";
+export type SortDir = "asc" | "desc";
+
+export const DEFAULT_SORT: { key: SortKey; dir: SortDir } = { key: "entrada", dir: "asc" };
+
+/** Options of the mobile "Ordenar por" select ("urgencia" is also the Estado column sort). */
+export const SORT_OPTIONS: { key: SortKey; label: string }[] = [
+  { key: "entrada", label: "Entrada" },
+  { key: "urgencia", label: "Urgencia" },
+  { key: "apartamento", label: "Apartamento" },
+  { key: "reserva", label: "Reserva" },
+  { key: "huesped", label: "Huésped" },
+  { key: "portal", label: "Portal" },
+  { key: "viajeros", label: "Viajeros" },
+  { key: "sync", label: "Sincronizado" },
+  { key: "reclamacion", label: "Reclamación" },
+];
+
+/** What a row exposes to the sort. `urgency` is Alert.priority: LOWER = MORE URGENT. */
+export interface SortableRow {
+  fecha_checkin: string;
+  urgency: number;
+  unit: string | null;
+  numero_reserva: string;
+  huesped: string | null;
+  portal: string | null;
+  viajeros: number | null;
+  ultimo_sync: string | null;
+  lastReclamacionAt: string | null;
+}
+
+const collator = new Intl.Collator("es", { numeric: true, sensitivity: "base" });
+const cmpStr = (a: string, b: string) => collator.compare(a, b);
+const cmpNum = (a: number, b: number) => a - b;
+const cmpTime = (a: string, b: string) => Date.parse(a) - Date.parse(b);
+
+/** Empty values (null/undefined/"") always go last, whatever the direction. */
+function cmpField<T>(a: T | null | undefined, b: T | null | undefined, dir: SortDir, cmp: (x: T, y: T) => number): number {
+  const ea = a === null || a === undefined || (a as unknown) === "";
+  const eb = b === null || b === undefined || (b as unknown) === "";
+  if (ea && eb) return 0;
+  if (ea) return 1;
+  if (eb) return -1;
+  const c = cmp(a as T, b as T);
+  return dir === "asc" ? c : -c;
+}
+
+/**
+ * Comparator for one sort key. The direction only flips the primary key; the tie-breakers are
+ * fixed: entry date asc, most urgent first, unit name, reservation number.
+ */
+export function compareRows(key: SortKey, dir: SortDir): (a: SortableRow, b: SortableRow) => number {
+  const tie = (a: SortableRow, b: SortableRow, skip: "fecha" | "urgency" | null) =>
+    (skip === "fecha" ? 0 : cmpStr(a.fecha_checkin, b.fecha_checkin)) ||
+    (skip === "urgency" ? 0 : cmpNum(a.urgency, b.urgency)) ||
+    cmpField(a.unit, b.unit, "asc", cmpStr) ||
+    cmpStr(a.numero_reserva, b.numero_reserva);
+
+  return (a, b) => {
+    switch (key) {
+      case "entrada":
+        // date (dir) -> most urgent first -> unit
+        return cmpField(a.fecha_checkin, b.fecha_checkin, dir, cmpStr) || tie(a, b, "fecha");
+      case "urgencia":
+        // asc = most urgent first (urgency already contains the entry date as its last component)
+        return cmpField(a.urgency, b.urgency, dir, cmpNum) || tie(a, b, "urgency");
+      case "apartamento":
+        return cmpField(a.unit, b.unit, dir, cmpStr) || tie(a, b, null);
+      case "reserva":
+        return cmpField(a.numero_reserva, b.numero_reserva, dir, cmpStr) || tie(a, b, null);
+      case "huesped":
+        return cmpField(a.huesped, b.huesped, dir, cmpStr) || tie(a, b, null);
+      case "portal":
+        return cmpField(a.portal, b.portal, dir, cmpStr) || tie(a, b, null);
+      case "viajeros":
+        return cmpField(a.viajeros, b.viajeros, dir, cmpNum) || tie(a, b, null);
+      case "sync":
+        return cmpField(a.ultimo_sync, b.ultimo_sync, dir, cmpTime) || tie(a, b, null);
+      case "reclamacion":
+        return cmpField(a.lastReclamacionAt, b.lastReclamacionAt, dir, cmpTime) || tie(a, b, null);
+    }
+  };
+}
+
+/** Sorted copy of `rows`; stable: rows that compare equal keep their input order. */
+export function sortRows<T>(rows: readonly T[], key: SortKey, dir: SortDir, pick: (row: T) => SortableRow): T[] {
+  const cmp = compareRows(key, dir);
+  return rows
+    .map((row, i) => ({ row, i, s: pick(row) }))
+    .sort((a, b) => cmp(a.s, b.s) || a.i - b.i)
+    .map((x) => x.row);
+}
