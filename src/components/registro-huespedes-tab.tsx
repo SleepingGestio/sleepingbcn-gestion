@@ -104,8 +104,9 @@ export function RegistroHuespedesTab({
           const situacion = situacionRegistro(rowIn, { expected });
           return (
             <div key={r.id_registre} className="space-y-2 rounded-md border p-3">
-              {/* One line: name, pill, n/N and "Actualizado …". Name + pill wrap together; the rest may wrap below. */}
-              <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+              {/* One line: name + pill on the left, n/N · "Actualizado …" · lote flush right (justify-between).
+                  If the right group does not fit it wraps below and, being alone on its line, starts at the left. */}
+              <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
                 <div className="flex items-center gap-2">
                   <span className="text-sm font-medium">{r.apartamentos?.nombre ?? `Apartamento ${r.id_apt}`}</span>
                   <SituacionPill
