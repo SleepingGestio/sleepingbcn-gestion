@@ -1,15 +1,26 @@
 name: Partee sync
 
-# Schedule (UTC; Madrid is UTC+1 winter / UTC+2 summer):
-#  - 05:15 UTC = 06:15 / 07:15 local: first run, so Registre hostes is fresh for today's arrivals.
-#  - 14:15 UTC = 15:15 / 16:15 local: second run, after guests had the morning to complete the
-#    online check-in and before evening arrivals.
-# GitHub may delay scheduled runs (often by several minutes, more at peak times such as the
-# top of the hour), so the minutes are off-peak on purpose and exact timing is not guaranteed.
+# Two kinds of scheduled runs (GitHub cron is UTC only; Madrid is UTC+1 in winter, UTC+2 in summer):
+#
+#  1. FULL, twice a day (window yesterday..+7, typecheck + tests first):
+#     - 05:15 UTC = 06:15 / 07:15 local: first run, so Registre hostes is fresh for today's arrivals.
+#     - 14:15 UTC = 15:15 / 16:15 local: second run, after guests had the morning to complete the
+#       online check-in and before evening arrivals.
+#
+#  2. HOURLY, light (window yesterday..today+3, no install / typecheck / tests), only 08:00-20:00 Madrid.
+#     The cron fires at minute 40 of every UTC hour from 06 to 19, which is the superset of
+#     08:00-20:00 Madrid in both seasons (winter 07..19 UTC, summer 06..18 UTC). The first step
+#     computes the Madrid hour and the job exits early (all later steps skipped) when it is outside 08..20.
+#     Minute 40 avoids the top of the hour (busiest) and the :15 of the full runs.
+#
+# GitHub may delay or even skip scheduled runs (often by several minutes, more at peak times), so exact
+# timing is not guaranteed; the next hourly run (or the daily full ones) catches up because every run
+# re-reads the whole window.
 on:
   schedule:
     - cron: "15 5 * * *"
     - cron: "15 14 * * *"
+    - cron: "40 6-19 * * *"
   workflow_dispatch:
     inputs:
       dry:
@@ -25,7 +36,10 @@ on:
         type: string
         required: false
 
-# Two runs never overlap; a new one waits for the running one.
+# Runs never overlap and a running one is never cancelled: a new run waits for the running one.
+# GitHub keeps at most ONE pending run per group (a newer pending run replaces an older pending one).
+# That is safe here: hourly runs time out after 5 minutes and a full run after 15, so a pending full run
+# always starts well before the next hourly cron (every 60 minutes, at :40) can replace it.
 concurrency:
   group: partee-sync
   cancel-in-progress: false
@@ -34,7 +48,9 @@ permissions:
   contents: read
 
 jobs:
+  # ------------------------------------------------------------------ full (daily crons + manual)
   sync:
+    if: github.event_name != 'schedule' || github.event.schedule != '40 6-19 * * *'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     defaults:
@@ -73,6 +89,7 @@ jobs:
 
       # Scheduled runs are real; manual runs follow the "dry" input.
       # Inputs go through env (not interpolated into the script); the CLI validates them.
+      # Any non-zero exit fails the job on purpose: this is the run that e-mails you.
       - name: Run sync
         if: steps.guard.outputs.ready == 'true'
         env:
@@ -91,3 +108,73 @@ jobs:
             if [ -n "$INPUT_TO" ]; then args+=("--to=$INPUT_TO"); fi
           fi
           bun src/cli.ts "${args[@]}"
+
+  # ------------------------------------------------------------------ hourly (light)
+  hourly:
+    if: github.event_name == 'schedule' && github.event.schedule == '40 6-19 * * *'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # First step, before anything is downloaded: only 08..20 Madrid time runs; any other hour exits here.
+      - name: Madrid hour
+        id: hour
+        run: |
+          h=$(TZ=Europe/Madrid date +%H)
+          h=$((10#$h))
+          if [ "$h" -ge 8 ] && [ "$h" -le 20 ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            echo "from=$(TZ=Europe/Madrid date -d 'today -1 day' +%F)" >> "$GITHUB_OUTPUT"
+            echo "to=$(TZ=Europe/Madrid date -d 'today +3 days' +%F)" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::Hourly Partee sync skipped: Madrid hour is $h (runs from 08 to 20)."
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v4
+        if: steps.hour.outputs.run == 'true'
+        with:
+          sparse-checkout: jobs/partee-sync
+          sparse-checkout-cone-mode: true
+
+      # The CLI has no runtime dependencies (only bun/node built-ins and local files), so there is no
+      # "bun install" here: typecheck and tests stay on the daily full runs and on manual runs.
+      - uses: oven-sh/setup-bun@v2
+        if: steps.hour.outputs.run == 'true'
+        with:
+          bun-version: latest
+
+      # Secrets are only compared with "empty", never printed.
+      - name: Check secrets
+        id: guard
+        if: steps.hour.outputs.run == 'true'
+        env:
+          PARTEE_API_TOKEN: ${{ secrets.PARTEE_API_TOKEN }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          if [ -z "$PARTEE_API_TOKEN" ] || [ -z "$SUPABASE_URL" ] || [ -z "$SUPABASE_SERVICE_ROLE_KEY" ]; then
+            echo "::notice::Hourly Partee sync skipped: one or more of PARTEE_API_TOKEN, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY are not set as Actions secrets yet."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      # Real run over yesterday..today+3 (Madrid dates, computed above; well under the 14-day maximum).
+      # NO e-mail spam: this job never fails because of the sync itself. Exit code 1 (some call failed
+      # or Partee rate-limited) and 2 (aborted: 401, DB error, ...) become a warning annotation; the two
+      # daily full runs stay strict and are the ones that fail loudly (at most twice a day).
+      - name: Run sync (hourly window)
+        if: steps.hour.outputs.run == 'true' && steps.guard.outputs.ready == 'true'
+        working-directory: jobs/partee-sync
+        env:
+          PARTEE_API_TOKEN: ${{ secrets.PARTEE_API_TOKEN }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          WINDOW_FROM: ${{ steps.hour.outputs.from }}
+          WINDOW_TO: ${{ steps.hour.outputs.to }}
+        run: |
+          code=0
+          bun src/cli.ts "--from=$WINDOW_FROM" "--to=$WINDOW_TO" || code=$?
+          if [ "$code" -ne 0 ]; then
+            echo "::warning::Hourly Partee sync finished with exit code $code (1 = a call failed or Partee rate-limited, 2 = aborted). See the log above; the next run retries and the daily full runs will fail loudly if this persists."
+          fi
