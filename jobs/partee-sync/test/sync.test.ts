@@ -39,6 +39,8 @@ interface World {
   reservations: Record<string, Responder>; // "estId|dd-MM-yyyy"
   partes: Record<string, Responder>; // parteId
   existing?: Array<{ numero_reserva: string; id_apt: number; estado: string }>; // current partee_registre rows
+  excluded?: string[]; // numero_reserva rows of partee_exclusion
+  exclusionReadStatus?: number; // make the partee_exclusion read fail with this HTTP status
 }
 
 function setup(w: World) {
@@ -68,6 +70,9 @@ function setup(w: World) {
           ]));
         case 'partee_registre':
           return new Response(JSON.stringify(w.existing ?? []));
+        case 'partee_exclusion':
+          if (w.exclusionReadStatus) return new Response('{"message":"boom"}', { status: w.exclusionReadStatus });
+          return new Response(JSON.stringify((w.excluded ?? []).map((numero_reserva) => ({ numero_reserva }))));
         case 'apartamentos_alias_kb':
           return new Response(JSON.stringify([]));
         case 'reservas_kb':
@@ -337,6 +342,74 @@ describe('runSync', () => {
       const s = await runSync(env, opts, deps);
       expect(s.needs_review).toEqual([]);
       expect(log.upserts[0].map((r) => [r.numero_reserva, r.estado])).toEqual([['R1', 'anulado'], ['R2', 'sin_registro']]);
+    });
+  });
+
+  describe('excluded reservations (partee_exclusion)', () => {
+    it('skips excluded reservations: no Partee reads, no rows, counted in skipped_excluded', async () => {
+      const { deps, log } = setup({
+        kb: [kb('EXCL', 'Apt 1'), kb('KEEP', 'Apt 2')],
+        reservations: { '101|28-10-2026': ok([partee(1, 990)]), '102|28-10-2026': ok([ical(2)]) },
+        partes: { '990': ok(parte({})) },
+        excluded: ['EXCL'],
+      });
+      const s = await runSync(env, opts, deps);
+      expect(s.skipped_excluded).toBe(1);
+      expect(s.kb_pairs).toBe(1);
+      expect(log.partee).toEqual(['102|28-10-2026']); // nothing asked for Apt 1 / EXCL
+      expect(log.parte).toEqual([]);
+      expect(log.upserts[0].map((r) => r.numero_reserva)).toEqual(['KEEP']);
+    });
+
+    it('an excluded multi-room reservation generates no reads for any unit', async () => {
+      const { deps, log } = setup({
+        kb: [kb('MULTI', 'Apt 1, Apt 2')],
+        reservations: {},
+        partes: {},
+        excluded: ['MULTI'],
+      });
+      const s = await runSync(env, opts, deps);
+      expect(s.skipped_excluded).toBe(1);
+      expect(s.partee_calls).toBe(0);
+      expect(log.upserts).toHaveLength(0);
+    });
+
+    it('leaves existing partee_registre rows of an excluded reservation untouched (no write at all)', async () => {
+      const { deps, log } = setup({
+        kb: [kb('EXCL', 'Apt 1')],
+        reservations: { '101|28-10-2026': ok([partee(1, 991)]) },
+        partes: { '991': ok(parte({})) },
+        existing: [{ numero_reserva: 'EXCL', id_apt: 1, estado: 'finalizado' }],
+        excluded: ['EXCL'],
+      });
+      const s = await runSync(env, opts, deps);
+      expect(s.needs_review).toEqual([]);
+      expect(log.upserts).toHaveLength(0);
+    });
+
+    it('aborts the run when the exclusion read fails (never syncs excluded reservations by mistake)', async () => {
+      const { deps, log } = setup({
+        kb: [kb('R1', 'Apt 1')],
+        reservations: { '101|28-10-2026': ok([ical(1)]) },
+        partes: {},
+        exclusionReadStatus: 500,
+      });
+      await expect(runSync(env, opts, deps)).rejects.toThrow('supabase_read_failed:partee_exclusion:500');
+      expect(log.partee).toHaveLength(0);
+      expect(log.upserts).toHaveLength(0);
+    });
+
+    it('has no effect when the exclusion set is empty', async () => {
+      const world = {
+        kb: [kb('R1', 'Apt 1')],
+        reservations: { '101|28-10-2026': ok([partee(1, 992)]) },
+        partes: { '992': ok(parte({})) },
+      };
+      const a = setup({ ...world, excluded: [] });
+      const sa = await runSync(env, opts, a.deps);
+      expect(sa.skipped_excluded).toBe(0);
+      expect(sa.kb_pairs).toBe(1);
+      expect(a.log.upserts[0].map((r) => r.numero_reserva)).toEqual(['R1']);
     });
   });
 });

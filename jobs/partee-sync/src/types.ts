@@ -71,6 +71,8 @@ export interface RunSummary {
   kb_pairs: number;
   ignored_units: number;
   unresolved_rooms: number;
+  /** KB reservations in the window skipped because they are in partee_exclusion (no Partee reads). */
+  skipped_excluded: number;
   partee_calls: number;
   parte_calls: number;
   empty_dates: number;

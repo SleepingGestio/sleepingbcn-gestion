@@ -77,6 +77,15 @@ export class Db {
     return this.getAll('partee_registre', p);
   }
 
+  /** Reservation numbers that do not need a Partee registration (partee_exclusion). */
+  async excludedReservas(): Promise<string[]> {
+    const rows = await this.getAll<{ numero_reserva: string }>(
+      'partee_exclusion',
+      new URLSearchParams({ select: 'numero_reserva', order: 'numero_reserva' }),
+    );
+    return rows.map((r) => r.numero_reserva);
+  }
+
   /** Bulk upsert on (numero_reserva, id_apt). Columns not in the payload (ses_*) are left untouched. */
   async upsertRegistre(rows: RegistreRow[]): Promise<void> {
     if (rows.length === 0) return;

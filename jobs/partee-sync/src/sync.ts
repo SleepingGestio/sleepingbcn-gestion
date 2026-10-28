@@ -62,6 +62,7 @@ export async function runSync(env: Env, opts: RunOptions, deps: Deps = realDeps)
     kb_pairs: 0,
     ignored_units: 0,
     unresolved_rooms: 0,
+    skipped_excluded: 0,
     partee_calls: 0,
     parte_calls: 0,
     empty_dates: 0,
@@ -77,17 +78,24 @@ export async function runSync(env: Env, opts: RunOptions, deps: Deps = realDeps)
     duration_ms: 0,
   };
 
-  // 1-2. Establishments, KB reservations, room resolution, current registre state.
-  const [ests, apts, alias, kb, existing] = await Promise.all([
+  // 1-2. Establishments, KB reservations, room resolution, current registre state, exclusions.
+  // If the exclusion read fails the whole run aborts: excluded reservations must never be synced by mistake.
+  const [ests, apts, alias, kb, existing, excludedList] = await Promise.all([
     db.establiments(),
     db.apartamentos(),
     db.alias(),
     db.kbReservations(w.window.from, w.window.to),
     db.registreEstados(w.window.from, w.window.to),
+    db.excludedReservas(),
   ]);
+  // Excluded reservations generate no pairs and therefore no Partee reads; their existing
+  // partee_registre rows are left exactly as they are.
+  const excluded = new Set(excludedList);
+  const kbToSync = kb.filter((r) => !excluded.has(r.numero));
+  summary.skipped_excluded = kb.length - kbToSync.length;
   summary.establishments = ests.length;
   const estByApt = new Map(ests.map((e) => [e.id_apt, e.partee_est_id]));
-  const built = buildTargetPairs(kb, buildRoomIndex(apts, alias), new Set(estByApt.keys()));
+  const built = buildTargetPairs(kbToSync, buildRoomIndex(apts, alias), new Set(estByApt.keys()));
   summary.kb_pairs = built.pairs.length;
   summary.ignored_units = built.ignoredUnits;
   summary.unresolved_rooms = built.unresolvedRooms;
