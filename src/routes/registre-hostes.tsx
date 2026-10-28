@@ -7,6 +7,7 @@ import { ReservaDetail } from "@/components/reserva-detail";
 import { AddReclamacionDialog } from "@/components/registro-reclamaciones";
 import { ExcluirReservaDialog, IncluirReservaDialog, useExclusiones } from "@/components/registro-exclusion";
 import { RefreshButton } from "@/components/registro-refresh";
+import { SyncTodoButton } from "@/components/registro-sync-todo";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -323,22 +324,25 @@ function RegistreHostesPage() {
     <AppShell title="Registre hostes">
       <TooltipProvider delayDuration={200}>
         <div className="space-y-4">
-          <p className="text-xs text-muted-foreground">
-            Última sincronización:{" "}
-            {lastSync ? (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span className="cursor-help underline decoration-dotted underline-offset-2">
-                    {fmtAgo(lastSync)}
-                  </span>
-                </TooltipTrigger>
-                <TooltipContent>{fmtDateTime(lastSync)}</TooltipContent>
-              </Tooltip>
-            ) : (
-              "—"
-            )}
-            . La sincronización con Partee se ejecuta dos veces al día.
-          </p>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-xs text-muted-foreground">
+              Última sincronización:{" "}
+              {lastSync ? (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="cursor-help underline decoration-dotted underline-offset-2">
+                      {fmtAgo(lastSync)}
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent>{fmtDateTime(lastSync)}</TooltipContent>
+                </Tooltip>
+              ) : (
+                "—"
+              )}
+              . La sincronización con Partee se ejecuta de forma completa dos veces al día y de forma ligera cada hora, de 08:00 a 20:00.
+            </p>
+            <SyncTodoButton />
+          </div>
 
           {/* Counters (click = filter) */}
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
