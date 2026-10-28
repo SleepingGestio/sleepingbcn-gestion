@@ -22,6 +22,7 @@ import {
   RegistreEstadoBadge,
   ViajerosCell,
 } from "@/components/partee-registre-bits";
+import { ReclamacionesBlock } from "@/components/registro-reclamaciones";
 
 export function RegistroHuespedesTab({
   numero,
@@ -104,6 +105,8 @@ export function RegistroHuespedesTab({
               ) : (
                 <p className="text-sm text-muted-foreground">{noLinkReason(r.estado)}</p>
               )}
+
+              <ReclamacionesBlock registre={r} />
             </div>
           );
         })}

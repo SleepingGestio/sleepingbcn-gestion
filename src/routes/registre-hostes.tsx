@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Eye } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { ReservaDetail } from "@/components/reserva-detail";
+import { AddReclamacionDialog } from "@/components/registro-reclamaciones";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -25,10 +26,12 @@ import {
   addDaysIso,
   alertLevel,
   countRooms,
+  CANAL_LABEL,
   ESTADO_LABEL,
   expectedViajeros,
   fmtAgo,
   isValidIso,
+  reclamacionHint,
   todayMadrid,
   viajerosTone,
   type Alert,
@@ -47,6 +50,41 @@ interface Row {
   expected: Expected;
   alert: Alert;
   tone: ViajerosTone;
+  /** "Sin reclamar" / "Reclamado hace …" for warning/danger rows, else null. */
+  hint: string | null;
+  last: { enviada_en: string; canal: string | null } | null;
+}
+
+function ReclamacionCell({
+  hint,
+  last,
+  level,
+  canClaim,
+  onClaim,
+}: {
+  hint: string | null;
+  last: Row["last"];
+  level: AlertLevel;
+  canClaim: boolean;
+  onClaim: () => void;
+}) {
+  if (!hint && !canClaim) return <span className="text-xs text-muted-foreground">—</span>;
+  const sin = hint === "Sin reclamar";
+  return (
+    <div className="flex flex-col items-start gap-1">
+      {hint && (
+        <span className={cn("text-xs", sin ? LEVEL_TEXT[level] : "text-muted-foreground")}>
+          {hint}
+          {!sin && last?.canal ? ` · ${CANAL_LABEL[last.canal] ?? last.canal}` : ""}
+        </span>
+      )}
+      {canClaim && (
+        <Button variant="outline" size="sm" onClick={onClaim}>
+          Reclamar
+        </Button>
+      )}
+    </div>
+  );
 }
 
 type Quick = "danger" | "warning" | "sin_registro" | "borrador0" | "finalizado" | null;
@@ -77,6 +115,8 @@ function RegistreHostesPage() {
   const [unit, setUnit] = useState<string>(ALL);
   const [quick, setQuick] = useState<Quick>(null);
   const [selected, setSelected] = useState<string | null>(null);
+  const [reclamarFor, setReclamarFor] = useState<number | null>(null);
+  const editor = canEdit("registre_hostes");
 
   const rangeOk = isValidIso(from) && isValidIso(to) && from <= to;
   const q = useQuery({
@@ -85,22 +125,30 @@ function RegistreHostesPage() {
     queryFn: () => fetchRegistreWindow(from, to),
   });
 
-  const rows: Row[] = useMemo(
-    () =>
-      (q.data ?? []).map((r) => {
-        const kb = r.reservas_kb;
-        const expected = expectedViajeros(
-          {
-            huespedes: kb?.["Huéspedes"],
-            menores: kb?.["Huéspedes menores de edad"],
-            exentos: kb?.["Huéspedes exentos"],
-          },
-          countRooms(kb?.Habitaciones),
-        );
-        return { r, expected, alert: alertLevel(r, { today, expected }), tone: viajerosTone(r, { today }, expected) };
-      }),
-    [q.data, today],
-  );
+  const rows: Row[] = useMemo(() => {
+    const now = new Date();
+    return (q.data ?? []).map((r) => {
+      const kb = r.reservas_kb;
+      const expected = expectedViajeros(
+        {
+          huespedes: kb?.["Huéspedes"],
+          menores: kb?.["Huéspedes menores de edad"],
+          exentos: kb?.["Huéspedes exentos"],
+        },
+        countRooms(kb?.Habitaciones),
+      );
+      const alert = alertLevel(r, { today, expected });
+      const last = r.partee_reclamacio?.[0] ?? null;
+      return {
+        r,
+        expected,
+        alert,
+        tone: viajerosTone(r, { today }, expected),
+        hint: reclamacionHint(alert.level, last?.enviada_en ?? null, now),
+        last,
+      };
+    });
+  }, [q.data, today]);
 
   const units = useMemo(() => {
     const m = new Map<number, string>();
@@ -252,11 +300,12 @@ function RegistreHostesPage() {
                       <TableHead>Estado</TableHead>
                       <TableHead>Viajeros</TableHead>
                       <TableHead>Sincronizado</TableHead>
+                      <TableHead>Reclamación</TableHead>
                       <TableHead className="text-right">Acciones</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {visible.map(({ r, expected, alert, tone }) => (
+                    {visible.map(({ r, expected, alert, tone, hint, last }) => (
                       <TableRow key={r.id_registre}>
                         <TableCell className="whitespace-nowrap">{fmtDate(r.fecha_checkin)}</TableCell>
                         <TableCell>{r.apartamentos?.nombre ?? `Apartamento ${r.id_apt}`}</TableCell>
@@ -276,6 +325,15 @@ function RegistreHostesPage() {
                             <TooltipContent>{fmtDateTime(r.ultimo_sync)}</TooltipContent>
                           </Tooltip>
                         </TableCell>
+                        <TableCell>
+                          <ReclamacionCell
+                            hint={hint}
+                            last={last}
+                            level={alert.level}
+                            canClaim={editor && r.estado !== "finalizado" && r.estado !== "anulado"}
+                            onClaim={() => setReclamarFor(r.id_registre)}
+                          />
+                        </TableCell>
                         <TableCell className="whitespace-nowrap text-right">
                           <CopyLinkIconButton url={r.checkin_url} noLinkReason={noLinkReason(r.estado)} />
                           <Button variant="ghost" size="icon" aria-label="Ver registro de huéspedes" onClick={() => setSelected(r.numero_reserva)}>
@@ -290,7 +348,7 @@ function RegistreHostesPage() {
 
               {/* Mobile cards */}
               <div className="space-y-2 md:hidden">
-                {visible.map(({ r, expected, alert, tone }) => (
+                {visible.map(({ r, expected, alert, tone, hint, last }) => (
                   <Card key={r.id_registre}>
                     <CardContent className="space-y-2 p-3">
                       <div className="flex items-start justify-between gap-2">
@@ -303,6 +361,13 @@ function RegistreHostesPage() {
                         <RegistreEstadoBadge estado={r.estado} level={alert.level} />
                       </div>
                       <div className={cn("text-sm", LEVEL_TEXT[alert.level])}>{alert.label}</div>
+                      <ReclamacionCell
+                        hint={hint}
+                        last={last}
+                        level={alert.level}
+                        canClaim={editor && r.estado !== "finalizado" && r.estado !== "anulado"}
+                        onClaim={() => setReclamarFor(r.id_registre)}
+                      />
                       <div className="text-xs text-muted-foreground">
                         {r.numero_reserva} · {r.reservas_kb?.Referencia ?? "—"} · {r.reservas_kb?.Portal ?? "—"}
                       </div>
@@ -324,6 +389,12 @@ function RegistreHostesPage() {
           )}
         </div>
       </TooltipProvider>
+
+      <AddReclamacionDialog
+        idRegistre={reclamarFor}
+        open={reclamarFor != null}
+        onOpenChange={(o) => !o && setReclamarFor(null)}
+      />
 
       <ReservaDetail
         numero={selected}

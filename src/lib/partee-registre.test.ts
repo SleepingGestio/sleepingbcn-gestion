@@ -9,8 +9,12 @@ import {
   diffDays,
   expectedViajeros,
   fmtAgo,
+  fmtMadridDateTime,
   isStaleRegistre,
+  madridLocalToIso,
+  reclamacionHint,
   todayMadrid,
+  toMadridLocalInput,
   viajerosTone,
   viajerosTooltip,
   type Expected,
@@ -269,5 +273,92 @@ describe("isStaleRegistre", () => {
     assert.equal(isStaleRegistre("2026-10-28", null), false);
     assert.equal(isStaleRegistre("2026-10-28", undefined), false);
     assert.equal(isStaleRegistre("2026-10-28", ""), false);
+  });
+});
+
+describe("registro confirmado a mano", () => {
+  const conf = (estado: string, d: number, n: number | null, ex: Expected, confirmado = true) =>
+    alertLevel(
+      { estado, num_viajeros: n, fecha_checkin: day(d), registro_confirmado: confirmado },
+      { today: TODAY, expected: ex },
+    );
+  const tone = (estado: string, d: number, n: number | null, ex: Expected, confirmado = true) =>
+    viajerosTone(
+      { estado, num_viajeros: n, fecha_checkin: day(d), registro_confirmado: confirmado },
+      { today: TODAY },
+      ex,
+    );
+
+  it("beats the comparison rules and the entry-day label", () => {
+    for (const [d, ex] of [[2, exact(3)], [2, approx(3)], [0, exact(3)], [0, UNKNOWN], [5, exact(4)]] as const) {
+      const r = conf("borrador", d, 1, ex);
+      assert.deepEqual([r.level, r.code, r.label], ["ok", "confirmado_manual", "Registro confirmado a mano"]);
+    }
+  });
+  it("overdue stays danger even if confirmed", () => {
+    const r = conf("borrador", -1, 2, exact(2));
+    assert.deepEqual([r.level, r.code], ["danger", "vencido"]);
+  });
+  it("needs n > 0 and borrador; unconfirmed rows behave as before", () => {
+    assert.equal(conf("borrador", 2, 0, exact(2)).code, "no_iniciado");
+    assert.equal(conf("borrador", 0, 0, exact(2)).code, "hoy_sin_registro");
+    assert.equal(conf("borrador", 2, 1, exact(3), false).code, "faltan_viajeros");
+    assert.equal(conf("borrador", 0, 1, exact(3), false).code, "hoy_incompleto");
+  });
+  it("tone is ok for confirmed rows with n > 0 and d >= 0", () => {
+    assert.equal(tone("borrador", 0, 1, exact(3)), "ok");
+    assert.equal(tone("borrador", 2, 1, exact(3)), "ok");
+    assert.equal(tone("borrador", 5, 1, UNKNOWN), "ok");
+  });
+  it("tone is not ok for confirmed rows that are overdue or have no viajeros", () => {
+    assert.equal(tone("borrador", -1, 1, exact(3)), "danger");
+    assert.equal(tone("borrador", 0, 0, exact(3)), "danger");
+    assert.equal(tone("borrador", 2, 1, exact(3), false), "muted");
+  });
+});
+
+describe("reclamacionHint", () => {
+  const now = new Date("2026-10-28T12:00:00Z");
+  it("null for ok / info levels", () => {
+    assert.equal(reclamacionHint("ok", null, now), null);
+    assert.equal(reclamacionHint("info", "2026-10-28T11:00:00Z", now), null);
+  });
+  it("Sin reclamar when there is none", () => {
+    assert.equal(reclamacionHint("danger", null, now), "Sin reclamar");
+    assert.equal(reclamacionHint("warning", undefined, now), "Sin reclamar");
+    assert.equal(reclamacionHint("warning", "not a date", now), "Sin reclamar");
+  });
+  it("Sin reclamar when the last one is older than 24 h", () => {
+    assert.equal(reclamacionHint("warning", "2026-10-27T11:00:00Z", now), "Sin reclamar");
+    assert.equal(reclamacionHint("danger", "2026-10-27T11:59:00Z", now), "Sin reclamar");
+  });
+  it("Reclamado hace … within 24 h", () => {
+    assert.equal(reclamacionHint("warning", "2026-10-28T09:00:00Z", now), "Reclamado hace 3 h");
+    assert.equal(reclamacionHint("danger", "2026-10-28T11:55:00Z", now), "Reclamado hace 5 min");
+    assert.equal(reclamacionHint("danger", "2026-10-27T12:00:00Z", now), "Reclamado hace 24 h");
+  });
+});
+
+describe("Madrid date-time helpers", () => {
+  it("toMadridLocalInput formats an instant in Madrid time", () => {
+    assert.equal(toMadridLocalInput(new Date("2026-10-28T10:30:00Z")), "2026-10-28T11:30"); // winter, UTC+1
+    assert.equal(toMadridLocalInput(new Date("2026-07-14T10:30:00Z")), "2026-07-14T12:30"); // summer, UTC+2
+    assert.equal(toMadridLocalInput(new Date("2026-10-28T23:30:00Z")), "2026-10-29T00:30");
+  });
+  it("madridLocalToIso converts Madrid wall time to UTC", () => {
+    assert.equal(madridLocalToIso("2026-10-28T11:30"), "2026-10-28T10:30:00.000Z");
+    assert.equal(madridLocalToIso("2026-07-14T12:30"), "2026-07-14T10:30:00.000Z");
+    assert.equal(madridLocalToIso("2026-10-29T00:30"), "2026-10-28T23:30:00.000Z");
+    assert.equal(madridLocalToIso("garbage"), null);
+  });
+  it("round-trips around the DST changes (2026-03-29 and 2026-10-25)", () => {
+    for (const iso of ["2026-03-29T00:30:00.000Z", "2026-03-29T01:30:00.000Z", "2026-10-24T23:30:00.000Z", "2026-10-25T01:30:00.000Z"]) {
+      assert.equal(madridLocalToIso(toMadridLocalInput(iso)), iso);
+    }
+  });
+  it("fmtMadridDateTime", () => {
+    assert.equal(fmtMadridDateTime("2026-10-28T10:30:00Z"), "28/10/26 11:30");
+    assert.equal(fmtMadridDateTime("2026-07-14T10:30:00Z"), "14/07/26 12:30");
+    assert.equal(fmtMadridDateTime(null), "—");
   });
 });

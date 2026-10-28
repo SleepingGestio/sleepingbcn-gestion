@@ -21,7 +21,18 @@ export const PARTEE_RULES = {
   noIniciadoInfoMaxDays: 7, // d 4..7 not started -> info (beyond: info too)
   /** Time Partee finalizes the parte (shown in the entry-day label). */
   autoFinalizeTime: "03:45",
+  /** A reclamation younger than this counts as "recently reclaimed". */
+  reclamacionVigenteHoras: 24,
 } as const;
+
+export const CANAL_LABEL: Record<string, string> = {
+  kb: "KB",
+  whatsapp: "WhatsApp",
+  telefono: "Teléfono",
+  email: "Email",
+  otro: "Otro",
+};
+export const CANALES = ["kb", "whatsapp", "telefono", "email", "otro"] as const;
 
 export const COMPARISON_TOOLTIP =
   "El número previsto viene de la reserva y puede incluir niños; Partee solo exige registrar a los mayores de 14 años";
@@ -42,7 +53,8 @@ export type AlertCode =
   | "mas_de_los_previstos"
   | "completo"
   | "faltan_viajeros"
-  | "en_curso";
+  | "en_curso"
+  | "confirmado_manual";
 
 export interface Alert {
   level: AlertLevel;
@@ -149,6 +161,8 @@ export interface AlertRowInput {
   estado: string;
   num_viajeros: number | null;
   fecha_checkin: string;
+  /** Manually confirmed complete by a user (partee_registre.registro_confirmado). */
+  registro_confirmado?: boolean | null;
 }
 
 export interface AlertContext {
@@ -179,6 +193,11 @@ export function alertLevel(row: AlertRowInput, ctx: AlertContext): Alert {
   }
 
   if (d < 0) return make(row, "danger", "vencido", "Parte vencido sin finalizar");
+
+  // Confirmed by hand beats every comparison rule (and "Se finaliza esta noche"); overdue above stays danger.
+  if (row.estado === "borrador" && n > 0 && row.registro_confirmado) {
+    return make(row, "ok", "confirmado_manual", "Registro confirmado a mano");
+  }
 
   const notStarted = row.estado === "sin_registro" || row.estado === "iniciado" || (row.estado === "borrador" && n === 0);
 
@@ -220,10 +239,11 @@ export type ViajerosTone = "ok" | "warning" | "danger" | "muted";
 export function viajerosTone(row: AlertRowInput, ctx: { today: string }, expected: Expected): ViajerosTone {
   const n = row.num_viajeros ?? 0;
   const ex = expected.expected;
+  const d = diffDays(ctx.today, row.fecha_checkin);
   if (row.estado === "finalizado") return "ok";
   if (ex !== null && n >= ex) return "ok";
+  if (row.estado === "borrador" && n > 0 && d >= 0 && row.registro_confirmado) return "ok";
   if (row.estado === "anulado" || row.estado === "manual") return "muted";
-  const d = diffDays(ctx.today, row.fecha_checkin);
   if (d < 0) return "danger";
   if (d === 0) {
     if (n === 0) return "danger";
@@ -245,6 +265,75 @@ export function viajerosTooltip(numViajeros: number | null, ex: Expected): strin
   const previstos = ex.expected === 1 ? "1 previsto" : `${ex.expected} previstos`;
   const base = `${registrados} de ${previstos}.`;
   return ex.exact ? base : `${base} ${COMPARISON_TOOLTIP}`;
+}
+
+/**
+ * Reclamation hint for rows that need attention (warning / danger): "Sin reclamar" when there is
+ * no reclamation or the last one is older than PARTEE_RULES.reclamacionVigenteHoras, otherwise
+ * "Reclamado hace …". Other levels: null.
+ */
+export function reclamacionHint(
+  level: AlertLevel,
+  lastReclamacionAt: string | null | undefined,
+  now: Date = new Date(),
+): string | null {
+  if (level !== "warning" && level !== "danger") return null;
+  const t = lastReclamacionAt ? Date.parse(lastReclamacionAt) : NaN;
+  if (Number.isNaN(t)) return "Sin reclamar";
+  const horas = (now.getTime() - t) / 3_600_000;
+  if (horas > PARTEE_RULES.reclamacionVigenteHoras) return "Sin reclamar";
+  return `Reclamado ${fmtAgo(lastReclamacionAt, now)}`;
+}
+
+// ---------- Europe/Madrid date-time helpers (datetime-local <-> timestamptz) ----------
+
+const MADRID = "Europe/Madrid";
+
+function madridParts(ms: number) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: MADRID,
+    hourCycle: "h23",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).formatToParts(new Date(ms));
+  const g = (t: string) => Number(parts.find((p) => p.type === t)?.value);
+  return { y: g("year"), mo: g("month"), d: g("day"), h: g("hour"), mi: g("minute") };
+}
+
+/** Madrid wall-clock minus UTC, in minutes, at an instant (60 in winter, 120 in summer). */
+function madridOffsetMin(ms: number): number {
+  const p = madridParts(ms);
+  const minute = Math.floor(ms / 60_000) * 60_000;
+  return (Date.UTC(p.y, p.mo - 1, p.d, p.h, p.mi) - minute) / 60_000;
+}
+
+const pad2 = (n: number) => String(n).padStart(2, "0");
+
+/** `datetime-local` value ("YYYY-MM-DDTHH:mm") for an instant, expressed in Madrid time. */
+export function toMadridLocalInput(date: Date | string): string {
+  const ms = typeof date === "string" ? Date.parse(date) : date.getTime();
+  const p = madridParts(ms);
+  return `${p.y}-${pad2(p.mo)}-${pad2(p.d)}T${pad2(p.h)}:${pad2(p.mi)}`;
+}
+
+/** Interprets a `datetime-local` value as Madrid wall time and returns the UTC ISO string. */
+export function madridLocalToIso(local: string): string | null {
+  const m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/.exec(local);
+  if (!m) return null;
+  const wall = Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]);
+  let guess = wall - madridOffsetMin(wall) * 60_000;
+  guess = wall - madridOffsetMin(guess) * 60_000; // second pass settles instants next to a DST change
+  return new Date(guess).toISOString();
+}
+
+/** "dd/MM/yy HH:mm" in Madrid time ("—" when empty/invalid). */
+export function fmtMadridDateTime(iso: string | null | undefined): string {
+  if (!iso || Number.isNaN(Date.parse(iso))) return "—";
+  const p = madridParts(Date.parse(iso));
+  return `${pad2(p.d)}/${pad2(p.mo)}/${String(p.y).slice(-2)} ${pad2(p.h)}:${pad2(p.mi)}`;
 }
 
 /**

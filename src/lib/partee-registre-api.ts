@@ -1,4 +1,4 @@
-// Read-only queries for the Registre hostes screens. Nothing here writes.
+// Read queries for the Registre hostes screens. Writes live in components/registro-reclamaciones.tsx.
 import { supabase } from "@/integrations/supabase/client";
 import { ESTADOS_KB_EXCLUIDOS, isStaleRegistre } from "@/lib/partee-registre";
 
@@ -26,14 +26,26 @@ export interface RegistreRowFull {
   num_lote: string | null;
   checkin_url: string | null;
   ultimo_sync: string | null;
+  registro_confirmado: boolean;
+  registro_confirmado_por: number | null;
+  registro_confirmado_en: string | null;
+  registro_confirmado_nota: string | null;
   apartamentos: { nombre: string | null } | null;
   reservas_kb: RegistreKb | null;
+  /** Only on the page query: the most recent reclamation (embedded, limit 1). */
+  partee_reclamacio?: Array<{ enviada_en: string; canal: string | null }> | null;
 }
 
 // Typed as plain string so supabase-js does not try to parse the quoted column names.
 const SELECT_FULL: string =
   "id_registre, numero_reserva, id_apt, fecha_checkin, estado, is_borrador, num_viajeros, num_lote, checkin_url, ultimo_sync, " +
+  "registro_confirmado, registro_confirmado_por, registro_confirmado_en, registro_confirmado_nota, " +
   'apartamentos(nombre), reservas_kb("Número", Referencia, Portal, "Huéspedes", "Huéspedes menores de edad", "Huéspedes exentos", "Check in", "Check-out", Estado, Habitaciones)';
+
+// Page query: same columns + only the latest reclamation per row (embedded, ordered desc, limit 1),
+// so the embed never multiplies rows and the 1000-row cap still applies to registre rows only.
+const SELECT_WINDOW: string = SELECT_FULL + ", partee_reclamacio(enviada_en, canal)";
+const LAST_RECL = { referencedTable: "partee_reclamacio" } as const;
 
 const PAGE = 1000; // PostgREST row cap: always page
 
@@ -69,19 +81,23 @@ export async function fetchRegistreWindow(from: string, to: string): Promise<Reg
   const inWindow = pageAll<RegistreRowFull>((a, b) =>
     supabase
       .from("partee_registre")
-      .select(SELECT_FULL)
+      .select(SELECT_WINDOW)
       .gte("fecha_checkin", from)
       .lte("fecha_checkin", to)
       .order("id_registre")
+      .order("enviada_en", { ...LAST_RECL, ascending: false })
+      .limit(1, LAST_RECL)
       .range(a, b),
   );
   const overdue = pageAll<RegistreRowFull>((a, b) =>
     supabase
       .from("partee_registre")
-      .select(SELECT_FULL)
+      .select(SELECT_WINDOW)
       .lt("fecha_checkin", from)
       .not("estado", "in", "(finalizado,anulado)")
       .order("id_registre")
+      .order("enviada_en", { ...LAST_RECL, ascending: false })
+      .limit(1, LAST_RECL)
       .range(a, b),
   );
   const [w, o] = await Promise.all([inWindow, overdue]);

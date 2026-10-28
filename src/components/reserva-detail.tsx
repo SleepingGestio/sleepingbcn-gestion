@@ -34,6 +34,9 @@ import { cn } from "@/lib/utils";
 import { TimeBadge } from "@/components/time-badge";
 import { RegistroHuespedesTab } from "@/components/registro-huespedes-tab";
 
+/** Legacy reservas_gestio columns replaced by the Registre hostes reclamations (columns are kept). */
+const PARTEE_LEGACY_KEYS = ["ParteeEnv", "ParteeRecl1", "ParteeRecl2", "ParteeRecl3"] as const;
+
 /** Nights between two "Check in"/"Check-out" ISO date strings (YYYY-MM-DD, same
  * format used everywhere else this pair is diffed, e.g. generar-limpiezas.ts's
  * addDaysISO). null if either date is missing or unparseable. */
@@ -320,7 +323,11 @@ export function ReservaDetail({
     if (readOnly || !numero) return;
     setSaving(true);
     try {
-      await upsertGestio({ "Número": numero, ...g });
+      // The Parte policía / Reclamación 1-3 columns moved to the Registre hostes tab; never send them,
+      // so an old value held in `g` can not be written back or nulled.
+      const payload: Partial<ReservaGestio> = { ...g };
+      for (const k of PARTEE_LEGACY_KEYS) delete payload[k];
+      await upsertGestio({ "Número": numero, ...payload });
       await saveReservaExtras(numero, extras, extrasOriginal);
       toast.success("Cambios guardados");
       onSaved?.();
@@ -474,44 +481,6 @@ export function ReservaDetail({
                     ))}
                   </div>
                 )}
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>Parte policía enviado</Label>
-                  <Input
-                    type="datetime-local"
-                    value={toLocal(g.ParteeEnv)}
-                    onChange={(e) => setG({ ...g, ParteeEnv: e.target.value ? new Date(e.target.value).toISOString() : null })}
-                    disabled={readOnly}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Reclamación 1</Label>
-                  <Input
-                    type="datetime-local"
-                    value={toLocal(g.ParteeRecl1)}
-                    onChange={(e) => setG({ ...g, ParteeRecl1: e.target.value ? new Date(e.target.value).toISOString() : null })}
-                    disabled={readOnly}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Reclamación 2</Label>
-                  <Input
-                    type="datetime-local"
-                    value={toLocal(g.ParteeRecl2)}
-                    onChange={(e) => setG({ ...g, ParteeRecl2: e.target.value ? new Date(e.target.value).toISOString() : null })}
-                    disabled={readOnly}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Reclamación 3</Label>
-                  <Input
-                    type="datetime-local"
-                    value={toLocal(g.ParteeRecl3)}
-                    onChange={(e) => setG({ ...g, ParteeRecl3: e.target.value ? new Date(e.target.value).toISOString() : null })}
-                    disabled={readOnly}
-                  />
-                </div>
               </div>
               <div className="space-y-2">
                 <Label>Notas de gestión</Label>
@@ -975,12 +944,4 @@ function TotalCard({ label, value, highlight }: { label: string; value: number; 
       <div className="mt-0.5 text-[15px] font-bold tabular-nums">{fmtEUR(value)}</div>
     </div>
   );
-}
-
-function toLocal(iso: string | null | undefined): string {
-  if (!iso) return "";
-  const d = new Date(iso);
-  if (isNaN(d.getTime())) return "";
-  const off = d.getTimezoneOffset() * 60000;
-  return new Date(d.getTime() - off).toISOString().slice(0, 16);
 }
