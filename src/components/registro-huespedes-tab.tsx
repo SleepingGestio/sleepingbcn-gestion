@@ -73,7 +73,7 @@ export function RegistroHuespedesTab({
           <ExclusionHeader
             numero={numero}
             exclusion={exclusion}
-            right={<RefreshBar numero={numero} lastSync={null} excluded={!!exclusion} />}
+            right={<RefreshBar numero={numero} excluded={!!exclusion} />}
           />
           <div className="rounded-md border border-dashed p-6 text-center text-sm text-muted-foreground">
             Sin datos de Partee todavía (la sincronización cubre las entradas de ayer a 7 días vista).
@@ -84,7 +84,10 @@ export function RegistroHuespedesTab({
   }
 
   const today = todayMadrid();
-  const lastSync = rows.reduce<string | null>((max, r) => (r.ultimo_sync && (!max || r.ultimo_sync > max) ? r.ultimo_sync : max), null);
+  // "Abrir en Partee" goes in the top bar only when exactly ONE unit row has a check-in link (the common
+  // case); with several links every unit block keeps its own button, because the bar is per reservation.
+  const urlRows = rows.filter((r) => r.checkin_url);
+  const topUrl = urlRows.length === 1 ? urlRows[0].checkin_url : null;
   const expected = expectedViajeros({ huespedes, menores, exentos }, countRooms(habitaciones));
 
   return (
@@ -93,7 +96,7 @@ export function RegistroHuespedesTab({
         <ExclusionHeader
           numero={numero}
           exclusion={exclusion}
-          right={<RefreshBar numero={numero} lastSync={lastSync} excluded={!!exclusion} />}
+          right={<RefreshBar numero={numero} excluded={!!exclusion} openUrl={topUrl} />}
         />
         {rows.map((r) => {
           const rowIn = { ...r, excluida: !!exclusion };
@@ -101,28 +104,30 @@ export function RegistroHuespedesTab({
           const situacion = situacionRegistro(rowIn, { expected });
           return (
             <div key={r.id_registre} className="space-y-2 rounded-md border p-3">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="text-sm font-medium">{r.apartamentos?.nombre ?? `Apartamento ${r.id_apt}`}</span>
-                <SituacionPill
-                  situacion={situacion}
-                  tone={situacionTone(situacion, rowIn, { today })}
-                  tooltip={situacionTooltip(rowIn, expected)}
-                />
-                {alert.code === "vencido" && (
-                  <span className={`text-sm ${LEVEL_TEXT[alert.level]}`}>{alert.label}</span>
-                )}
+              {/* One line: name, pill, n/N and "Actualizado …". Name + pill wrap together; the rest may wrap below. */}
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-medium">{r.apartamentos?.nombre ?? `Apartamento ${r.id_apt}`}</span>
+                  <SituacionPill
+                    situacion={situacion}
+                    tone={situacionTone(situacion, rowIn, { today })}
+                    tooltip={situacionTooltip(rowIn, expected)}
+                  />
+                </div>
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
+                  <ViajerosCell n={r.num_viajeros} expected={expected} tone={viajerosTone(rowIn, { today }, expected)} />
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span className="cursor-help">Actualizado {fmtAgo(r.ultimo_sync)}</span>
+                    </TooltipTrigger>
+                    <TooltipContent>{fmtDateTime(r.ultimo_sync)}</TooltipContent>
+                  </Tooltip>
+                  {r.num_lote && <span>Lote: {r.num_lote}</span>}
+                </div>
               </div>
-
-              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
-                <ViajerosCell n={r.num_viajeros} expected={expected} tone={viajerosTone(rowIn, { today }, expected)} />
-                {r.num_lote && <span>Lote: {r.num_lote}</span>}
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <span className="cursor-help">Actualizado {fmtAgo(r.ultimo_sync)}</span>
-                  </TooltipTrigger>
-                  <TooltipContent>{fmtDateTime(r.ultimo_sync)}</TooltipContent>
-                </Tooltip>
-              </div>
+              {alert.code === "vencido" && (
+                <div className={`text-sm ${LEVEL_TEXT[alert.level]}`}>{alert.label}</div>
+              )}
 
               {r.checkin_url ? (
                 <div className="flex flex-wrap items-center gap-2">
@@ -130,7 +135,7 @@ export function RegistroHuespedesTab({
                   <Button variant="outline" size="sm" onClick={() => copyLink(r.checkin_url!)}>
                     <Copy className="mr-1 h-3.5 w-3.5" /> Copiar enlace
                   </Button>
-                  <OpenLinkButton url={r.checkin_url} />
+                  {!topUrl && <OpenLinkButton url={r.checkin_url} />}
                 </div>
               ) : (
                 <p className="text-sm text-muted-foreground">{noLinkReason(r.estado)}</p>

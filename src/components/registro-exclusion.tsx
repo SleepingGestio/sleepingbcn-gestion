@@ -226,7 +226,7 @@ export function ExclusionHeader({
   const [excluirOpen, setExcluirOpen] = useState(false);
   const [incluirOpen, setIncluirOpen] = useState(false);
 
-  if (!exclusion && !editor) return right ? <div className="flex justify-end">{right}</div> : null;
+  if (!exclusion && !editor) return right ? <div className="flex justify-end empty:hidden">{right}</div> : null;
 
   return (
     <div className="space-y-2">
@@ -253,7 +253,7 @@ export function ExclusionHeader({
           {right}
         </div>
       )}
-      {exclusion && right && <div className="flex justify-end">{right}</div>}
+      {exclusion && right && <div className="flex justify-end empty:hidden">{right}</div>}
 
       <ExcluirReservaDialog numero={numero} current={exclusion} open={excluirOpen} onOpenChange={setExcluirOpen} />
       <IncluirReservaDialog numero={numero} open={incluirOpen} onOpenChange={setIncluirOpen} />

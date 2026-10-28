@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { usePermissions } from "@/hooks/use-permissions";
 import { actualizarReservaPartee, type RefreshResponse } from "@/lib/api/refresh-partee.functions";
-import { fmtAgo } from "@/lib/partee-registre";
+import { OpenLinkButton } from "@/components/partee-registre-bits";
 
 const FAIL_MESSAGE: Record<string, string> = {
   cooldown: "Espera unos segundos antes de volver a actualizar",
@@ -89,23 +89,29 @@ export function RefreshButton({ numero, compact = false }: { numero: string; com
   );
 }
 
-/** Top bar of the reservation tab: "Actualizado hace …" + the button (editors, not excluded). */
+/**
+ * Right side of the reservation tab's top bar: [Abrir en Partee] [Actualizar ahora].
+ * - "Abrir en Partee" shows when `openUrl` is given (the tab passes it only when exactly one unit row has a
+ *   check-in link; with several links each unit block keeps its own button).
+ * - "Actualizar ahora" shows for editors of 'registre_hostes' on reservations that are not excluded.
+ * The "Actualizado hace …" note lives in each unit block.
+ */
 export function RefreshBar({
   numero,
-  lastSync,
   excluded,
+  openUrl = null,
 }: {
   numero: string;
-  lastSync: string | null;
   excluded: boolean;
+  openUrl?: string | null;
 }) {
   const { canEdit } = usePermissions();
-  const showButton = canEdit("registre_hostes") && !excluded;
-  if (!showButton && !lastSync) return null;
+  const showRefresh = canEdit("registre_hostes") && !excluded;
+  if (!showRefresh && !openUrl) return null;
   return (
-    <div className="flex flex-wrap items-center justify-end gap-3 text-xs text-muted-foreground">
-      {lastSync && <span>Actualizado {fmtAgo(lastSync)}</span>}
-      {showButton && <RefreshButton numero={numero} />}
+    <div className="flex flex-wrap items-center justify-end gap-2">
+      {openUrl && <OpenLinkButton url={openUrl} />}
+      {showRefresh && <RefreshButton numero={numero} />}
     </div>
   );
 }
