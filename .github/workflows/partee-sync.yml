@@ -1,0 +1,93 @@
+name: Partee sync
+
+# Schedule (UTC; Madrid is UTC+1 winter / UTC+2 summer):
+#  - 05:15 UTC = 06:15 / 07:15 local: first run, so Registre hostes is fresh for today's arrivals.
+#  - 14:15 UTC = 15:15 / 16:15 local: second run, after guests had the morning to complete the
+#    online check-in and before evening arrivals.
+# GitHub may delay scheduled runs (often by several minutes, more at peak times such as the
+# top of the hour), so the minutes are off-peak on purpose and exact timing is not guaranteed.
+on:
+  schedule:
+    - cron: "15 5 * * *"
+    - cron: "15 14 * * *"
+  workflow_dispatch:
+    inputs:
+      dry:
+        description: "Dry run (reads Partee, writes nothing)"
+        type: boolean
+        default: true
+      from:
+        description: "Window start YYYY-MM-DD (optional, needs 'to'; max 14 days)"
+        type: string
+        required: false
+      to:
+        description: "Window end YYYY-MM-DD (optional, needs 'from')"
+        type: string
+        required: false
+
+# Two runs never overlap; a new one waits for the running one.
+concurrency:
+  group: partee-sync
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: jobs/partee-sync
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Typecheck
+        run: bun run typecheck
+
+      - name: Test
+        run: bun run test
+
+      # Secrets are only compared with "empty", never printed.
+      - name: Check secrets
+        id: guard
+        env:
+          PARTEE_API_TOKEN: ${{ secrets.PARTEE_API_TOKEN }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          if [ -z "$PARTEE_API_TOKEN" ] || [ -z "$SUPABASE_URL" ] || [ -z "$SUPABASE_SERVICE_ROLE_KEY" ]; then
+            echo "::notice::Partee sync skipped: one or more of PARTEE_API_TOKEN, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY are not set as Actions secrets yet."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      # Scheduled runs are real; manual runs follow the "dry" input.
+      # Inputs go through env (not interpolated into the script); the CLI validates them.
+      - name: Run sync
+        if: steps.guard.outputs.ready == 'true'
+        env:
+          PARTEE_API_TOKEN: ${{ secrets.PARTEE_API_TOKEN }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_DRY: ${{ inputs.dry }}
+          INPUT_FROM: ${{ inputs.from }}
+          INPUT_TO: ${{ inputs.to }}
+        run: |
+          args=()
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            if [ "$INPUT_DRY" = "true" ]; then args+=(--dry); fi
+            if [ -n "$INPUT_FROM" ]; then args+=("--from=$INPUT_FROM"); fi
+            if [ -n "$INPUT_TO" ]; then args+=("--to=$INPUT_TO"); fi
+          fi
+          bun src/cli.ts "${args[@]}"
