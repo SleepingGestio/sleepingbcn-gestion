@@ -1,7 +1,8 @@
 // Reservations that do not need a Partee registration (partee_exclusion, one row per reservation).
 // Writes are visible only to editors of 'registre_hostes' (RLS: can_edit_menu).
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
+import { Ban } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -205,17 +206,30 @@ export function IncluirReservaDialog({
 
 // ---------- top of the reservation tab ----------
 
-export function ExclusionHeader({ numero, exclusion }: { numero: string; exclusion: Exclusion | null }) {
+/**
+ * Top of the reservation tab. `right` (the "Actualizado hace … / Actualizar ahora" bar) is rendered on the
+ * same row as the "No requiere registro" button, which sits on the left; when the reservation is already
+ * excluded the banner comes first and `right` goes below it, aligned right.
+ */
+export function ExclusionHeader({
+  numero,
+  exclusion,
+  right,
+}: {
+  numero: string;
+  exclusion: Exclusion | null;
+  right?: ReactNode;
+}) {
   const { canEdit } = usePermissions();
   const editor = canEdit("registre_hostes");
   const nombre = useNombrePersona();
   const [excluirOpen, setExcluirOpen] = useState(false);
   const [incluirOpen, setIncluirOpen] = useState(false);
 
-  if (!exclusion && !editor) return null;
+  if (!exclusion && !editor) return right ? <div className="flex justify-end">{right}</div> : null;
 
   return (
-    <div>
+    <div className="space-y-2">
       {exclusion ? (
         <div className="space-y-1 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">
           <div>
@@ -231,12 +245,15 @@ export function ExclusionHeader({ numero, exclusion }: { numero: string; exclusi
           )}
         </div>
       ) : (
-        <div className="flex justify-end">
-          <Button variant="ghost" size="sm" className="text-muted-foreground" onClick={() => setExcluirOpen(true)}>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <Button variant="outline" size="sm" onClick={() => setExcluirOpen(true)}>
+            <Ban className="mr-1 h-3.5 w-3.5" />
             No requiere registro
           </Button>
+          {right}
         </div>
       )}
+      {exclusion && right && <div className="flex justify-end">{right}</div>}
 
       <ExcluirReservaDialog numero={numero} current={exclusion} open={excluirOpen} onOpenChange={setExcluirOpen} />
       <IncluirReservaDialog numero={numero} open={incluirOpen} onOpenChange={setIncluirOpen} />

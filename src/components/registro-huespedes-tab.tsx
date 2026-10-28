@@ -70,8 +70,11 @@ export function RegistroHuespedesTab({
     return (
       <TooltipProvider delayDuration={200}>
         <div className="space-y-3">
-          <ExclusionHeader numero={numero} exclusion={exclusion} />
-          <RefreshBar numero={numero} lastSync={null} excluded={!!exclusion} />
+          <ExclusionHeader
+            numero={numero}
+            exclusion={exclusion}
+            right={<RefreshBar numero={numero} lastSync={null} excluded={!!exclusion} />}
+          />
           <div className="rounded-md border border-dashed p-6 text-center text-sm text-muted-foreground">
             Sin datos de Partee todavía (la sincronización cubre las entradas de ayer a 7 días vista).
           </div>
@@ -87,8 +90,11 @@ export function RegistroHuespedesTab({
   return (
     <TooltipProvider delayDuration={200}>
       <div className="space-y-3">
-        <ExclusionHeader numero={numero} exclusion={exclusion} />
-        <RefreshBar numero={numero} lastSync={lastSync} excluded={!!exclusion} />
+        <ExclusionHeader
+          numero={numero}
+          exclusion={exclusion}
+          right={<RefreshBar numero={numero} lastSync={lastSync} excluded={!!exclusion} />}
+        />
         {rows.map((r) => {
           const rowIn = { ...r, excluida: !!exclusion };
           const alert = alertLevel(rowIn, { today, expected });

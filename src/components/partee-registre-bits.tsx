@@ -151,8 +151,8 @@ export function CopyLinkIconButton({ url, noLinkReason }: { url: string | null; 
 export function OpenLinkButton({ url }: { url: string }) {
   return (
     <Button variant="outline" size="sm" asChild>
-      <a href={url} target="_blank" rel="noopener noreferrer">
-        <ExternalLink className="mr-1 h-3.5 w-3.5" /> Abrir
+      <a href={url} target="_blank" rel="noopener noreferrer" aria-label="Abrir en Partee">
+        <ExternalLink className="mr-1 h-3.5 w-3.5" /> Abrir en Partee
       </a>
     </Button>
   );
