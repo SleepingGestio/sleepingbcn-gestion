@@ -26,7 +26,7 @@ import {
   ViajerosCell,
 } from "@/components/partee-registre-bits";
 import { usePermissions } from "@/hooks/use-permissions";
-import { fmtDate, fmtDateTime } from "@/lib/format";
+import { fmtDateTime } from "@/lib/format";
 import { fetchRegistreWindow, type Exclusion, type RegistreRowFull } from "@/lib/partee-registre-api";
 import {
   addDaysIso,
@@ -37,6 +37,7 @@ import {
   SITUACIONES_FILTRO,
   expectedViajeros,
   fmtAgo,
+  fmtDateWeekday,
   isValidIso,
   isIncompleto,
   isReclamable,
@@ -486,7 +487,7 @@ function RegistreHostesPage() {
                       const { r, expected, tone, exclusion } = row;
                       return (
                         <TableRow key={r.id_registre} className={exclusion ? "opacity-60" : undefined}>
-                          <TableCell className="whitespace-nowrap">{fmtDate(r.fecha_checkin)}</TableCell>
+                          <TableCell className="whitespace-nowrap">{fmtDateWeekday(r.fecha_checkin)}</TableCell>
                           <TableCell>{r.apartamentos?.nombre ?? `Apartamento ${r.id_apt}`}</TableCell>
                           <TableCell className="whitespace-nowrap">{r.numero_reserva}</TableCell>
                           <TableCell>{r.reservas_kb?.Referencia ?? "—"}</TableCell>
@@ -561,7 +562,7 @@ function RegistreHostesPage() {
                           <div>
                             <div className="text-sm font-medium">{r.apartamentos?.nombre ?? `Apartamento ${r.id_apt}`}</div>
                             <div className="text-xs text-muted-foreground">
-                              Entrada {fmtDate(r.fecha_checkin)} · salida {fmtDate(r.reservas_kb?.["Check-out"])}
+                              Entrada {fmtDateWeekday(r.fecha_checkin)} · salida {fmtDateWeekday(r.reservas_kb?.["Check-out"])}
                             </div>
                           </div>
                           <EstadoPill row={row} />

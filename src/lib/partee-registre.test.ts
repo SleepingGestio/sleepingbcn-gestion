@@ -9,6 +9,7 @@ import {
   diffDays,
   expectedViajeros,
   fmtAgo,
+  fmtDateWeekday,
   fmtMadridDateTime,
   isIncompleto,
   isStaleRegistre,
@@ -63,6 +64,40 @@ describe("dates", () => {
     assert.equal(fmtAgo("2026-10-28T11:55:00Z", now), "hace 5 min");
     assert.equal(fmtAgo("2026-10-28T09:00:00Z", now), "hace 3 h");
     assert.equal(fmtAgo("2026-10-25T12:00:00Z", now), "hace 3 d");
+  });
+});
+
+describe("fmtDateWeekday", () => {
+  it("the seven weekdays of a known week (Mon 2026-10-26 .. Sun 2026-11-01)", () => {
+    assert.equal(fmtDateWeekday("2026-10-26"), "lun 26/10/26");
+    assert.equal(fmtDateWeekday("2026-10-27"), "mar 27/10/26");
+    assert.equal(fmtDateWeekday("2026-10-28"), "mié 28/10/26");
+    assert.equal(fmtDateWeekday("2026-10-29"), "jue 29/10/26");
+    assert.equal(fmtDateWeekday("2026-10-30"), "vie 30/10/26");
+    assert.equal(fmtDateWeekday("2026-10-31"), "sáb 31/10/26");
+    assert.equal(fmtDateWeekday("2026-11-01"), "dom 01/11/26");
+  });
+  it("month / year boundary and a leap day", () => {
+    assert.equal(fmtDateWeekday("2026-12-31"), "jue 31/12/26");
+    assert.equal(fmtDateWeekday("2027-01-01"), "vie 01/01/27");
+    assert.equal(fmtDateWeekday("2028-02-29"), "mar 29/02/28");
+  });
+  it("DST change days keep their weekday (2026-03-29 Sun, 2026-10-25 Sun)", () => {
+    assert.equal(fmtDateWeekday("2026-03-29"), "dom 29/03/26");
+    assert.equal(fmtDateWeekday("2026-10-25"), "dom 25/10/26");
+  });
+  it("uses the first 10 characters of a longer ISO string, whatever its time or offset", () => {
+    assert.equal(fmtDateWeekday("2026-10-28T15:00:00"), "mié 28/10/26");
+    assert.equal(fmtDateWeekday("2026-10-28T23:59:59+02:00"), "mié 28/10/26");
+    assert.equal(fmtDateWeekday("2026-10-28T00:00:00Z"), "mié 28/10/26");
+  });
+  it("same fallbacks as fmtDate: '—' for null/empty, the raw text for anything that is not a date", () => {
+    assert.equal(fmtDateWeekday(null), "—");
+    assert.equal(fmtDateWeekday(undefined), "—");
+    assert.equal(fmtDateWeekday(""), "—");
+    assert.equal(fmtDateWeekday("not a date"), "not a date");
+    assert.equal(fmtDateWeekday("2026-13-45"), "2026-13-45");
+    assert.equal(fmtDateWeekday("2026-02-30"), "2026-02-30");
   });
 });
 

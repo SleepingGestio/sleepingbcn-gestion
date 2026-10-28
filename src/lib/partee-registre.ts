@@ -126,6 +126,23 @@ export function fmtAgo(iso: string | null | undefined, now: Date = new Date()): 
   return `hace ${Math.round(h / 24)} d`;
 }
 
+const WEEKDAY_ES = ["dom", "lun", "mar", "mié", "jue", "vie", "sáb"] as const;
+
+/**
+ * "mié 28/10/26" for a calendar date (YYYY-MM-DD; a longer ISO string uses its first 10 characters).
+ * The weekday comes from the date itself in UTC, so no timezone or DST can shift it. Same fallbacks as
+ * fmtDate in lib/format: "—" for null/empty, the raw text for anything that is not a real date.
+ */
+export function fmtDateWeekday(v: string | null | undefined): string {
+  if (v == null || v === "") return "—";
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(v);
+  if (!m) return String(v);
+  const [y, mo, d] = [Number(m[1]), Number(m[2]), Number(m[3])];
+  const dt = new Date(Date.UTC(y, mo - 1, d));
+  if (dt.getUTCFullYear() !== y || dt.getUTCMonth() !== mo - 1 || dt.getUTCDate() !== d) return String(v);
+  return `${WEEKDAY_ES[dt.getUTCDay()]} ${m[3]}/${m[2]}/${m[1].slice(-2)}`;
+}
+
 export interface SyncRowInput {
   fecha_checkin: string | null;
   ultimo_sync: string | null;
