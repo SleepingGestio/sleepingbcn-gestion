@@ -1,5 +1,14 @@
 name: Partee sync
 
+# The run title tells the kinds of run apart (the `guard` job below reads it from the API):
+#   "Partee sync (hourly)"   hourly light schedule
+#   "Partee sync (dry run)"  manual run with dry = true
+#   "Partee sync"            scheduled FULL runs and REAL manual runs (dry = false, e.g. the app's "Actualizar todo")
+# format() makes the dry check work whether the input arrives as a boolean or as the string "true"/"false"
+# (the app dispatches strings). If a real run were ever labelled "dry run" by mistake, the only effect is that
+# the guard does not count it, so a scheduled full run still happens (the safe direction).
+run-name: ${{ (github.event_name == 'schedule' && github.event.schedule == '40 6-19 * * *' && 'Partee sync (hourly)') || (github.event_name == 'workflow_dispatch' && format('{0}', inputs.dry) == 'true' && 'Partee sync (dry run)') || 'Partee sync' }}
+
 # Two kinds of scheduled runs (GitHub cron is UTC only; Madrid is UTC+1 in winter, UTC+2 in summer):
 #
 #  1. FULL, twice a day (window yesterday..+7, typecheck + tests first):
@@ -12,6 +21,10 @@ name: Partee sync
 #     08:00-20:00 Madrid in both seasons (winter 07..19 UTC, summer 06..18 UTC). The first step
 #     computes the Madrid hour and the job exits early (all later steps skipped) when it is outside 08..20.
 #     Minute 40 avoids the top of the hour (busiest) and the :15 of the full runs.
+#
+#  A scheduled FULL run is skipped when a REAL sync (manual run with dry = false, or a full run) finished in
+#  the last 60 minutes: the data is fresh (job `guard`, .github/scripts/partee-sync-guard.sh). Hourly runs and
+#  manual runs are never skipped by it, and the guard fails open (on any doubt the full run goes ahead).
 #
 # GitHub may delay or even skip scheduled runs (often by several minutes, more at peak times), so exact
 # timing is not guaranteed; the next hourly run (or the daily full ones) catches up because every run
@@ -48,9 +61,40 @@ permissions:
   contents: read
 
 jobs:
+  # ------------------------------------------------------------------ guard (scheduled FULL runs only)
+  # Runs inside the same workflow run, so it is serialized by the concurrency group: if a manual run is still
+  # going when the cron fires, the scheduled run waits and the guard then sees that run as finished.
+  guard:
+    if: github.event_name == 'schedule' && github.event.schedule != '40 6-19 * * *'
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    permissions:
+      actions: read # list this workflow's runs with the built-in GITHUB_TOKEN
+      contents: read
+    outputs:
+      skip: ${{ steps.decide.outputs.skip }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: .github/scripts
+          sparse-checkout-cone-mode: true
+
+      - name: Decide
+        id: decide
+        env:
+          GH_TOKEN: ${{ github.token }} # GITHUB_REPOSITORY and GITHUB_RUN_ID are already set by the runner
+        run: bash .github/scripts/partee-sync-guard.sh
+
   # ------------------------------------------------------------------ full (daily crons + manual)
   sync:
-    if: github.event_name != 'schedule' || github.event.schedule != '40 6-19 * * *'
+    needs: guard
+    # `guard` is skipped for manual runs and for the hourly cron, so a skipped guard must not block this job
+    # (hence !cancelled(), which replaces the implicit success()). A failed guard does not block it either:
+    # its `skip` output is then empty, never 'true'. Only a guard that decided skip=true skips this job.
+    if: >-
+      ${{ !cancelled()
+      && (needs.guard.result == 'skipped' || needs.guard.outputs.skip != 'true')
+      && (github.event_name != 'schedule' || github.event.schedule != '40 6-19 * * *') }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     defaults:
