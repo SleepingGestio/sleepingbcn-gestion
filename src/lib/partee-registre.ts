@@ -21,8 +21,6 @@ export const PARTEE_RULES = {
   noIniciadoInfoMaxDays: 7, // d 4..7 not started -> info (beyond: info too)
   /** Time Partee finalizes the parte (shown in the entry-day label). */
   autoFinalizeTime: "03:45",
-  /** Suffix added to comparison labels when the expected count may include children. */
-  childrenSuffix: " — puede incluir niños",
 } as const;
 
 export const COMPARISON_TOOLTIP =
@@ -168,7 +166,6 @@ export function alertLevel(row: AlertRowInput, ctx: AlertContext): Alert {
   const d = diffDays(ctx.today, row.fecha_checkin);
   const n = row.num_viajeros ?? 0;
   const { expected, exact } = ctx.expected;
-  const suffix = !exact ? R.childrenSuffix : "";
 
   switch (row.estado) {
     case "finalizado":
@@ -188,7 +185,7 @@ export function alertLevel(row: AlertRowInput, ctx: AlertContext): Alert {
   if (d === 0) {
     if (notStarted) return make(row, "danger", "hoy_sin_registro", "Entra hoy sin registro");
     if (expected !== null && n < expected) {
-      return make(row, "warning", "hoy_incompleto", `Posible registro incompleto (${n} de ${expected})${suffix}`);
+      return make(row, "warning", "hoy_incompleto", `Posible registro incompleto (${n} de ${expected})`);
     }
     return make(row, "info", "hoy_se_finaliza", `Se finaliza esta noche (${R.autoFinalizeTime})`);
   }
@@ -208,15 +205,46 @@ export function alertLevel(row: AlertRowInput, ctx: AlertContext): Alert {
   // borrador with n > 0
   if (expected === null) return make(row, "ok", "en_curso", `Registro en curso (${n} registrados)`);
   if (n > expected && exact) return make(row, "info", "mas_de_los_previstos", "Más viajeros que los previstos");
-  if (n >= expected) return make(row, "ok", "completo", `Completo, pendiente de finalizar${suffix}`);
-  return make(row, "info", "faltan_viajeros", `Faltan viajeros por registrar (${n} de ${expected})${suffix}`);
+  if (n >= expected) return make(row, "ok", "completo", "Completo, pendiente de finalizar");
+  return make(row, "info", "faltan_viajeros", `Faltan viajeros por registrar (${n} de ${expected})`);
 }
 
-/** "3 registrados · 4 previstos" / "3 registrados · 4 previstos*" / "3 registrados". */
-export function viajerosText(numViajeros: number | null, ex: Expected): string {
+export type ViajerosTone = "ok" | "warning" | "danger" | "muted";
+
+/**
+ * Colour of the compact "n/N" viajeros cell. Rules are checked in this order:
+ * finalizado -> ok; n >= expected -> ok (even on entry day); anulado/manual -> muted;
+ * overdue -> danger; entry day: n = 0 danger, partial warning, no expected but n > 0 ok;
+ * 1..noIniciadoWarningMaxDays days out: n = 0 warning, partial muted; everything else muted.
+ */
+export function viajerosTone(row: AlertRowInput, ctx: { today: string }, expected: Expected): ViajerosTone {
+  const n = row.num_viajeros ?? 0;
+  const ex = expected.expected;
+  if (row.estado === "finalizado") return "ok";
+  if (ex !== null && n >= ex) return "ok";
+  if (row.estado === "anulado" || row.estado === "manual") return "muted";
+  const d = diffDays(ctx.today, row.fecha_checkin);
+  if (d < 0) return "danger";
+  if (d === 0) {
+    if (n === 0) return "danger";
+    if (ex !== null) return "warning"; // 0 < n < expected
+    return "ok"; // expected unknown and n > 0
+  }
+  if (d <= PARTEE_RULES.noIniciadoWarningMaxDays) return n === 0 ? "warning" : "muted";
+  return "muted";
+}
+
+/**
+ * Tooltip / aria-label of the "n/N" cell. The children caveat is only added when the
+ * expected number may include children (expected not exact).
+ */
+export function viajerosTooltip(numViajeros: number | null, ex: Expected): string {
   const n = numViajeros ?? 0;
-  if (ex.expected === null) return `${n} registrados`;
-  return `${n} registrados · ${ex.expected} previstos${ex.exact ? "" : "*"}`;
+  const registrados = n === 1 ? "1 viajero registrado" : `${n} viajeros registrados`;
+  if (ex.expected === null) return `${registrados}.`;
+  const previstos = ex.expected === 1 ? "1 previsto" : `${ex.expected} previstos`;
+  const base = `${registrados} de ${previstos}.`;
+  return ex.exact ? base : `${base} ${COMPARISON_TOOLTIP}`;
 }
 
 /**

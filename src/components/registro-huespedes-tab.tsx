@@ -11,6 +11,7 @@ import {
   expectedViajeros,
   fmtAgo,
   todayMadrid,
+  viajerosTone,
 } from "@/lib/partee-registre";
 import { fmtDateTime } from "@/lib/format";
 import {
@@ -82,7 +83,7 @@ export function RegistroHuespedesTab({
               </div>
 
               <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
-                <ViajerosCell n={r.num_viajeros} expected={expected} />
+                <ViajerosCell n={r.num_viajeros} expected={expected} tone={viajerosTone(r, { today }, expected)} />
                 {r.num_lote && <span>Lote: {r.num_lote}</span>}
                 <Tooltip>
                   <TooltipTrigger asChild>

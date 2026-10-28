@@ -6,11 +6,11 @@ import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import {
-  COMPARISON_TOOLTIP,
   ESTADO_LABEL,
-  viajerosText,
+  viajerosTooltip,
   type AlertLevel,
   type Expected,
+  type ViajerosTone,
 } from "@/lib/partee-registre";
 
 const LEVEL_STYLE: Record<AlertLevel, string> = {
@@ -41,16 +41,29 @@ export function RegistreEstadoBadge({ estado, level }: { estado: string; level: 
   );
 }
 
-/** "n registrados · N previstos" with the children caveat tooltip when a comparison is shown. */
-export function ViajerosCell({ n, expected }: { n: number | null; expected: Expected }) {
-  const text = viajerosText(n, expected);
-  if (expected.expected === null) return <span className="whitespace-nowrap">{text}</span>;
+const TONE_TEXT: Record<ViajerosTone, string> = {
+  ok: "text-green-700",
+  warning: "text-orange-600",
+  danger: "text-red-700",
+  muted: "text-muted-foreground",
+};
+
+/** Compact "n/N" (just "n" when the expected count is unknown), coloured by tone, no words. */
+export function ViajerosCell({ n, expected, tone }: { n: number | null; expected: Expected; tone: ViajerosTone }) {
+  const text = expected.expected === null ? `${n ?? 0}` : `${n ?? 0}/${expected.expected}`;
+  const tip = viajerosTooltip(n, expected);
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <span className="cursor-help whitespace-nowrap underline decoration-dotted underline-offset-2">{text}</span>
+        <span
+          role="img"
+          aria-label={tip}
+          className={cn("cursor-help whitespace-nowrap text-lg font-semibold tabular-nums", TONE_TEXT[tone])}
+        >
+          {text}
+        </span>
       </TooltipTrigger>
-      <TooltipContent className="max-w-xs">{COMPARISON_TOOLTIP}</TooltipContent>
+      <TooltipContent className="max-w-xs">{tip}</TooltipContent>
     </Tooltip>
   );
 }

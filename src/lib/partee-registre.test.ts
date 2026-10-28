@@ -11,7 +11,8 @@ import {
   fmtAgo,
   isStaleRegistre,
   todayMadrid,
-  viajerosText,
+  viajerosTone,
+  viajerosTooltip,
   type Expected,
 } from "./partee-registre.ts";
 
@@ -106,9 +107,9 @@ describe("entry today (d = 0)", () => {
     const r = a("borrador", 0, 1, exact(3));
     assert.deepEqual([r.level, r.label], ["warning", "Posible registro incompleto (1 de 3)"]);
   });
-  it("borrador with fewer than expected, not exact: warning + children suffix", () => {
+  it("borrador with fewer than expected, not exact: warning, label has no suffix", () => {
     const r = a("borrador", 0, 2, approx(4));
-    assert.deepEqual([r.level, r.label], ["warning", "Posible registro incompleto (2 de 4) — puede incluir niños"]);
+    assert.deepEqual([r.level, r.label], ["warning", "Posible registro incompleto (2 de 4)"]);
   });
   it("sin_registro / iniciado / borrador with 0 viajeros: danger", () => {
     for (const [estado, n] of [["sin_registro", null], ["iniciado", null], ["borrador", 0], ["borrador", null]] as const) {
@@ -142,15 +143,15 @@ describe("entry in the coming days (d >= 1)", () => {
     const r = a("borrador", 2, 4, exact(3));
     assert.deepEqual([r.level, r.code, r.label], ["info", "mas_de_los_previstos", "Más viajeros que los previstos"]);
   });
-  it("more than expected but not exact: counts as complete (+ suffix)", () => {
+  it("more than expected but not exact: counts as complete, label has no suffix", () => {
     const r = a("borrador", 2, 5, approx(4));
-    assert.deepEqual([r.level, r.label], ["ok", "Completo, pendiente de finalizar — puede incluir niños"]);
+    assert.deepEqual([r.level, r.label], ["ok", "Completo, pendiente de finalizar"]);
   });
   it("fewer than expected at d = 2: info, never warning", () => {
     const r = a("borrador", 2, 1, exact(3));
     assert.deepEqual([r.level, r.code, r.label], ["info", "faltan_viajeros", "Faltan viajeros por registrar (1 de 3)"]);
     const r2 = a("borrador", 2, 1, approx(3));
-    assert.deepEqual([r2.level, r2.label], ["info", "Faltan viajeros por registrar (1 de 3) — puede incluir niños"]);
+    assert.deepEqual([r2.level, r2.label], ["info", "Faltan viajeros por registrar (1 de 3)"]);
   });
   it("fewer than expected stays info on d = 1 too", () => {
     assert.equal(a("borrador", 1, 2, exact(4)).level, "info");
@@ -177,11 +178,81 @@ describe("priority", () => {
   });
 });
 
-describe("viajerosText", () => {
-  it("formats with the asterisk rule", () => {
-    assert.equal(viajerosText(3, exact(4)), "3 registrados · 4 previstos");
-    assert.equal(viajerosText(3, approx(4)), "3 registrados · 4 previstos*");
-    assert.equal(viajerosText(null, UNKNOWN), "0 registrados");
+describe("alert labels never carry the children suffix", () => {
+  it("no label mentions children", () => {
+    for (const ex of [exact(3), approx(3), UNKNOWN]) {
+      for (const d of [0, 2, 6]) {
+        for (const n of [0, 1, 3, 5]) {
+          assert.ok(!a("borrador", d, n, ex).label.includes("niños"));
+        }
+      }
+    }
+  });
+});
+
+describe("viajerosTone", () => {
+  const t = (estado: string, d: number, n: number | null, ex: Expected) =>
+    viajerosTone({ estado, num_viajeros: n, fecha_checkin: day(d) }, { today: TODAY }, ex);
+
+  it("finalizado is ok whatever the numbers", () => {
+    assert.equal(t("finalizado", -3, 0, exact(4)), "ok");
+    assert.equal(t("finalizado", 5, null, UNKNOWN), "ok");
+  });
+  it("n >= expected is ok, even on entry day", () => {
+    assert.equal(t("borrador", 0, 2, exact(2)), "ok");
+    assert.equal(t("borrador", 0, 3, approx(2)), "ok");
+    assert.equal(t("borrador", 2, 2, exact(2)), "ok");
+  });
+  it("anulado / manual are muted", () => {
+    assert.equal(t("anulado", 0, 0, exact(2)), "muted");
+    assert.equal(t("manual", -1, 1, exact(2)), "muted");
+  });
+  it("overdue (not finalizado/anulado) is danger", () => {
+    assert.equal(t("borrador", -1, 1, exact(3)), "danger");
+    assert.equal(t("sin_registro", -2, null, exact(3)), "danger");
+  });
+  it("entry day: n = 0 danger, partial warning, unknown expected with n > 0 ok", () => {
+    assert.equal(t("borrador", 0, 0, exact(2)), "danger");
+    assert.equal(t("sin_registro", 0, null, UNKNOWN), "danger");
+    assert.equal(t("borrador", 0, 1, exact(2)), "warning");
+    assert.equal(t("borrador", 0, 1, approx(3)), "warning");
+    assert.equal(t("borrador", 0, 2, UNKNOWN), "ok");
+  });
+  it("1..3 days out: n = 0 warning, partial muted", () => {
+    assert.equal(t("borrador", 2, 0, exact(2)), "warning");
+    assert.equal(t("iniciado", 1, null, exact(2)), "warning");
+    assert.equal(t("borrador", 3, 0, UNKNOWN), "warning");
+    assert.equal(t("borrador", 2, 1, exact(3)), "muted");
+  });
+  it("4+ days out is muted", () => {
+    assert.equal(t("borrador", 4, 0, exact(2)), "muted");
+    assert.equal(t("borrador", 6, 1, exact(3)), "muted");
+    assert.equal(t("sin_registro", 6, null, UNKNOWN), "muted");
+  });
+  it("multi-unit (expected unknown) in the days ahead with viajeros is muted", () => {
+    assert.equal(t("borrador", 2, 2, UNKNOWN), "muted");
+  });
+});
+
+describe("viajerosTooltip", () => {
+  const caveat =
+    "El número previsto viene de la reserva y puede incluir niños; Partee solo exige registrar a los mayores de 14 años";
+  it("exact: no caveat", () => {
+    assert.equal(viajerosTooltip(3, exact(4)), "3 viajeros registrados de 4 previstos.");
+  });
+  it("not exact: adds the children caveat", () => {
+    assert.equal(viajerosTooltip(3, approx(4)), "3 viajeros registrados de 4 previstos. " + caveat);
+  });
+  it("unknown expected: no previstos part and no caveat", () => {
+    assert.equal(viajerosTooltip(2, UNKNOWN), "2 viajeros registrados.");
+    assert.equal(viajerosTooltip(null, UNKNOWN), "0 viajeros registrados.");
+  });
+  it("singular for n = 1 (and for 1 previsto)", () => {
+    assert.equal(viajerosTooltip(1, exact(2)), "1 viajero registrado de 2 previstos.");
+    assert.equal(viajerosTooltip(1, UNKNOWN), "1 viajero registrado.");
+    assert.equal(viajerosTooltip(1, approx(2)), "1 viajero registrado de 2 previstos. " + caveat);
+    assert.equal(viajerosTooltip(1, exact(1)), "1 viajero registrado de 1 previsto.");
+    assert.equal(viajerosTooltip(0, exact(2)), "0 viajeros registrados de 2 previstos.");
   });
 });
 

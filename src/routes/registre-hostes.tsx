@@ -30,7 +30,9 @@ import {
   fmtAgo,
   isValidIso,
   todayMadrid,
+  viajerosTone,
   type Alert,
+  type ViajerosTone,
   type AlertLevel,
   type Expected,
 } from "@/lib/partee-registre";
@@ -44,6 +46,7 @@ interface Row {
   r: RegistreRowFull;
   expected: Expected;
   alert: Alert;
+  tone: ViajerosTone;
 }
 
 type Quick = "danger" | "warning" | "sin_registro" | "borrador0" | "finalizado" | null;
@@ -94,7 +97,7 @@ function RegistreHostesPage() {
           },
           countRooms(kb?.Habitaciones),
         );
-        return { r, expected, alert: alertLevel(r, { today, expected }) };
+        return { r, expected, alert: alertLevel(r, { today, expected }), tone: viajerosTone(r, { today }, expected) };
       }),
     [q.data, today],
   );
@@ -253,7 +256,7 @@ function RegistreHostesPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {visible.map(({ r, expected, alert }) => (
+                    {visible.map(({ r, expected, alert, tone }) => (
                       <TableRow key={r.id_registre}>
                         <TableCell className="whitespace-nowrap">{fmtDate(r.fecha_checkin)}</TableCell>
                         <TableCell>{r.apartamentos?.nombre ?? `Apartamento ${r.id_apt}`}</TableCell>
@@ -266,7 +269,7 @@ function RegistreHostesPage() {
                             <span className={cn("text-xs", LEVEL_TEXT[alert.level])}>{alert.label}</span>
                           </div>
                         </TableCell>
-                        <TableCell className="text-sm"><ViajerosCell n={r.num_viajeros} expected={expected} /></TableCell>
+                        <TableCell><ViajerosCell n={r.num_viajeros} expected={expected} tone={tone} /></TableCell>
                         <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
                           <Tooltip>
                             <TooltipTrigger asChild><span className="cursor-help">{fmtAgo(r.ultimo_sync)}</span></TooltipTrigger>
@@ -287,7 +290,7 @@ function RegistreHostesPage() {
 
               {/* Mobile cards */}
               <div className="space-y-2 md:hidden">
-                {visible.map(({ r, expected, alert }) => (
+                {visible.map(({ r, expected, alert, tone }) => (
                   <Card key={r.id_registre}>
                     <CardContent className="space-y-2 p-3">
                       <div className="flex items-start justify-between gap-2">
@@ -304,7 +307,7 @@ function RegistreHostesPage() {
                         {r.numero_reserva} · {r.reservas_kb?.Referencia ?? "—"} · {r.reservas_kb?.Portal ?? "—"}
                       </div>
                       <div className="flex items-center justify-between gap-2">
-                        <div className="text-sm"><ViajerosCell n={r.num_viajeros} expected={expected} /></div>
+                        <ViajerosCell n={r.num_viajeros} expected={expected} tone={tone} />
                         <div className="flex items-center">
                           <CopyLinkIconButton url={r.checkin_url} noLinkReason={noLinkReason(r.estado)} />
                           <Button variant="ghost" size="icon" aria-label="Ver registro de huéspedes" onClick={() => setSelected(r.numero_reserva)}>
