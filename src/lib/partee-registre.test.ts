@@ -11,6 +11,7 @@ import {
   fmtAgo,
   fmtMadridDateTime,
   isStaleRegistre,
+  isUrgente,
   lastGeneralSync,
   MOTIVO_EXCLUSION_LABEL,
   SITUACION_LABEL,
@@ -61,6 +62,52 @@ describe("dates", () => {
     assert.equal(fmtAgo("2026-10-28T11:55:00Z", now), "hace 5 min");
     assert.equal(fmtAgo("2026-10-28T09:00:00Z", now), "hace 3 h");
     assert.equal(fmtAgo("2026-10-25T12:00:00Z", now), "hace 3 d");
+  });
+});
+
+describe("isUrgente (Urgentes counter)", () => {
+  // Rows of each situation: sin_registro = No generado, iniciado = Generado sin registros,
+  // borrador 1 of 3 = Parcial, borrador 3 of 3 = Completado, borrador with unknown expected = En curso.
+  const SITS: Record<string, { estado: string; n: number | null; ex: Expected }> = {
+    no_generado: { estado: "sin_registro", n: null, ex: exact(3) },
+    generado_sin_registros: { estado: "iniciado", n: 0, ex: exact(3) },
+    parcial: { estado: "borrador", n: 1, ex: exact(3) },
+    completado: { estado: "borrador", n: 3, ex: exact(3) },
+    en_curso: { estado: "borrador", n: 2, ex: UNKNOWN },
+    finalizado: { estado: "finalizado", n: 3, ex: exact(3) },
+    anulado: { estado: "anulado", n: null, ex: UNKNOWN },
+    manual: { estado: "manual", n: null, ex: UNKNOWN },
+    error: { estado: "error", n: null, ex: UNKNOWN },
+  };
+  const urgent = (sit: string, d: number, extra: { excluida?: boolean; registro_confirmado?: boolean } = {}) => {
+    const s = SITS[sit];
+    return isUrgente({ estado: s.estado, num_viajeros: s.n, fecha_checkin: day(d), ...extra }, { today: TODAY, expected: s.ex });
+  };
+
+  it("pending situations are urgent for d <= 1 only (past, today, tomorrow)", () => {
+    for (const sit of ["no_generado", "generado_sin_registros", "parcial"]) {
+      for (const d of [-2, 0, 1]) assert.equal(urgent(sit, d), true, `${sit} d=${d}`);
+      for (const d of [2, 3, 7]) assert.equal(urgent(sit, d), false, `${sit} d=${d}`);
+    }
+  });
+  it("completado / en_curso / finalizado / anulado / manual / error are not urgent on d = 0, 1, 2", () => {
+    for (const sit of ["completado", "en_curso", "finalizado", "anulado", "manual", "error"]) {
+      for (const d of [0, 1, 2]) assert.equal(urgent(sit, d), false, `${sit} d=${d}`);
+    }
+  });
+  it("overdue (alert code vencido) stays urgent, even Completado or manually confirmed", () => {
+    assert.equal(urgent("completado", -1), true);
+    assert.equal(urgent("en_curso", -3), true);
+    assert.equal(urgent("parcial", -1, { registro_confirmado: true }), true);
+    assert.equal(a("borrador", -1, 3, exact(3)).code, "vencido"); // same definition as alertLevel
+  });
+  it("terminal states in the past are not overdue, so not urgent (same handling as alertLevel)", () => {
+    for (const sit of ["finalizado", "anulado", "manual", "error"]) assert.equal(urgent(sit, -2), false, sit);
+  });
+  it("excluded rows are never urgent, overdue or not", () => {
+    for (const sit of ["no_generado", "parcial", "completado"]) {
+      for (const d of [-2, 0, 1]) assert.equal(urgent(sit, d, { excluida: true }), false, `${sit} d=${d}`);
+    }
   });
 });
 

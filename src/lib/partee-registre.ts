@@ -559,6 +559,17 @@ const PENDIENTES: ReadonlySet<SituacionCode> = new Set<SituacionCode>(["no_gener
 /** Something is still missing: the guest has not generated / completed the registration. */
 export const isPendiente = (s: Situacion): boolean => PENDIENTES.has(s.code);
 
+/**
+ * "Urgentes" counter: a pending situation (No generado, Generado sin registros, Parcial) whose entry is today or
+ * tomorrow (d <= 1), plus every overdue parte (alert code `vencido`, exactly as alertLevel defines it, terminal
+ * states included/excluded as there). Excluded reservations are never urgent.
+ */
+export function isUrgente(row: AlertRowInput, ctx: AlertContext): boolean {
+  if (row.excluida) return false;
+  if (alertLevel(row, ctx).code === "vencido") return true;
+  return diffDays(ctx.today, row.fecha_checkin) <= 1 && isPendiente(situacionRegistro(row, ctx));
+}
+
 export function situacionTone(situacion: Situacion, row: AlertRowInput, ctx: { today: string }): SituacionTone {
   switch (situacion.code) {
     case "completado":

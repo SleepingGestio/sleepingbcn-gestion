@@ -19,7 +19,6 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   CopyLinkIconButton,
-  LEVEL_LABEL,
   LEVEL_TEXT,
   noLinkReason,
   ReclamadoBadge,
@@ -40,6 +39,7 @@ import {
   fmtAgo,
   isValidIso,
   isReclamable,
+  isUrgente,
   lastGeneralSync,
   SORT_OPTIONS,
   situacionRegistro,
@@ -50,7 +50,6 @@ import {
   viajerosTone,
   type Alert,
   type ViajerosTone,
-  type AlertLevel,
   type Expected,
   type Situacion,
   type SituacionTone,
@@ -80,6 +79,8 @@ interface Row {
   exclusion: Exclusion | null;
   /** The single visible label (No generado, Parcial, Completado, ...). */
   situacion: Situacion;
+  /** Counted in "Urgentes" (see isUrgente). */
+  urgente: boolean;
 }
 
 function toSortable({ r, alert, last, count, reclamable }: Row): SortableRow {
@@ -196,11 +197,16 @@ function ReclamacionCell({
   );
 }
 
-type Quick = "danger" | "warning" | "no_generado" | "generado" | "finalizado" | null;
+type Quick = "urgente" | "no_generado" | "generado" | "parcial" | "finalizado" | null;
 
-const QUICK: { key: Exclude<Quick, null>; label: string; test: (x: Row) => boolean; tone: string }[] = [
-  { key: "danger", label: "Urgentes", test: (x) => x.alert.level === "danger", tone: "text-red-700" },
-  { key: "warning", label: "Avisos", test: (x) => x.alert.level === "warning", tone: "text-orange-700" },
+const QUICK: { key: Exclude<Quick, null>; label: string; test: (x: Row) => boolean; tone: string; hint?: string }[] = [
+  {
+    key: "urgente",
+    label: "Urgentes",
+    test: (x) => x.urgente,
+    tone: "text-red-700",
+    hint: "Pendientes que entran hoy o mañana, y partes vencidos sin finalizar",
+  },
   { key: "no_generado", label: "No generado", test: (x) => x.situacion.code === "no_generado", tone: "" },
   {
     key: "generado",
@@ -208,10 +214,12 @@ const QUICK: { key: Exclude<Quick, null>; label: string; test: (x: Row) => boole
     test: (x) => x.situacion.code === "generado_sin_registros",
     tone: "",
   },
+  { key: "parcial", label: "Parcial", test: (x) => x.situacion.code === "parcial", tone: "" },
   { key: "finalizado", label: "Finalizados", test: (x) => x.situacion.code === "finalizado", tone: "text-green-700" },
 ];
 
 const ALL = "all";
+const URGENTE = "urgente";
 
 function RegistreHostesPage() {
   const { canEdit } = usePermissions();
@@ -219,7 +227,7 @@ function RegistreHostesPage() {
   const [from, setFrom] = useState(() => addDaysIso(today, -7));
   const [to, setTo] = useState(() => addDaysIso(today, 14));
   const [search, setSearch] = useState("");
-  const [level, setLevel] = useState<string>(ALL);
+  const [alerta, setAlerta] = useState<string>(ALL); // ALL | URGENTE
   const [estado, setEstado] = useState<string>(ALL);
   const [unit, setUnit] = useState<string>(ALL);
   const [quick, setQuick] = useState<Quick>(null);
@@ -275,6 +283,7 @@ function RegistreHostesPage() {
         pillTone: situacionTone(situacion, rowIn, { today }),
         exclusion,
         situacion,
+        urgente: isUrgente(rowIn, { today, expected }),
       };
     });
   }, [q.data, today, exclusiones.map]);
@@ -290,9 +299,9 @@ function RegistreHostesPage() {
   // Filters other than the clickable counters. Excluded rows are only here when the switch is on.
   const base = useMemo(() => {
     const t = search.trim().toLowerCase();
-    return rows.filter(({ alert, exclusion, situacion, r }) => {
+    return rows.filter(({ urgente, exclusion, situacion, r }) => {
       if (exclusion && !showExcluidas) return false;
-      if (level !== ALL && alert.level !== level) return false;
+      if (alerta === URGENTE && !urgente) return false;
       if (estado !== ALL && situacion.code !== estado) return false;
       if (unit !== ALL && String(r.id_apt) !== unit) return false;
       if (t) {
@@ -301,7 +310,7 @@ function RegistreHostesPage() {
       }
       return true;
     });
-  }, [rows, level, estado, unit, search, showExcluidas]);
+  }, [rows, alerta, estado, unit, search, showExcluidas]);
 
   // Excluded rows never count: counters, the Total and the quick filters only see these.
   const counted = useMemo(() => base.filter((x) => !x.exclusion), [base]);
@@ -355,20 +364,29 @@ function RegistreHostesPage() {
 
           {/* Counters (click = filter) */}
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
-            {counts.map((c) => (
-              <button
-                key={c.key}
-                type="button"
-                onClick={() => setQuick(quick === c.key ? null : c.key)}
-                className={cn(
-                  "rounded-md border bg-card p-3 text-left transition-colors hover:bg-accent",
-                  quick === c.key && "border-primary ring-1 ring-primary",
-                )}
-              >
-                <div className={cn("text-2xl font-semibold", c.tone)}>{c.n}</div>
-                <div className="text-xs text-muted-foreground">{c.label}</div>
-              </button>
-            ))}
+            {counts.map((c) => {
+              const card = (
+                <button
+                  key={c.key}
+                  type="button"
+                  onClick={() => setQuick(quick === c.key ? null : c.key)}
+                  className={cn(
+                    "rounded-md border bg-card p-3 text-left transition-colors hover:bg-accent",
+                    quick === c.key && "border-primary ring-1 ring-primary",
+                  )}
+                >
+                  <div className={cn("text-2xl font-semibold", c.tone)}>{c.n}</div>
+                  <div className="text-xs text-muted-foreground">{c.label}</div>
+                </button>
+              );
+              if (!c.hint) return card;
+              return (
+                <Tooltip key={c.key}>
+                  <TooltipTrigger asChild>{card}</TooltipTrigger>
+                  <TooltipContent>{c.hint}</TooltipContent>
+                </Tooltip>
+              );
+            })}
             <button
               type="button"
               onClick={() => setQuick(null)}
@@ -390,13 +408,11 @@ function RegistreHostesPage() {
               onChange={(e) => setSearch(e.target.value)}
               className="col-span-2 lg:col-span-2"
             />
-            <Select value={level} onValueChange={setLevel}>
+            <Select value={alerta} onValueChange={setAlerta}>
               <SelectTrigger><SelectValue placeholder="Alerta" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value={ALL}>Todas las alertas</SelectItem>
-                {(["danger", "warning", "info", "ok"] as AlertLevel[]).map((l) => (
-                  <SelectItem key={l} value={l}>{LEVEL_LABEL[l]}</SelectItem>
-                ))}
+                <SelectItem value={URGENTE}>Urgentes</SelectItem>
               </SelectContent>
             </Select>
             <Select value={estado} onValueChange={setEstado}>
