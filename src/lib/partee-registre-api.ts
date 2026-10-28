@@ -32,7 +32,7 @@ export interface RegistreRowFull {
   registro_confirmado_nota: string | null;
   apartamentos: { nombre: string | null } | null;
   reservas_kb: RegistreKb | null;
-  /** Only on the page query: the most recent reclamation (embedded, limit 1). */
+  /** Only on the page query: ALL reclamations of the row, newest first (embedded). */
   partee_reclamacio?: Array<{ enviada_en: string; canal: string | null }> | null;
 }
 
@@ -42,8 +42,9 @@ const SELECT_FULL: string =
   "registro_confirmado, registro_confirmado_por, registro_confirmado_en, registro_confirmado_nota, " +
   'apartamentos(nombre), reservas_kb("Número", Referencia, Portal, "Huéspedes", "Huéspedes menores de edad", "Huéspedes exentos", "Check in", "Check-out", Estado, Habitaciones)';
 
-// Page query: same columns + only the latest reclamation per row (embedded, ordered desc, limit 1),
-// so the embed never multiplies rows and the 1000-row cap still applies to registre rows only.
+// Page query: same columns + all reclamations of each row (embedded, newest first). An embedded
+// resource is returned as a nested array, so it never multiplies the parent rows: the 1000-row cap and
+// the paging below still apply to registre rows only.
 const SELECT_WINDOW: string = SELECT_FULL + ", partee_reclamacio(enviada_en, canal)";
 const LAST_RECL = { referencedTable: "partee_reclamacio" } as const;
 
@@ -105,7 +106,6 @@ export async function fetchRegistreWindow(from: string, to: string): Promise<Reg
       .lte("fecha_checkin", to)
       .order("id_registre")
       .order("enviada_en", { ...LAST_RECL, ascending: false })
-      .limit(1, LAST_RECL)
       .range(a, b),
   );
   const overdue = pageAll<RegistreRowFull>((a, b) =>
@@ -116,7 +116,6 @@ export async function fetchRegistreWindow(from: string, to: string): Promise<Reg
       .not("estado", "in", "(finalizado,anulado)")
       .order("id_registre")
       .order("enviada_en", { ...LAST_RECL, ascending: false })
-      .limit(1, LAST_RECL)
       .range(a, b),
   );
   const [w, o] = await Promise.all([inWindow, overdue]);

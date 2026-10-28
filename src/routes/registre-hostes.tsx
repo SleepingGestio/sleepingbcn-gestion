@@ -20,6 +20,7 @@ import {
   LEVEL_LABEL,
   LEVEL_TEXT,
   noLinkReason,
+  ReclamadoBadge,
   SituacionPill,
   ViajerosCell,
 } from "@/components/partee-registre-bits";
@@ -30,17 +31,16 @@ import {
   addDaysIso,
   alertLevel,
   countRooms,
-  CANAL_LABEL,
   DEFAULT_SORT,
   MOTIVO_EXCLUSION_LABEL,
   SITUACIONES_FILTRO,
   expectedViajeros,
   fmtAgo,
   isValidIso,
-  reclamacionHint,
+  isReclamable,
   SORT_OPTIONS,
-  situacionLevel,
   situacionRegistro,
+  situacionTone,
   situacionTooltip,
   sortRows,
   todayMadrid,
@@ -50,6 +50,7 @@ import {
   type AlertLevel,
   type Expected,
   type Situacion,
+  type SituacionTone,
   type SortableRow,
   type SortDir,
   type SortKey,
@@ -65,16 +66,20 @@ interface Row {
   expected: Expected;
   alert: Alert;
   tone: ViajerosTone;
-  /** "Sin reclamar" / "Reclamado hace …" for warning/danger rows, else null. */
-  hint: string | null;
+  /** Latest reclamation and how many there are (embedded, newest first). */
   last: { enviada_en: string; canal: string | null } | null;
+  count: number;
+  /** "Reclamado N" badge + "Reclamar" button apply (something is still missing, not excluded). */
+  reclamable: boolean;
+  /** Fixed colour of the situation pill. */
+  pillTone: SituacionTone;
   /** Row of partee_exclusion for this reservation (all its units), or null. */
   exclusion: Exclusion | null;
   /** The single visible label (No generado, Parcial, Completado, ...). */
   situacion: Situacion;
 }
 
-function toSortable({ r, alert, last }: Row): SortableRow {
+function toSortable({ r, alert, last, count, reclamable }: Row): SortableRow {
   return {
     fecha_checkin: r.fecha_checkin,
     urgency: alert.priority,
@@ -84,6 +89,7 @@ function toSortable({ r, alert, last }: Row): SortableRow {
     portal: r.reservas_kb?.Portal ?? null,
     viajeros: r.num_viajeros,
     ultimo_sync: r.ultimo_sync,
+    reclamacionCount: reclamable ? count : null,
     lastReclamacionAt: last?.enviada_en ?? null,
   };
 }
@@ -123,7 +129,7 @@ function SortHead({
  * "Excluida · {motivo}". Only an overdue parte keeps a second line: it is a legal risk.
  */
 function EstadoPill({ row }: { row: Row }) {
-  const { r, alert, exclusion, situacion, expected } = row;
+  const { r, alert, exclusion, situacion, expected, pillTone } = row;
   return (
     <div className="flex flex-col items-start gap-1">
       {exclusion ? (
@@ -133,7 +139,7 @@ function EstadoPill({ row }: { row: Row }) {
       ) : (
         <SituacionPill
           situacion={situacion}
-          level={situacionLevel(situacion, alert)}
+          tone={pillTone}
           tooltip={situacionTooltip({ ...r, excluida: false }, expected)}
         />
       )}
@@ -166,28 +172,18 @@ function ExclusionAction({
 }
 
 function ReclamacionCell({
-  hint,
-  last,
-  level,
+  row,
   canClaim,
   onClaim,
 }: {
-  hint: string | null;
-  last: Row["last"];
-  level: AlertLevel;
+  row: Row;
   canClaim: boolean;
   onClaim: () => void;
 }) {
-  if (!hint && !canClaim) return <span className="text-xs text-muted-foreground">—</span>;
-  const sin = hint === "Sin reclamar";
+  if (!row.reclamable) return <span className="text-xs text-muted-foreground">—</span>;
   return (
-    <div className="flex flex-col items-start gap-1">
-      {hint && (
-        <span className={cn("text-xs", sin ? LEVEL_TEXT[level] : "text-muted-foreground")}>
-          {hint}
-          {!sin && last?.canal ? ` · ${CANAL_LABEL[last.canal] ?? last.canal}` : ""}
-        </span>
-      )}
+    <div className="flex flex-wrap items-center gap-2">
+      <ReclamadoBadge count={row.count} last={row.last} tone={row.pillTone} />
       {canClaim && (
         <Button variant="outline" size="sm" onClick={onClaim}>
           Reclamar
@@ -249,7 +245,6 @@ function RegistreHostesPage() {
   });
 
   const rows: Row[] = useMemo(() => {
-    const now = new Date();
     return (q.data ?? []).map((r) => {
       const kb = r.reservas_kb;
       const expected = expectedViajeros(
@@ -264,14 +259,17 @@ function RegistreHostesPage() {
       const rowIn = { ...r, excluida: !!exclusion };
       const alert = alertLevel(rowIn, { today, expected });
       const situacion = situacionRegistro(rowIn, { expected });
-      const last = r.partee_reclamacio?.[0] ?? null;
+      const reclamaciones = r.partee_reclamacio ?? [];
+      const last = reclamaciones[0] ?? null;
       return {
         r,
         expected,
         alert,
         tone: viajerosTone(rowIn, { today }, expected),
-        hint: reclamacionHint(alert.level, last?.enviada_en ?? null, now),
         last,
+        count: reclamaciones.length,
+        reclamable: isReclamable(situacion),
+        pillTone: situacionTone(situacion, rowIn, { today }),
         exclusion,
         situacion,
       };
@@ -447,7 +445,7 @@ function RegistreHostesPage() {
                   </TableHeader>
                   <TableBody>
                     {visible.map((row) => {
-                      const { r, expected, alert, tone, hint, last, exclusion } = row;
+                      const { r, expected, tone, exclusion } = row;
                       return (
                         <TableRow key={r.id_registre} className={exclusion ? "opacity-60" : undefined}>
                           <TableCell className="whitespace-nowrap">{fmtDate(r.fecha_checkin)}</TableCell>
@@ -467,10 +465,8 @@ function RegistreHostesPage() {
                           </TableCell>
                           <TableCell>
                             <ReclamacionCell
-                              hint={hint}
-                              last={last}
-                              level={alert.level}
-                              canClaim={editor && !exclusion && r.estado !== "finalizado" && r.estado !== "anulado"}
+                              row={row}
+                              canClaim={editor && row.reclamable}
                               onClaim={() => setReclamarFor(r.id_registre)}
                             />
                           </TableCell>
@@ -518,7 +514,7 @@ function RegistreHostesPage() {
               </div>
               <div className="space-y-2 md:hidden">
                 {visible.map((row) => {
-                  const { r, expected, alert, tone, hint, last, exclusion } = row;
+                  const { r, expected, tone, exclusion } = row;
                   return (
                     <Card key={r.id_registre} className={exclusion ? "opacity-60" : undefined}>
                       <CardContent className="space-y-2 p-3">
@@ -532,10 +528,8 @@ function RegistreHostesPage() {
                           <EstadoPill row={row} />
                         </div>
                         <ReclamacionCell
-                          hint={hint}
-                          last={last}
-                          level={alert.level}
-                          canClaim={editor && !exclusion && r.estado !== "finalizado" && r.estado !== "anulado"}
+                          row={row}
+                          canClaim={editor && row.reclamable}
                           onClaim={() => setReclamarFor(r.id_registre)}
                         />
                         <div className="text-xs text-muted-foreground">

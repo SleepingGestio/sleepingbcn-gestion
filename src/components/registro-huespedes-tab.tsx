@@ -10,8 +10,8 @@ import {
   countRooms,
   expectedViajeros,
   fmtAgo,
-  situacionLevel,
   situacionRegistro,
+  situacionTone,
   situacionTooltip,
   todayMadrid,
   viajerosTone,
@@ -95,7 +95,7 @@ export function RegistroHuespedesTab({
                 <span className="text-sm font-medium">{r.apartamentos?.nombre ?? `Apartamento ${r.id_apt}`}</span>
                 <SituacionPill
                   situacion={situacion}
-                  level={situacionLevel(situacion, alert)}
+                  tone={situacionTone(situacion, rowIn, { today })}
                   tooltip={situacionTooltip(rowIn, expected)}
                 />
                 {alert.code === "vencido" && (

@@ -9,15 +9,19 @@ import {
   viajerosTooltip,
   type AlertLevel,
   type Expected,
+  reclamacionTooltip,
   type Situacion,
+  type SituacionTone,
   type ViajerosTone,
 } from "@/lib/partee-registre";
 
-const LEVEL_STYLE: Record<AlertLevel, string> = {
-  danger: "bg-red-600 text-white hover:bg-red-600",
-  warning: "bg-orange-500 text-white hover:bg-orange-500",
-  info: "bg-sky-100 text-sky-900 hover:bg-sky-100",
+/** One fixed colour per situation; only the orange of the pending ones varies in intensity. */
+const SITUACION_STYLE: Record<SituacionTone, string> = {
   ok: "bg-green-600 text-white hover:bg-green-600",
+  pendiente_fuerte: "bg-orange-500 text-white hover:bg-orange-500",
+  pendiente_suave: "bg-orange-100 text-orange-900 hover:bg-orange-100",
+  neutro: "bg-slate-100 text-slate-700 hover:bg-slate-100",
+  error: "bg-red-600 text-white hover:bg-red-600",
 };
 
 export const LEVEL_TEXT: Record<AlertLevel, string> = {
@@ -34,21 +38,21 @@ export const LEVEL_LABEL: Record<AlertLevel, string> = {
   ok: "Correcto",
 };
 
-/** The single situation pill, coloured by the alert level of the row; the tooltip has the technical detail. */
+/** The single situation pill, one fixed colour per situation; the tooltip has the technical detail. */
 export function SituacionPill({
   situacion,
-  level,
+  tone,
   tooltip,
 }: {
   situacion: Situacion;
-  level: AlertLevel;
+  tone: SituacionTone;
   tooltip: string;
 }) {
   return (
     <Tooltip>
       <TooltipTrigger asChild>
         <span className="inline-flex cursor-help">
-          <Badge className={cn("whitespace-nowrap", LEVEL_STYLE[level])}>{situacion.label}</Badge>
+          <Badge className={cn("whitespace-nowrap", SITUACION_STYLE[tone])}>{situacion.label}</Badge>
         </span>
       </TooltipTrigger>
       <TooltipContent className="max-w-xs">{tooltip}</TooltipContent>
@@ -58,10 +62,34 @@ export function SituacionPill({
 
 const TONE_TEXT: Record<ViajerosTone, string> = {
   ok: "text-green-700",
-  warning: "text-orange-600",
-  danger: "text-red-700",
+  pendiente_fuerte: "text-orange-600",
+  pendiente_suave: "text-orange-400",
   muted: "text-muted-foreground",
 };
+
+/** "Reclamado N": orange (same as the pending pill) while nobody claimed, calm blue once claimed. */
+export function ReclamadoBadge({
+  count,
+  last,
+  tone,
+}: {
+  count: number;
+  last: { enviada_en: string; canal: string | null } | null;
+  /** Tone of the row's pending pill; used only while count is 0. */
+  tone: SituacionTone;
+}) {
+  const style = count >= 1 ? "bg-sky-100 text-sky-900 hover:bg-sky-100" : SITUACION_STYLE[tone];
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span className="inline-flex cursor-help">
+          <Badge className={cn("whitespace-nowrap", style)}>Reclamado {count}</Badge>
+        </span>
+      </TooltipTrigger>
+      <TooltipContent>{reclamacionTooltip(count, last)}</TooltipContent>
+    </Tooltip>
+  );
+}
 
 /** Compact "n/N" (just "n" when the expected count is unknown), coloured by tone, no words. */
 export function ViajerosCell({ n, expected, tone }: { n: number | null; expected: Expected; tone: ViajerosTone }) {

@@ -14,12 +14,13 @@ import {
   MOTIVO_EXCLUSION_LABEL,
   SITUACION_LABEL,
   SITUACIONES_FILTRO,
-  situacionLevel,
   situacionRegistro,
+  situacionTone,
   situacionTooltip,
   MOTIVOS_EXCLUSION,
   madridLocalToIso,
-  reclamacionHint,
+  isReclamable,
+  reclamacionTooltip,
   todayMadrid,
   toMadridLocalInput,
   DEFAULT_SORT,
@@ -206,15 +207,13 @@ describe("alert labels never carry the children suffix", () => {
   });
 });
 
-describe("viajerosTone", () => {
+describe("viajerosTone (same colour code as the pill, never red)", () => {
   const t = (estado: string, d: number, n: number | null, ex: Expected) =>
     viajerosTone({ estado, num_viajeros: n, fecha_checkin: day(d) }, { today: TODAY }, ex);
 
-  it("finalizado is ok whatever the numbers", () => {
+  it("complete is green: finalizado, n >= expected (even on entry day)", () => {
     assert.equal(t("finalizado", -3, 0, exact(4)), "ok");
     assert.equal(t("finalizado", 5, null, UNKNOWN), "ok");
-  });
-  it("n >= expected is ok, even on entry day", () => {
     assert.equal(t("borrador", 0, 2, exact(2)), "ok");
     assert.equal(t("borrador", 0, 3, approx(2)), "ok");
     assert.equal(t("borrador", 2, 2, exact(2)), "ok");
@@ -223,30 +222,35 @@ describe("viajerosTone", () => {
     assert.equal(t("anulado", 0, 0, exact(2)), "muted");
     assert.equal(t("manual", -1, 1, exact(2)), "muted");
   });
-  it("overdue (not finalizado/anulado) is danger", () => {
-    assert.equal(t("borrador", -1, 1, exact(3)), "danger");
-    assert.equal(t("sin_registro", -2, null, exact(3)), "danger");
+  it("pending and imminent (d <= 3, overdue included) is strong orange", () => {
+    assert.equal(t("borrador", -1, 1, exact(3)), "pendiente_fuerte"); // parcial, overdue
+    assert.equal(t("sin_registro", -2, null, exact(3)), "pendiente_fuerte"); // no generado, overdue
+    assert.equal(t("borrador", 0, 0, exact(2)), "pendiente_fuerte");
+    assert.equal(t("sin_registro", 0, null, UNKNOWN), "pendiente_fuerte");
+    assert.equal(t("borrador", 0, 1, exact(2)), "pendiente_fuerte");
+    assert.equal(t("iniciado", 1, null, exact(2)), "pendiente_fuerte");
+    assert.equal(t("borrador", 2, 0, exact(2)), "pendiente_fuerte");
+    assert.equal(t("borrador", 3, 0, UNKNOWN), "pendiente_fuerte");
+    assert.equal(t("borrador", 2, 1, exact(3)), "pendiente_fuerte"); // parcial 2 days out
   });
-  it("entry day: n = 0 danger, partial warning, unknown expected with n > 0 ok", () => {
-    assert.equal(t("borrador", 0, 0, exact(2)), "danger");
-    assert.equal(t("sin_registro", 0, null, UNKNOWN), "danger");
-    assert.equal(t("borrador", 0, 1, exact(2)), "warning");
-    assert.equal(t("borrador", 0, 1, approx(3)), "warning");
-    assert.equal(t("borrador", 0, 2, UNKNOWN), "ok");
+  it("pending and not imminent (d >= 4) is soft orange", () => {
+    assert.equal(t("borrador", 4, 0, exact(2)), "pendiente_suave");
+    assert.equal(t("borrador", 6, 1, exact(3)), "pendiente_suave");
+    assert.equal(t("sin_registro", 6, null, UNKNOWN), "pendiente_suave");
   });
-  it("1..3 days out: n = 0 warning, partial muted", () => {
-    assert.equal(t("borrador", 2, 0, exact(2)), "warning");
-    assert.equal(t("iniciado", 1, null, exact(2)), "warning");
-    assert.equal(t("borrador", 3, 0, UNKNOWN), "warning");
-    assert.equal(t("borrador", 2, 1, exact(3)), "muted");
-  });
-  it("4+ days out is muted", () => {
-    assert.equal(t("borrador", 4, 0, exact(2)), "muted");
-    assert.equal(t("borrador", 6, 1, exact(3)), "muted");
-    assert.equal(t("sin_registro", 6, null, UNKNOWN), "muted");
-  });
-  it("multi-unit (expected unknown) in the days ahead with viajeros is muted", () => {
+  it("en_curso (multi-unit, unknown expected) is muted", () => {
     assert.equal(t("borrador", 2, 2, UNKNOWN), "muted");
+    assert.equal(t("borrador", 0, 2, UNKNOWN), "muted");
+  });
+  it("never returns a red/warning/danger value", () => {
+    const allowed = new Set(["ok", "pendiente_fuerte", "pendiente_suave", "muted"]);
+    for (const estado of ["sin_registro", "iniciado", "borrador", "finalizado", "anulado", "error", "manual"]) {
+      for (const d of [-3, 0, 2, 4, 9]) {
+        for (const n of [null, 0, 1, 3]) {
+          for (const ex of [UNKNOWN, exact(2), approx(2)]) assert.ok(allowed.has(t(estado, d, n, ex)), `${estado}/${d}/${n}`);
+        }
+      }
+    }
   });
 });
 
@@ -322,32 +326,46 @@ describe("registro confirmado a mano", () => {
     assert.equal(tone("borrador", 2, 1, exact(3)), "ok");
     assert.equal(tone("borrador", 5, 1, UNKNOWN), "ok");
   });
-  it("tone is not ok for confirmed rows that are overdue or have no viajeros", () => {
-    assert.equal(tone("borrador", -1, 1, exact(3)), "danger");
-    assert.equal(tone("borrador", 0, 0, exact(3)), "danger");
-    assert.equal(tone("borrador", 2, 1, exact(3), false), "muted");
+  it("confirmed rows stay green even if overdue (the alert keeps the red line), but not without viajeros", () => {
+    assert.equal(tone("borrador", -1, 1, exact(3)), "ok");
+    assert.equal(tone("borrador", 0, 0, exact(3)), "pendiente_fuerte");
+    assert.equal(tone("borrador", 2, 1, exact(3), false), "pendiente_fuerte"); // not confirmed: parcial, imminent
   });
 });
 
-describe("reclamacionHint", () => {
-  const now = new Date("2026-10-28T12:00:00Z");
-  it("null for ok / info levels", () => {
-    assert.equal(reclamacionHint("ok", null, now), null);
-    assert.equal(reclamacionHint("info", "2026-10-28T11:00:00Z", now), null);
+describe("reclamacion helpers", () => {
+  const sit = (estado: string, n: number | null, ex: Expected = UNKNOWN, extra: Record<string, unknown> = {}) =>
+    situacionRegistro({ estado, num_viajeros: n, fecha_checkin: day(2), ...extra }, { expected: ex });
+
+  it("isReclamable only for No generado / Generado sin registros / Parcial", () => {
+    assert.equal(isReclamable(sit("sin_registro", null)), true);
+    assert.equal(isReclamable(sit("iniciado", null)), true);
+    assert.equal(isReclamable(sit("borrador", 0, exact(2))), true);
+    assert.equal(isReclamable(sit("borrador", 1, exact(2))), true); // parcial
+    assert.equal(isReclamable(sit("borrador", 2, exact(2))), false); // completado
+    assert.equal(isReclamable(sit("borrador", 1, exact(3), { registro_confirmado: true })), false);
+    assert.equal(isReclamable(sit("borrador", 2, UNKNOWN)), false); // en curso
+    assert.equal(isReclamable(sit("finalizado", 2, exact(2))), false);
+    assert.equal(isReclamable(sit("anulado", null)), false);
+    assert.equal(isReclamable(sit("error", null)), false);
+    assert.equal(isReclamable(sit("manual", null)), false);
   });
-  it("Sin reclamar when there is none", () => {
-    assert.equal(reclamacionHint("danger", null, now), "Sin reclamar");
-    assert.equal(reclamacionHint("warning", undefined, now), "Sin reclamar");
-    assert.equal(reclamacionHint("warning", "not a date", now), "Sin reclamar");
+  it("an excluded row is never reclaimable", () => {
+    assert.equal(isReclamable(sit("sin_registro", null, UNKNOWN, { excluida: true })), false);
+    assert.equal(isReclamable(sit("borrador", 1, exact(2), { excluida: true })), false);
   });
-  it("Sin reclamar when the last one is older than 24 h", () => {
-    assert.equal(reclamacionHint("warning", "2026-10-27T11:00:00Z", now), "Sin reclamar");
-    assert.equal(reclamacionHint("danger", "2026-10-27T11:59:00Z", now), "Sin reclamar");
-  });
-  it("Reclamado hace … within 24 h", () => {
-    assert.equal(reclamacionHint("warning", "2026-10-28T09:00:00Z", now), "Reclamado hace 3 h");
-    assert.equal(reclamacionHint("danger", "2026-10-28T11:55:00Z", now), "Reclamado hace 5 min");
-    assert.equal(reclamacionHint("danger", "2026-10-27T12:00:00Z", now), "Reclamado hace 24 h");
+  it("reclamacionTooltip", () => {
+    const now = new Date("2026-10-28T12:00:00Z");
+    assert.equal(reclamacionTooltip(0, null, now), "Sin reclamaciones");
+    assert.equal(
+      reclamacionTooltip(2, { enviada_en: "2026-10-28T09:00:00Z", canal: "whatsapp" }, now),
+      "Última reclamación: hace 3 h · WhatsApp",
+    );
+    assert.equal(
+      reclamacionTooltip(1, { enviada_en: "2026-10-28T09:00:00Z", canal: null }, now),
+      "Última reclamación: hace 3 h",
+    );
+    assert.equal(reclamacionTooltip(1, { enviada_en: "2026-10-28T09:00:00Z", canal: "raro" }, now), "Última reclamación: hace 3 h · raro");
   });
 });
 
@@ -384,6 +402,7 @@ describe("sortRows", () => {
     portal: "Airbnb",
     viajeros: 1,
     ultimo_sync: "2026-10-28T08:00:00Z",
+    reclamacionCount: null,
     lastReclamacionAt: null,
     ...o,
   });
@@ -452,14 +471,16 @@ describe("sortRows", () => {
     assert.deepEqual(sorted(rows, "sync", "asc"), ["old", "new", "never"]);
     assert.deepEqual(sorted(rows, "sync", "desc"), ["new", "old", "never"]);
   });
-  it("reclamacion: by last reclamation date, none last", () => {
+  it("reclamacion: by count, then by last date; rows without the badge (null) go last in both directions", () => {
     const rows = [
-      mk({ numero_reserva: "none", lastReclamacionAt: null }),
-      mk({ numero_reserva: "recent", lastReclamacionAt: "2026-10-28T09:00:00Z" }),
-      mk({ numero_reserva: "older", lastReclamacionAt: "2026-10-26T09:00:00Z" }),
+      mk({ numero_reserva: "na", reclamacionCount: null }),
+      mk({ numero_reserva: "c2", reclamacionCount: 2, lastReclamacionAt: "2026-10-28T09:00:00Z" }),
+      mk({ numero_reserva: "c0", reclamacionCount: 0 }),
+      mk({ numero_reserva: "c1-new", reclamacionCount: 1, lastReclamacionAt: "2026-10-28T08:00:00Z" }),
+      mk({ numero_reserva: "c1-old", reclamacionCount: 1, lastReclamacionAt: "2026-10-26T08:00:00Z" }),
     ];
-    assert.deepEqual(sorted(rows, "reclamacion", "asc"), ["older", "recent", "none"]);
-    assert.deepEqual(sorted(rows, "reclamacion", "desc"), ["recent", "older", "none"]);
+    assert.deepEqual(sorted(rows, "reclamacion", "asc"), ["c0", "c1-old", "c1-new", "c2", "na"]);
+    assert.deepEqual(sorted(rows, "reclamacion", "desc"), ["c2", "c1-new", "c1-old", "c0", "na"]);
   });
   it("empty text values (null or empty string) go last", () => {
     const rows = [
@@ -528,11 +549,7 @@ describe("reservas excluidas (No requiere registro)", () => {
     const base = { estado: "borrador", num_viajeros: 0, fecha_checkin: day(0) };
     assert.equal(alertLevel({ ...base, excluida: false }, { today: TODAY, expected: UNKNOWN }).code, "hoy_sin_registro");
     assert.equal(alertLevel({ ...base, excluida: null }, { today: TODAY, expected: UNKNOWN }).code, "hoy_sin_registro");
-    assert.equal(viajerosTone({ ...base, excluida: false }, { today: TODAY }, exact(2)), "danger");
-  });
-  it("reclamacionHint is null for an excluded row (its level is info)", () => {
-    const lvl = ex("sin_registro", 0, null).level;
-    assert.equal(reclamacionHint(lvl, null, new Date("2026-10-28T12:00:00Z")), null);
+    assert.equal(viajerosTone({ ...base, excluida: false }, { today: TODAY }, exact(2)), "pendiente_fuerte");
   });
   it("motivo labels", () => {
     assert.deepEqual([...MOTIVOS_EXCLUSION], ["extension", "reserva_privada", "otros"]);
@@ -640,34 +657,56 @@ describe("situacionTooltip", () => {
   });
 });
 
-describe("situacionLevel (pill colour)", () => {
-  const both = (estado: string, d: number, n: number | null, ex: Expected, extra: Record<string, unknown> = {}) => {
+describe("situacionTone (one fixed colour per situation)", () => {
+  const tone = (estado: string, d: number, n: number | null, ex: Expected, extra: Record<string, unknown> = {}) => {
     const row = { estado, num_viajeros: n, fecha_checkin: day(d), ...extra };
-    return { s: situacionRegistro(row, { expected: ex }), a: alertLevel(row, { today: TODAY, expected: ex }) };
+    return situacionTone(situacionRegistro(row, { expected: ex }), row, { today: TODAY });
   };
-  it("completado with an informational alert is green", () => {
-    const { s, a } = both("borrador", 0, 2, exact(2)); // n >= expected on entry day -> info "Se finaliza esta noche"
-    assert.deepEqual([s.code, a.level], ["completado", "info"]);
-    assert.equal(situacionLevel(s, a), "ok");
-  });
-  it("completado with an overdue alert keeps the danger colour", () => {
-    const { s, a } = both("borrador", -1, 2, exact(2));
-    assert.deepEqual([s.code, a.code, a.level], ["completado", "vencido", "danger"]);
-    assert.equal(situacionLevel(s, a), "danger");
-  });
-  it("any other situation keeps the alert level unchanged", () => {
-    const cases: Array<[string, number, number | null, Expected]> = [
-      ["sin_registro", 1, null, UNKNOWN], // no_generado, danger
-      ["borrador", 0, 1, exact(2)], // parcial, warning
-      ["borrador", 2, 0, exact(2)], // generado_sin_registros, warning
-      ["borrador", 2, 2, UNKNOWN], // en_curso, ok
-      ["finalizado", 2, 2, exact(2)], // finalizado, ok
-      ["anulado", 2, null, UNKNOWN], // anulado, info
-    ];
-    for (const [estado, d, n, ex] of cases) {
-      const { s, a } = both(estado, d, n, ex);
-      assert.notEqual(s.code, "completado");
-      assert.equal(situacionLevel(s, a), a.level);
+
+  it("completado and finalizado are ok (green) whatever the date", () => {
+    for (const d of [-3, 0, 2, 10]) {
+      assert.equal(tone("borrador", d, 2, exact(2)), "ok");
+      assert.equal(tone("borrador", d, 1, exact(3), { registro_confirmado: true }), "ok");
+      assert.equal(tone("finalizado", d, 2, exact(2)), "ok");
     }
+  });
+  it("completado is green regardless of the alert level (also when the alert is overdue)", () => {
+    const row = { estado: "borrador", num_viajeros: 2, fecha_checkin: day(-1) };
+    const a = alertLevel(row, { today: TODAY, expected: exact(2) });
+    assert.deepEqual([a.code, a.level], ["vencido", "danger"]);
+    assert.equal(situacionTone(situacionRegistro(row, { expected: exact(2) }), row, { today: TODAY }), "ok");
+    const row2 = { estado: "borrador", num_viajeros: 2, fecha_checkin: day(0) };
+    assert.equal(alertLevel(row2, { today: TODAY, expected: exact(2) }).level, "info");
+    assert.equal(situacionTone(situacionRegistro(row2, { expected: exact(2) }), row2, { today: TODAY }), "ok");
+  });
+  it("pending situations: strong when imminent (d <= 3, overdue included), soft otherwise", () => {
+    const cases: Array<[string, number | null, Expected]> = [
+      ["sin_registro", null, UNKNOWN], // No generado
+      ["iniciado", null, UNKNOWN], // Generado sin registros
+      ["borrador", 0, exact(2)], // Generado sin registros
+      ["borrador", 1, exact(2)], // Parcial
+    ];
+    for (const [estado, n, ex] of cases) {
+      for (const d of [-2, 0, 3]) assert.equal(tone(estado, d, n, ex), "pendiente_fuerte", `${estado} d=${d}`);
+      for (const d of [4, 10]) assert.equal(tone(estado, d, n, ex), "pendiente_suave", `${estado} d=${d}`);
+    }
+  });
+  it("same label, same colour: Parcial 2 days out has the strong tone whatever its alert level (info)", () => {
+    const row = { estado: "borrador", num_viajeros: 1, fecha_checkin: day(2) };
+    assert.equal(alertLevel(row, { today: TODAY, expected: exact(2) }).level, "info");
+    assert.equal(situacionTone(situacionRegistro(row, { expected: exact(2) }), row, { today: TODAY }), "pendiente_fuerte");
+    const far = { ...row, fecha_checkin: day(6) };
+    assert.equal(situacionTone(situacionRegistro(far, { expected: exact(2) }), far, { today: TODAY }), "pendiente_suave");
+  });
+  it("en_curso, anulado, manual, excluida and unknown are neutro", () => {
+    assert.equal(tone("borrador", 2, 2, UNKNOWN), "neutro"); // en curso
+    assert.equal(tone("anulado", 2, null, UNKNOWN), "neutro");
+    assert.equal(tone("manual", 2, null, UNKNOWN), "neutro");
+    assert.equal(tone("sin_registro", 0, null, UNKNOWN, { excluida: true }), "neutro");
+    assert.equal(tone("algo_nuevo", 0, 1, UNKNOWN), "neutro");
+  });
+  it("error is error (red)", () => {
+    assert.equal(tone("error", 2, null, UNKNOWN), "error");
+    assert.equal(tone("error", -3, null, UNKNOWN), "error");
   });
 });

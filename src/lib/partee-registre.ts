@@ -21,8 +21,6 @@ export const PARTEE_RULES = {
   noIniciadoInfoMaxDays: 7, // d 4..7 not started -> info (beyond: info too)
   /** Time Partee finalizes the parte (shown in the entry-day label). */
   autoFinalizeTime: "03:45",
-  /** A reclamation younger than this counts as "recently reclaimed". */
-  reclamacionVigenteHoras: 24,
 } as const;
 
 export const CANAL_LABEL: Record<string, string> = {
@@ -242,31 +240,19 @@ export function alertLevel(row: AlertRowInput, ctx: AlertContext): Alert {
   return make(row, "info", "faltan_viajeros", `Faltan viajeros por registrar (${n} de ${expected})`);
 }
 
-export type ViajerosTone = "ok" | "warning" | "danger" | "muted";
+/** Colour of the compact "n/N" cell; derived from the situation so it never contradicts the pill. */
+export type ViajerosTone = "ok" | "pendiente_fuerte" | "pendiente_suave" | "muted";
 
 /**
- * Colour of the compact "n/N" viajeros cell. Rules are checked in this order:
- * finalizado -> ok; n >= expected -> ok (even on entry day); anulado/manual -> muted;
- * overdue -> danger; entry day: n = 0 danger, partial warning, no expected but n > 0 ok;
- * 1..noIniciadoWarningMaxDays days out: n = 0 warning, partial muted; everything else muted.
+ * Same colour code as the pill (situacionTone): complete -> green; pending situations -> orange,
+ * strong when the entry is imminent, soft otherwise; everything else muted gray. Never red.
  */
 export function viajerosTone(row: AlertRowInput, ctx: { today: string }, expected: Expected): ViajerosTone {
-  const n = row.num_viajeros ?? 0;
-  const ex = expected.expected;
-  const d = diffDays(ctx.today, row.fecha_checkin);
-  if (row.excluida) return "muted";
-  if (row.estado === "finalizado") return "ok";
-  if (ex !== null && n >= ex) return "ok";
-  if (row.estado === "borrador" && n > 0 && d >= 0 && row.registro_confirmado) return "ok";
-  if (row.estado === "anulado" || row.estado === "manual") return "muted";
-  if (d < 0) return "danger";
-  if (d === 0) {
-    if (n === 0) return "danger";
-    if (ex !== null) return "warning"; // 0 < n < expected
-    return "ok"; // expected unknown and n > 0
-  }
-  if (d <= PARTEE_RULES.noIniciadoWarningMaxDays) return n === 0 ? "warning" : "muted";
-  return "muted";
+  const t = situacionTone(situacionRegistro(row, { expected }), row, ctx);
+  if (t === "ok") return "ok";
+  if (t === "pendiente_fuerte") return "pendiente_fuerte";
+  if (t === "pendiente_suave") return "pendiente_suave";
+  return "muted"; // neutro, error
 }
 
 /**
@@ -280,24 +266,6 @@ export function viajerosTooltip(numViajeros: number | null, ex: Expected): strin
   const previstos = ex.expected === 1 ? "1 previsto" : `${ex.expected} previstos`;
   const base = `${registrados} de ${previstos}.`;
   return ex.exact ? base : `${base} ${COMPARISON_TOOLTIP}`;
-}
-
-/**
- * Reclamation hint for rows that need attention (warning / danger): "Sin reclamar" when there is
- * no reclamation or the last one is older than PARTEE_RULES.reclamacionVigenteHoras, otherwise
- * "Reclamado hace …". Other levels: null.
- */
-export function reclamacionHint(
-  level: AlertLevel,
-  lastReclamacionAt: string | null | undefined,
-  now: Date = new Date(),
-): string | null {
-  if (level !== "warning" && level !== "danger") return null;
-  const t = lastReclamacionAt ? Date.parse(lastReclamacionAt) : NaN;
-  if (Number.isNaN(t)) return "Sin reclamar";
-  const horas = (now.getTime() - t) / 3_600_000;
-  if (horas > PARTEE_RULES.reclamacionVigenteHoras) return "Sin reclamar";
-  return `Reclamado ${fmtAgo(lastReclamacionAt, now)}`;
 }
 
 // ---------- Europe/Madrid date-time helpers (datetime-local <-> timestamptz) ----------
@@ -401,6 +369,8 @@ export interface SortableRow {
   portal: string | null;
   viajeros: number | null;
   ultimo_sync: string | null;
+  /** Number of reclamations, or null when the row has no "Reclamado N" badge (not reclaimable). */
+  reclamacionCount: number | null;
   lastReclamacionAt: string | null;
 }
 
@@ -452,7 +422,12 @@ export function compareRows(key: SortKey, dir: SortDir): (a: SortableRow, b: Sor
       case "sync":
         return cmpField(a.ultimo_sync, b.ultimo_sync, dir, cmpTime) || tie(a, b, null);
       case "reclamacion":
-        return cmpField(a.lastReclamacionAt, b.lastReclamacionAt, dir, cmpTime) || tie(a, b, null);
+        // by count, then by last reclamation date; rows without the badge (null) go last in both directions
+        return (
+          cmpField(a.reclamacionCount, b.reclamacionCount, dir, cmpNum) ||
+          cmpField(a.lastReclamacionAt, b.lastReclamacionAt, dir, cmpTime) ||
+          tie(a, b, null)
+        );
     }
   };
 }
@@ -546,11 +521,48 @@ export function situacionRegistro(row: AlertRowInput, ctx: { expected: Expected 
 }
 
 /**
- * Colour of the situation pill: green for "Completado" (even if the alert is only informational,
- * e.g. "Se finaliza esta noche"), but an overdue parte keeps its alert colour.
+ * Pill colour. ONE fixed colour per situation; the only variation is the intensity of the orange of
+ * the pending situations (No generado, Generado sin registros, Parcial): strong when the entry is
+ * imminent (d <= PARTEE_RULES.noIniciadoWarningMaxDays, overdue included), soft otherwise.
+ * It deliberately ignores alertLevel.
  */
-export function situacionLevel(situacion: Situacion, alert: Alert): AlertLevel {
-  return situacion.code === "completado" && alert.code !== "vencido" ? "ok" : alert.level;
+export type SituacionTone = "ok" | "pendiente_fuerte" | "pendiente_suave" | "neutro" | "error";
+
+const PENDIENTES: ReadonlySet<SituacionCode> = new Set<SituacionCode>(["no_generado", "generado_sin_registros", "parcial"]);
+
+/** Something is still missing: the guest has not generated / completed the registration. */
+export const isPendiente = (s: Situacion): boolean => PENDIENTES.has(s.code);
+
+export function situacionTone(situacion: Situacion, row: AlertRowInput, ctx: { today: string }): SituacionTone {
+  switch (situacion.code) {
+    case "completado":
+    case "finalizado":
+      return "ok";
+    case "error":
+      return "error";
+    case "no_generado":
+    case "generado_sin_registros":
+    case "parcial": {
+      const d = diffDays(ctx.today, row.fecha_checkin);
+      return d <= PARTEE_RULES.noIniciadoWarningMaxDays ? "pendiente_fuerte" : "pendiente_suave";
+    }
+    default:
+      return "neutro"; // en_curso, anulado, manual, excluida, otro
+  }
+}
+
+/** The "Reclamado N" badge and the "Reclamar" button only make sense while something is missing. */
+export const isReclamable = (s: Situacion): boolean => isPendiente(s);
+
+/** Tooltip of the "Reclamado N" badge. */
+export function reclamacionTooltip(
+  count: number,
+  last: { enviada_en: string; canal: string | null } | null,
+  now: Date = new Date(),
+): string {
+  if (count < 1 || !last) return "Sin reclamaciones";
+  const canal = last.canal ? ` · ${CANAL_LABEL[last.canal] ?? last.canal}` : "";
+  return `Última reclamación: ${fmtAgo(last.enviada_en, now)}${canal}`;
 }
 
 /** Tooltip of the situation pill: the technical detail that the label hides. */
