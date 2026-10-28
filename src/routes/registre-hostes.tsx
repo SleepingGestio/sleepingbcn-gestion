@@ -38,6 +38,7 @@ import {
   expectedViajeros,
   fmtAgo,
   isValidIso,
+  isIncompleto,
   isReclamable,
   isUrgente,
   lastGeneralSync,
@@ -197,7 +198,7 @@ function ReclamacionCell({
   );
 }
 
-type Quick = "urgente" | "no_generado" | "generado" | "parcial" | "finalizado" | null;
+type Quick = "urgente" | "no_generado" | "generado" | "parcial" | "incompleto" | "finalizado" | null;
 
 const QUICK: { key: Exclude<Quick, null>; label: string; test: (x: Row) => boolean; tone: string; hint?: string }[] = [
   {
@@ -210,11 +211,18 @@ const QUICK: { key: Exclude<Quick, null>; label: string; test: (x: Row) => boole
   { key: "no_generado", label: "No generado", test: (x) => x.situacion.code === "no_generado", tone: "" },
   {
     key: "generado",
-    label: "Generado sin registros",
+    label: "Sin registros",
     test: (x) => x.situacion.code === "generado_sin_registros",
     tone: "",
   },
   { key: "parcial", label: "Parcial", test: (x) => x.situacion.code === "parcial", tone: "" },
+  {
+    key: "incompleto",
+    label: "Incompletos",
+    test: (x) => isIncompleto(x.situacion),
+    tone: "",
+    hint: "Registro empezado sin completar: Sin registros + Parcial",
+  },
   { key: "finalizado", label: "Finalizados", test: (x) => x.situacion.code === "finalizado", tone: "text-green-700" },
 ];
 
@@ -363,7 +371,7 @@ function RegistreHostesPage() {
           </div>
 
           {/* Counters (click = filter) */}
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-7">
             {counts.map((c) => {
               const card = (
                 <button

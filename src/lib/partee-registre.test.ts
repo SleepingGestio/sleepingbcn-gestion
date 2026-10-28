@@ -10,6 +10,7 @@ import {
   expectedViajeros,
   fmtAgo,
   fmtMadridDateTime,
+  isIncompleto,
   isStaleRegistre,
   isUrgente,
   lastGeneralSync,
@@ -66,7 +67,7 @@ describe("dates", () => {
 });
 
 describe("isUrgente (Urgentes counter)", () => {
-  // Rows of each situation: sin_registro = No generado, iniciado = Generado sin registros,
+  // Rows of each situation: sin_registro = No generado, iniciado = Sin registros,
   // borrador 1 of 3 = Parcial, borrador 3 of 3 = Completado, borrador with unknown expected = En curso.
   const SITS: Record<string, { estado: string; n: number | null; ex: Expected }> = {
     no_generado: { estado: "sin_registro", n: null, ex: exact(3) },
@@ -107,6 +108,28 @@ describe("isUrgente (Urgentes counter)", () => {
   it("excluded rows are never urgent, overdue or not", () => {
     for (const sit of ["no_generado", "parcial", "completado"]) {
       for (const d of [-2, 0, 1]) assert.equal(urgent(sit, d, { excluida: true }), false, `${sit} d=${d}`);
+    }
+  });
+});
+
+describe("isIncompleto (Incompletos counter)", () => {
+  const sit = (estado: string, n: number | null, ex: Expected = exact(3), extra: Record<string, unknown> = {}) =>
+    situacionRegistro({ estado, num_viajeros: n, fecha_checkin: day(2), ...extra }, { expected: ex });
+
+  it("only Sin registros and Parcial", () => {
+    assert.equal(isIncompleto(sit("iniciado", null)), true); // Sin registros
+    assert.equal(isIncompleto(sit("borrador", 0)), true); // Sin registros
+    assert.equal(isIncompleto(sit("borrador", 1)), true); // Parcial
+  });
+  it("never No generado, nor any other situation", () => {
+    assert.equal(isIncompleto(sit("sin_registro", null)), false);
+    assert.equal(isIncompleto(sit("borrador", 3)), false); // Completado
+    assert.equal(isIncompleto(sit("borrador", 2, UNKNOWN)), false); // En curso
+    for (const estado of ["finalizado", "anulado", "error", "manual"]) assert.equal(isIncompleto(sit(estado, 1)), false, estado);
+  });
+  it("excluded reservations are never incomplete", () => {
+    for (const estado of ["iniciado", "borrador"]) {
+      assert.equal(isIncompleto(sit(estado, 1, exact(3), { excluida: true })), false, estado);
     }
   });
 });
@@ -312,28 +335,28 @@ describe("viajerosTone (same colour code as the pill, never red)", () => {
     assert.equal(t("anulado", 0, 0, exact(2)), "muted");
     assert.equal(t("manual", -1, 1, exact(2)), "muted");
   });
-  it("pending and imminent (d <= 3, overdue included) is strong orange", () => {
+  it("pending and imminent (d <= 3, overdue included) is strong orange (violet for No generado)", () => {
     assert.equal(t("borrador", -1, 1, exact(3)), "pendiente_fuerte"); // parcial, overdue
-    assert.equal(t("sin_registro", -2, null, exact(3)), "pendiente_fuerte"); // no generado, overdue
+    assert.equal(t("sin_registro", -2, null, exact(3)), "no_generado_fuerte"); // no generado, overdue
     assert.equal(t("borrador", 0, 0, exact(2)), "pendiente_fuerte");
-    assert.equal(t("sin_registro", 0, null, UNKNOWN), "pendiente_fuerte");
+    assert.equal(t("sin_registro", 0, null, UNKNOWN), "no_generado_fuerte");
     assert.equal(t("borrador", 0, 1, exact(2)), "pendiente_fuerte");
     assert.equal(t("iniciado", 1, null, exact(2)), "pendiente_fuerte");
     assert.equal(t("borrador", 2, 0, exact(2)), "pendiente_fuerte");
     assert.equal(t("borrador", 3, 0, UNKNOWN), "pendiente_fuerte");
     assert.equal(t("borrador", 2, 1, exact(3)), "pendiente_fuerte"); // parcial 2 days out
   });
-  it("pending and not imminent (d >= 4) is soft orange", () => {
+  it("pending and not imminent (d >= 4) is soft orange (soft violet for No generado)", () => {
     assert.equal(t("borrador", 4, 0, exact(2)), "pendiente_suave");
     assert.equal(t("borrador", 6, 1, exact(3)), "pendiente_suave");
-    assert.equal(t("sin_registro", 6, null, UNKNOWN), "pendiente_suave");
+    assert.equal(t("sin_registro", 6, null, UNKNOWN), "no_generado_suave");
   });
   it("en_curso (multi-unit, unknown expected) is muted", () => {
     assert.equal(t("borrador", 2, 2, UNKNOWN), "muted");
     assert.equal(t("borrador", 0, 2, UNKNOWN), "muted");
   });
   it("never returns a red/warning/danger value", () => {
-    const allowed = new Set(["ok", "pendiente_fuerte", "pendiente_suave", "muted"]);
+    const allowed = new Set(["ok", "pendiente_fuerte", "pendiente_suave", "no_generado_fuerte", "no_generado_suave", "muted"]);
     for (const estado of ["sin_registro", "iniciado", "borrador", "finalizado", "anulado", "error", "manual"]) {
       for (const d of [-3, 0, 2, 4, 9]) {
         for (const n of [null, 0, 1, 3]) {
@@ -427,7 +450,7 @@ describe("reclamacion helpers", () => {
   const sit = (estado: string, n: number | null, ex: Expected = UNKNOWN, extra: Record<string, unknown> = {}) =>
     situacionRegistro({ estado, num_viajeros: n, fecha_checkin: day(2), ...extra }, { expected: ex });
 
-  it("isReclamable only for No generado / Generado sin registros / Parcial", () => {
+  it("isReclamable only for No generado / Sin registros / Parcial", () => {
     assert.equal(isReclamable(sit("sin_registro", null)), true);
     assert.equal(isReclamable(sit("iniciado", null)), true);
     assert.equal(isReclamable(sit("borrador", 0, exact(2))), true);
@@ -669,10 +692,10 @@ describe("situacionRegistro (one visible label)", () => {
   it("sin_registro -> No generado", () => {
     assert.deepEqual(pair(sit("sin_registro", null)), ["no_generado", "No generado"]);
   });
-  it("iniciado, and borrador with 0 viajeros -> Generado sin registros", () => {
-    assert.deepEqual(pair(sit("iniciado", null)), ["generado_sin_registros", "Generado sin registros"]);
-    assert.deepEqual(pair(sit("borrador", 0, exact(2))), ["generado_sin_registros", "Generado sin registros"]);
-    assert.deepEqual(pair(sit("borrador", null, exact(2))), ["generado_sin_registros", "Generado sin registros"]);
+  it("iniciado, and borrador with 0 viajeros -> Sin registros", () => {
+    assert.deepEqual(pair(sit("iniciado", null)), ["generado_sin_registros", "Sin registros"]);
+    assert.deepEqual(pair(sit("borrador", 0, exact(2))), ["generado_sin_registros", "Sin registros"]);
+    assert.deepEqual(pair(sit("borrador", null, exact(2))), ["generado_sin_registros", "Sin registros"]);
     // even if somebody confirmed it by hand, with no viajeros nothing was registered
     assert.equal(sit("borrador", 0, exact(2), { registro_confirmado: true }).code, "generado_sin_registros");
   });
@@ -709,6 +732,17 @@ describe("situacionRegistro (one visible label)", () => {
     }
     for (const label of Object.values(SITUACION_LABEL)) assert.ok(!/borrador/i.test(label));
     for (const o of SITUACIONES_FILTRO) assert.ok(!/borrador/i.test(o.label));
+  });
+  it("no visible label says 'Generado sin registros' any more (the internal code is unchanged)", () => {
+    for (const label of Object.values(SITUACION_LABEL)) assert.ok(!/generado sin registros/i.test(label), label);
+    for (const o of SITUACIONES_FILTRO) assert.ok(!/generado sin registros/i.test(o.label), o.label);
+    assert.equal(SITUACION_LABEL.generado_sin_registros, "Sin registros");
+    assert.equal(SITUACIONES_FILTRO.find((o) => o.code === "generado_sin_registros")?.label, "Sin registros");
+    for (const estado of ["sin_registro", "iniciado", "borrador", "finalizado", "anulado", "error", "manual"]) {
+      for (const n of [null, 0, 1, 3]) {
+        for (const ex of [UNKNOWN, exact(2), approx(2)]) assert.ok(!/generado sin registros/i.test(sit(estado, n, ex).label));
+      }
+    }
   });
   it("the filter options cover every situation code except excluida and otro", () => {
     const codes = SITUACIONES_FILTRO.map((o) => o.code).sort();
@@ -769,16 +803,23 @@ describe("situacionTone (one fixed colour per situation)", () => {
     assert.equal(alertLevel(row2, { today: TODAY, expected: exact(2) }).level, "info");
     assert.equal(situacionTone(situacionRegistro(row2, { expected: exact(2) }), row2, { today: TODAY }), "ok");
   });
-  it("pending situations: strong when imminent (d <= 3, overdue included), soft otherwise", () => {
+  it("Sin registros and Parcial: orange, strong when imminent (d <= 3, overdue included), soft otherwise", () => {
     const cases: Array<[string, number | null, Expected]> = [
-      ["sin_registro", null, UNKNOWN], // No generado
-      ["iniciado", null, UNKNOWN], // Generado sin registros
-      ["borrador", 0, exact(2)], // Generado sin registros
+      ["iniciado", null, UNKNOWN], // Sin registros
+      ["borrador", 0, exact(2)], // Sin registros
       ["borrador", 1, exact(2)], // Parcial
     ];
     for (const [estado, n, ex] of cases) {
       for (const d of [-2, 0, 3]) assert.equal(tone(estado, d, n, ex), "pendiente_fuerte", `${estado} d=${d}`);
       for (const d of [4, 10]) assert.equal(tone(estado, d, n, ex), "pendiente_suave", `${estado} d=${d}`);
+    }
+  });
+  it("No generado has its own hue (violet): strong when imminent (d <= 3, overdue included), soft otherwise", () => {
+    for (const d of [-2, 0, 3]) assert.equal(tone("sin_registro", d, null, UNKNOWN), "no_generado_fuerte", `d=${d}`);
+    for (const d of [4, 10]) assert.equal(tone("sin_registro", d, null, UNKNOWN), "no_generado_suave", `d=${d}`);
+    // a violet tone is never used by another situation
+    for (const [estado, n] of [["iniciado", null], ["borrador", 0], ["borrador", 1], ["borrador", 3], ["finalizado", 3]] as const) {
+      for (const d of [-2, 0, 3, 4, 10]) assert.ok(!tone(estado, d, n, exact(3)).startsWith("no_generado"), `${estado} d=${d}`);
     }
   });
   it("same label, same colour: Parcial 2 days out has the strong tone whatever its alert level (info)", () => {
@@ -787,6 +828,15 @@ describe("situacionTone (one fixed colour per situation)", () => {
     assert.equal(situacionTone(situacionRegistro(row, { expected: exact(2) }), row, { today: TODAY }), "pendiente_fuerte");
     const far = { ...row, fecha_checkin: day(6) };
     assert.equal(situacionTone(situacionRegistro(far, { expected: exact(2) }), far, { today: TODAY }), "pendiente_suave");
+  });
+  it("viajerosTone of a No generado row follows its pill: same violet pair", () => {
+    const vt = (d: number) =>
+      viajerosTone({ estado: "sin_registro", num_viajeros: null, fecha_checkin: day(d) }, { today: TODAY }, exact(2));
+    for (const d of [-2, 0, 3]) assert.equal(vt(d), "no_generado_fuerte");
+    for (const d of [4, 10]) assert.equal(vt(d), "no_generado_suave");
+    // Sin registros / Parcial keep the orange pair
+    assert.equal(viajerosTone({ estado: "iniciado", num_viajeros: null, fecha_checkin: day(0) }, { today: TODAY }, exact(2)), "pendiente_fuerte");
+    assert.equal(viajerosTone({ estado: "borrador", num_viajeros: 1, fecha_checkin: day(6) }, { today: TODAY }, exact(3)), "pendiente_suave");
   });
   it("en_curso, anulado, manual, excluida and unknown are neutro", () => {
     assert.equal(tone("borrador", 2, 2, UNKNOWN), "neutro"); // en curso

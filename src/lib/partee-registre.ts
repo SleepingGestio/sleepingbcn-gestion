@@ -267,17 +267,25 @@ export function alertLevel(row: AlertRowInput, ctx: AlertContext): Alert {
 }
 
 /** Colour of the compact "n/N" cell; derived from the situation so it never contradicts the pill. */
-export type ViajerosTone = "ok" | "pendiente_fuerte" | "pendiente_suave" | "muted";
+export type ViajerosTone =
+  | "ok"
+  | "pendiente_fuerte"
+  | "pendiente_suave"
+  | "no_generado_fuerte"
+  | "no_generado_suave"
+  | "muted";
 
 /**
- * Same colour code as the pill (situacionTone): complete -> green; pending situations -> orange,
- * strong when the entry is imminent, soft otherwise; everything else muted gray. Never red.
+ * Same colour code as the pill (situacionTone): complete -> green; Sin registros / Parcial -> orange and
+ * No generado -> violet, strong when the entry is imminent, soft otherwise; everything else muted gray. Never red.
  */
 export function viajerosTone(row: AlertRowInput, ctx: { today: string }, expected: Expected): ViajerosTone {
   const t = situacionTone(situacionRegistro(row, { expected }), row, ctx);
   if (t === "ok") return "ok";
   if (t === "pendiente_fuerte") return "pendiente_fuerte";
   if (t === "pendiente_suave") return "pendiente_suave";
+  if (t === "no_generado_fuerte") return "no_generado_fuerte";
+  if (t === "no_generado_suave") return "no_generado_suave";
   return "muted"; // neutro, error
 }
 
@@ -494,7 +502,7 @@ export const SITUACION_LABEL: Record<Exclude<SituacionCode, "otro">, string> = {
   manual: "Marcado a mano",
   finalizado: "Finalizado",
   no_generado: "No generado",
-  generado_sin_registros: "Generado sin registros",
+  generado_sin_registros: "Sin registros",
   completado: "Completado",
   parcial: "Parcial (Faltan registros)",
   en_curso: "En curso",
@@ -503,7 +511,7 @@ export const SITUACION_LABEL: Record<Exclude<SituacionCode, "otro">, string> = {
 /** Options of the "Estado" filter select (short labels), in display order. */
 export const SITUACIONES_FILTRO: { code: SituacionCode; label: string }[] = [
   { code: "no_generado", label: "No generado" },
-  { code: "generado_sin_registros", label: "Generado sin registros" },
+  { code: "generado_sin_registros", label: "Sin registros" },
   { code: "parcial", label: "Parcial" },
   { code: "completado", label: "Completado" },
   { code: "en_curso", label: "En curso" },
@@ -547,20 +555,30 @@ export function situacionRegistro(row: AlertRowInput, ctx: { expected: Expected 
 }
 
 /**
- * Pill colour. ONE fixed colour per situation; the only variation is the intensity of the orange of
- * the pending situations (No generado, Generado sin registros, Parcial): strong when the entry is
- * imminent (d <= PARTEE_RULES.noIniciadoWarningMaxDays, overdue included), soft otherwise.
+ * Pill colour. ONE fixed colour per situation; the only variation is the intensity of the pending ones:
+ * No generado is violet, Sin registros and Parcial are orange; strong when the entry is imminent
+ * (d <= PARTEE_RULES.noIniciadoWarningMaxDays, overdue included), soft otherwise.
  * It deliberately ignores alertLevel.
  */
-export type SituacionTone = "ok" | "pendiente_fuerte" | "pendiente_suave" | "neutro" | "error";
+export type SituacionTone =
+  | "ok"
+  | "pendiente_fuerte"
+  | "pendiente_suave"
+  | "no_generado_fuerte"
+  | "no_generado_suave"
+  | "neutro"
+  | "error";
 
 const PENDIENTES: ReadonlySet<SituacionCode> = new Set<SituacionCode>(["no_generado", "generado_sin_registros", "parcial"]);
 
 /** Something is still missing: the guest has not generated / completed the registration. */
 export const isPendiente = (s: Situacion): boolean => PENDIENTES.has(s.code);
 
+/** "Incompletos" counter: the registration was started but not completed (Sin registros or Parcial; never No generado). */
+export const isIncompleto = (s: Situacion): boolean => s.code === "generado_sin_registros" || s.code === "parcial";
+
 /**
- * "Urgentes" counter: a pending situation (No generado, Generado sin registros, Parcial) whose entry is today or
+ * "Urgentes" counter: a pending situation (No generado, Sin registros, Parcial) whose entry is today or
  * tomorrow (d <= 1), plus every overdue parte (alert code `vencido`, exactly as alertLevel defines it, terminal
  * states included/excluded as there). Excluded reservations are never urgent.
  */
@@ -577,7 +595,10 @@ export function situacionTone(situacion: Situacion, row: AlertRowInput, ctx: { t
       return "ok";
     case "error":
       return "error";
-    case "no_generado":
+    case "no_generado": {
+      const d = diffDays(ctx.today, row.fecha_checkin);
+      return d <= PARTEE_RULES.noIniciadoWarningMaxDays ? "no_generado_fuerte" : "no_generado_suave";
+    }
     case "generado_sin_registros":
     case "parcial": {
       const d = diffDays(ctx.today, row.fecha_checkin);

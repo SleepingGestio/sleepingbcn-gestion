@@ -15,11 +15,13 @@ import {
   type ViajerosTone,
 } from "@/lib/partee-registre";
 
-/** One fixed colour per situation; only the orange of the pending ones varies in intensity. */
+/** One fixed colour per situation; the pending ones vary in intensity (violet: No generado, orange: Sin registros / Parcial). */
 const SITUACION_STYLE: Record<SituacionTone, string> = {
   ok: "bg-green-600 text-white hover:bg-green-600",
   pendiente_fuerte: "bg-orange-500 text-white hover:bg-orange-500",
   pendiente_suave: "bg-orange-100 text-orange-900 hover:bg-orange-100",
+  no_generado_fuerte: "bg-violet-600 text-white hover:bg-violet-600",
+  no_generado_suave: "bg-violet-100 text-violet-900 hover:bg-violet-100",
   neutro: "bg-slate-100 text-slate-700 hover:bg-slate-100",
   error: "bg-red-600 text-white hover:bg-red-600",
 };
@@ -64,10 +66,12 @@ const TONE_TEXT: Record<ViajerosTone, string> = {
   ok: "text-green-700",
   pendiente_fuerte: "text-orange-600",
   pendiente_suave: "text-orange-400",
+  no_generado_fuerte: "text-violet-600",
+  no_generado_suave: "text-violet-400",
   muted: "text-muted-foreground",
 };
 
-/** "Reclamado N": orange (same as the pending pill) while nobody claimed, calm blue once claimed. */
+/** "Reclamado N": same colour as the row's pending pill while nobody claimed, calm blue once claimed. */
 export function ReclamadoBadge({
   count,
   last,
