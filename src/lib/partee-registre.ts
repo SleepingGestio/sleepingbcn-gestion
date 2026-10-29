@@ -309,6 +309,27 @@ export function viajerosTone(row: AlertRowInput, ctx: { today: string }, expecte
 }
 
 /**
+ * More travellers registered than expected. Only when the expected number is KNOWN and n is known; an
+ * approximate expected number (children not subtracted, `exact: false`) is treated like an exact one, because it
+ * is the raw guest count of the reservation: registering more than that is more than expected either way.
+ */
+export function masQuePrevistos(n: number | null | undefined, ex: Expected): boolean {
+  return ex.expected !== null && n !== null && n !== undefined && n > ex.expected;
+}
+
+/** Partee closes the guest check-in link once the parte is finalized or cancelled. */
+export const ESTADOS_ENLACE_CERRADO: ReadonlySet<string> = new Set(["finalizado", "anulado"]);
+
+/**
+ * The guest link to show / copy / open for a row: null when the parte is finalizado or anulado (the link is dead:
+ * opening it says "Compruebe el enlace o contacte con el establecimiento"). The stored URL is not modified.
+ */
+export function enlaceVigente(estado: string, url: string | null | undefined): string | null {
+  if (ESTADOS_ENLACE_CERRADO.has(estado)) return null;
+  return url ? url : null;
+}
+
+/**
  * Tooltip / aria-label of the "n/N" cell. The children caveat is only added when the
  * expected number may include children (expected not exact).
  */

@@ -1,11 +1,12 @@
 // Small presentational pieces shared by the reservation tab and /registre-hostes.
-import { Copy, ExternalLink } from "lucide-react";
+import { ArrowUp, Copy, ExternalLink } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import {
+  masQuePrevistos,
   viajerosTooltip,
   type AlertLevel,
   type Expected,
@@ -99,7 +100,7 @@ export function ReclamadoBadge({
 export function ViajerosCell({ n, expected, tone }: { n: number | null; expected: Expected; tone: ViajerosTone }) {
   const text = expected.expected === null ? `${n ?? 0}` : `${n ?? 0}/${expected.expected}`;
   const tip = viajerosTooltip(n, expected);
-  return (
+  const cell = (
     <Tooltip>
       <TooltipTrigger asChild>
         <span
@@ -113,7 +114,23 @@ export function ViajerosCell({ n, expected, tone }: { n: number | null; expected
       <TooltipContent className="max-w-xs">{tip}</TooltipContent>
     </Tooltip>
   );
+  if (!masQuePrevistos(n, expected)) return cell;
+  return (
+    <span className="inline-flex items-center gap-0.5">
+      {cell}
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span role="img" aria-label={MAS_QUE_PREVISTOS} className="cursor-help">
+            <ArrowUp className="h-3.5 w-3.5 text-red-600" aria-hidden="true" />
+          </span>
+        </TooltipTrigger>
+        <TooltipContent>{MAS_QUE_PREVISTOS}</TooltipContent>
+      </Tooltip>
+    </span>
+  );
 }
+
+const MAS_QUE_PREVISTOS = "Más viajeros registrados que previstos";
 
 export async function copyLink(url: string) {
   try {
@@ -164,7 +181,7 @@ export function OpenLinkButton({ url }: { url: string }) {
 
 /** Why a row has no check-in link. */
 export function noLinkReason(estado: string): string {
-  return estado === "finalizado"
-    ? "Parte finalizado: Partee ya no ofrece el enlace"
-    : "Todavía no hay enlace de registro para esta estancia";
+  if (estado === "finalizado") return "El enlace ya no es válido: el parte está finalizado";
+  if (estado === "anulado") return "El enlace ya no es válido: el parte está anulado";
+  return "Todavía no hay enlace de registro para esta estancia";
 }

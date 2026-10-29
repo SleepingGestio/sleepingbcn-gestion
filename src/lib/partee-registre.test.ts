@@ -25,6 +25,9 @@ import {
   madridLocalToIso,
   isReclamable,
   puedeGenerarEnlace,
+  masQuePrevistos,
+  enlaceVigente,
+  ESTADOS_ENLACE_CERRADO,
   reclamacionTooltip,
   todayMadrid,
   toMadridLocalInput,
@@ -973,6 +976,47 @@ describe("puedeGenerarEnlace", () => {
   it("not for other situations", () => {
     for (const estado of ["iniciado", "borrador", "finalizado", "anulado", "error", "manual"]) {
       assert.equal(can(2, 1, { estado, num_viajeros: 1 }), false);
+    }
+  });
+});
+
+describe("masQuePrevistos (red arrow next to n/N)", () => {
+  const approx = (n: number): Expected => ({ expected: n, exact: false });
+  it("true only when expected is known and n > expected", () => {
+    assert.equal(masQuePrevistos(3, exact(2)), true);
+    assert.equal(masQuePrevistos(2, exact(2)), false);
+    assert.equal(masQuePrevistos(1, exact(2)), false);
+    assert.equal(masQuePrevistos(0, exact(2)), false);
+  });
+  it("false when n is null / undefined", () => {
+    assert.equal(masQuePrevistos(null, exact(2)), false);
+    assert.equal(masQuePrevistos(undefined, exact(2)), false);
+  });
+  it("false when the expected number is unknown (multi-unit), whatever n is", () => {
+    assert.equal(masQuePrevistos(5, UNKNOWN), false);
+    assert.equal(masQuePrevistos(0, UNKNOWN), false);
+  });
+  it("an approximate expected number is treated like an exact one", () => {
+    assert.equal(masQuePrevistos(3, approx(2)), true);
+    assert.equal(masQuePrevistos(2, approx(2)), false);
+  });
+});
+
+describe("enlaceVigente (dead guest link on closed partes)", () => {
+  const URL = "https://m.partee.es/u1";
+  it("finalizado and anulado: no link, even when a URL is stored", () => {
+    assert.deepEqual([...ESTADOS_ENLACE_CERRADO].sort(), ["anulado", "finalizado"]);
+    assert.equal(enlaceVigente("finalizado", URL), null);
+    assert.equal(enlaceVigente("anulado", URL), null);
+  });
+  it("every other estado keeps its link unchanged", () => {
+    for (const estado of ["sin_registro", "iniciado", "borrador", "manual", "error"]) {
+      assert.equal(enlaceVigente(estado, URL), URL);
+    }
+  });
+  it("no URL stays no URL (null, undefined, empty), for any estado", () => {
+    for (const estado of ["sin_registro", "iniciado", "borrador", "manual", "error", "finalizado", "anulado"]) {
+      for (const v of [null, undefined, ""]) assert.equal(enlaceVigente(estado, v), null);
     }
   });
 });

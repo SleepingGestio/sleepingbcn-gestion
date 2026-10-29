@@ -1,6 +1,6 @@
 // Read queries for the Registre hostes screens. Writes live in components/registro-reclamaciones.tsx.
 import { supabase } from "@/integrations/supabase/client";
-import { ESTADOS_KB_EXCLUIDOS, isStaleRegistre } from "@/lib/partee-registre";
+import { enlaceVigente, ESTADOS_KB_EXCLUIDOS, isStaleRegistre } from "@/lib/partee-registre";
 
 export interface RegistreKb {
   "Número": string;
@@ -51,10 +51,15 @@ const SELECT_FULL: string =
 const SELECT_WINDOW: string = SELECT_FULL + ", partee_reclamacio(enviada_en, canal)";
 const LAST_RECL = { referencedTable: "partee_reclamacio" } as const;
 
-/** `checkin_url` becomes what the UI shows and copies: Partee's own link first, else the generated one. */
+/**
+ * `checkin_url` becomes what the UI shows, copies and opens: Partee's own link first, else the generated one, and
+ * none at all once the parte is finalizado / anulado (Partee closes the link; see enlaceVigente). This is the
+ * single place where link visibility is decided: every consumer of these rows (list, mobile card, reservation tab,
+ * the "Abrir en Partee" button of the tab's top bar) reads `checkin_url` from here. The stored data is untouched.
+ */
 const withEffectiveUrl = (r: RegistreRowFull): RegistreRowFull => ({
   ...r,
-  checkin_url: r.checkin_url ?? r.checkin_url_generado ?? null,
+  checkin_url: enlaceVigente(r.estado, r.checkin_url ?? r.checkin_url_generado),
 });
 
 const PAGE = 1000; // PostgREST row cap: always page
