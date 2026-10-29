@@ -215,6 +215,8 @@ export interface AlertRowInput {
   registro_confirmado?: boolean | null;
   /** The reservation is in partee_exclusion: it does not need a registration. */
   excluida?: boolean | null;
+  /** Check-in link created from the app (partee_registre.checkin_url_generado). */
+  checkin_url_generado?: string | null;
 }
 
 export interface AlertContext {
@@ -555,7 +557,8 @@ export function situacionRegistro(row: AlertRowInput, ctx: { expected: Expected 
     case "finalizado":
       return mk("finalizado");
     case "sin_registro":
-      return mk("no_generado");
+      // A link generated from the app means the registration IS generated, only the guest has not used it yet.
+      return mk(row.checkin_url_generado ? "generado_sin_registros" : "no_generado");
     case "iniciado":
       return mk("generado_sin_registros");
     case "borrador": {
@@ -626,6 +629,23 @@ export function situacionTone(situacion: Situacion, row: AlertRowInput, ctx: { t
   }
 }
 
+/**
+ * "Generar enlace" is offered only on a No generado row of a single-unit reservation that is not excluded and
+ * whose check-in is today or later (the server re-checks all of it, plus cancelled and conflicts).
+ */
+export function puedeGenerarEnlace(
+  row: AlertRowInput & { checkin_url?: string | null },
+  ctx: { today: string; unitCount: number; situacion: Situacion },
+): boolean {
+  return (
+    !row.excluida &&
+    ctx.situacion.code === "no_generado" &&
+    !row.checkin_url &&
+    ctx.unitCount <= 1 &&
+    row.fecha_checkin >= ctx.today
+  );
+}
+
 /** The "Reclamado N" badge and the "Reclamar" button only make sense while something is missing. */
 export const isReclamable = (s: Situacion): boolean => isPendiente(s);
 
@@ -650,5 +670,6 @@ export function situacionTooltip(row: AlertRowInput, expected: Expected): string
     if (ex === null) parts.push(registrados);
     else parts.push(`${registrados} de ${ex === 1 ? "1 previsto" : `${ex} previstos`}`);
   }
+  if (row.estado === "sin_registro" && row.checkin_url_generado) parts.push("Enlace generado, el huésped aún no se ha registrado");
   return parts.join(". ") + ".";
 }

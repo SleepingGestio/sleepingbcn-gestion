@@ -237,6 +237,21 @@ export function selectRecord(records: PRecord[]): Selection {
   return { kind: 'sin_registro' };
 }
 
+export type LinkTarget =
+  | { kind: 'target'; record: PRecord } // exactly one record, no parteID, channel not PARTEE
+  | { kind: 'stale' } // a record already has a parteID / PARTEE channel: the stored state is old
+  | { kind: 'ambiguous' } // several records for the same establishment and date: never guess
+  | { kind: 'none' }; // nothing usable (no records, or the only one has no id)
+
+/** Picks the Partee record to create a check-in link for. Strict: only an unambiguous record qualifies. */
+export function selectLinkTarget(records: PRecord[]): LinkTarget {
+  if (records.some((r) => hasParteId(r) || isPartee(r))) return { kind: 'stale' };
+  if (records.length > 1) return { kind: 'ambiguous' };
+  const [only] = records;
+  if (!only || only.id === null || only.id === undefined || only.id === '') return { kind: 'none' };
+  return { kind: 'target', record: only };
+}
+
 /** Extracts the allowed fields from a parte response. `viajeros` is only counted. */
 export function extractParteFacts(raw: unknown): ParteFacts {
   const p = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;

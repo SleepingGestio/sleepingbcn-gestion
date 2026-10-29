@@ -24,6 +24,7 @@ import {
   MOTIVOS_EXCLUSION,
   madridLocalToIso,
   isReclamable,
+  puedeGenerarEnlace,
   reclamacionTooltip,
   todayMadrid,
   toMadridLocalInput,
@@ -727,6 +728,70 @@ describe("situacionRegistro (one visible label)", () => {
   it("sin_registro -> No generado", () => {
     assert.deepEqual(pair(sit("sin_registro", null)), ["no_generado", "No generado"]);
   });
+  describe("sin_registro with a generated link (checkin_url_generado)", () => {
+    const URL = "https://m.partee.es/u1";
+    it("sin_registro + generated URL -> Sin registros", () => {
+      assert.deepEqual(pair(sit("sin_registro", null, UNKNOWN, { checkin_url_generado: URL })), [
+        "generado_sin_registros",
+        "Sin registros",
+      ]);
+    });
+    it("without a generated URL it stays No generado (null, empty string, undefined)", () => {
+      for (const v of [null, "", undefined]) {
+        assert.equal(sit("sin_registro", null, UNKNOWN, { checkin_url_generado: v }).code, "no_generado");
+      }
+    });
+    it("excluded stays Excluida", () => {
+      assert.deepEqual(pair(sit("sin_registro", null, UNKNOWN, { excluida: true, checkin_url_generado: URL })), [
+        "excluida",
+        "Excluida",
+      ]);
+    });
+    it("other estados are unaffected by a generated URL", () => {
+      for (const [estado, n, code] of [
+        ["iniciado", null, "generado_sin_registros"],
+        ["borrador", 1, "en_curso"],
+        ["finalizado", 2, "finalizado"],
+        ["anulado", null, "anulado"],
+        ["error", null, "error"],
+        ["manual", null, "manual"],
+      ] as const) {
+        assert.equal(sit(estado, n, UNKNOWN, { checkin_url_generado: URL }).code, code);
+      }
+    });
+    it("counts as Incompleto, stays pending / reclaimable, and loses the violet colour", () => {
+      const s = sit("sin_registro", null, UNKNOWN, { checkin_url_generado: URL });
+      assert.equal(isIncompleto(s), true);
+      assert.equal(isReclamable(s), true);
+      const row = { estado: "sin_registro", num_viajeros: null, fecha_checkin: day(2), checkin_url_generado: URL };
+      assert.equal(situacionTone(s, row, { today: TODAY }), "pendiente_fuerte");
+      assert.equal(situacionTone(s, { ...row, fecha_checkin: day(10) }, { today: TODAY }), "pendiente_suave");
+      assert.equal(situacionTone(sit("sin_registro", null), { ...row, checkin_url_generado: null }, { today: TODAY }), "no_generado_fuerte");
+    });
+    it("Urgentes does not change: pending either way (imminent entry => urgent)", () => {
+      const ctx = { today: TODAY, expected: UNKNOWN };
+      for (const d of [-1, 0, 1]) {
+        for (const gen of [null, URL]) {
+          assert.equal(
+            isUrgente({ estado: "sin_registro", num_viajeros: null, fecha_checkin: day(d), checkin_url_generado: gen }, ctx),
+            true,
+          );
+        }
+      }
+      for (const gen of [null, URL]) {
+        assert.equal(
+          isUrgente({ estado: "sin_registro", num_viajeros: null, fecha_checkin: day(5), checkin_url_generado: gen }, ctx),
+          false,
+        );
+      }
+    });
+    it("the tooltip mentions the generated link", () => {
+      assert.equal(
+        situacionTooltip({ estado: "sin_registro", num_viajeros: null, fecha_checkin: day(2), checkin_url_generado: URL }, UNKNOWN),
+        "Estado en Partee: sin_registro. Enlace generado, el huésped aún no se ha registrado.",
+      );
+    });
+  });
   it("iniciado, and borrador with 0 viajeros -> Sin registros", () => {
     assert.deepEqual(pair(sit("iniciado", null)), ["generado_sin_registros", "Sin registros"]);
     assert.deepEqual(pair(sit("borrador", 0, exact(2))), ["generado_sin_registros", "Sin registros"]);
@@ -883,5 +948,31 @@ describe("situacionTone (one fixed colour per situation)", () => {
   it("error is error (red)", () => {
     assert.equal(tone("error", 2, null, UNKNOWN), "error");
     assert.equal(tone("error", -3, null, UNKNOWN), "error");
+  });
+});
+
+describe("puedeGenerarEnlace", () => {
+  const sit = (extra: Record<string, unknown> = {}) =>
+    situacionRegistro({ estado: "sin_registro", num_viajeros: null, fecha_checkin: day(2), ...extra }, { expected: UNKNOWN });
+  const can = (d: number, unitCount = 1, extra: Record<string, unknown> = {}) => {
+    const row = { estado: "sin_registro", num_viajeros: null, fecha_checkin: day(d), ...extra };
+    return puedeGenerarEnlace(row, { today: TODAY, unitCount, situacion: situacionRegistro(row, { expected: UNKNOWN }) });
+  };
+  it("No generado, single unit, check-in today or later", () => {
+    assert.equal(can(0), true);
+    assert.equal(can(5), true);
+    assert.equal(sit().code, "no_generado");
+  });
+  it("not for past check-ins, multi-unit, excluded, or rows that already have a link", () => {
+    assert.equal(can(-1), false);
+    assert.equal(can(2, 2), false);
+    assert.equal(can(2, 1, { excluida: true }), false);
+    assert.equal(can(2, 1, { checkin_url: "https://m.partee.es/u1" }), false);
+    assert.equal(can(2, 1, { checkin_url_generado: "https://m.partee.es/u1" }), false);
+  });
+  it("not for other situations", () => {
+    for (const estado of ["iniciado", "borrador", "finalizado", "anulado", "error", "manual"]) {
+      assert.equal(can(2, 1, { estado, num_viajeros: 1 }), false);
+    }
   });
 });

@@ -10,6 +10,7 @@ import {
   countRooms,
   expectedViajeros,
   fmtAgo,
+  puedeGenerarEnlace,
   situacionRegistro,
   situacionTone,
   situacionTooltip,
@@ -27,6 +28,7 @@ import {
 } from "@/components/partee-registre-bits";
 import { ReclamacionesBlock } from "@/components/registro-reclamaciones";
 import { ExclusionHeader, useExclusiones } from "@/components/registro-exclusion";
+import { GenerarEnlaceButton } from "@/components/registro-generar-enlace";
 import { RefreshBar } from "@/components/registro-refresh";
 
 export function RegistroHuespedesTab({
@@ -42,7 +44,7 @@ export function RegistroHuespedesTab({
   exentos: number | null;
   habitaciones: string | null;
 }) {
-  const { canView, loading } = usePermissions();
+  const { canView, canEdit, loading } = usePermissions();
   const allowed = canView("registre_hostes");
   const exclusiones = useExclusiones(allowed);
   const exclusion = exclusiones.map.get(numero) ?? null;
@@ -139,7 +141,13 @@ export function RegistroHuespedesTab({
                   {!topUrl && <OpenLinkButton url={r.checkin_url} />}
                 </div>
               ) : (
-                <p className="text-sm text-muted-foreground">{noLinkReason(r.estado)}</p>
+                <div className="flex flex-wrap items-center gap-2">
+                  {canEdit("registre_hostes") &&
+                    puedeGenerarEnlace(rowIn, { today, unitCount: countRooms(habitaciones), situacion }) && (
+                      <GenerarEnlaceButton numero={numero} />
+                    )}
+                  <p className="text-sm text-muted-foreground">{noLinkReason(r.estado)}</p>
+                </div>
               )}
 
               <ReclamacionesBlock registre={r} readOnly={!!exclusion} />

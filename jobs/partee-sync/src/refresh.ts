@@ -112,6 +112,51 @@ function touchRow(pair: TargetPair, ex: ExistingRegistre, nowIso: string): Regis
   };
 }
 
+/** The read ports shared by "Actualizar ahora" and "Generar enlace". */
+export type ReservaReadDb = Pick<
+  RefreshDb,
+  'kbReserva' | 'kbMismaFecha' | 'isExcluded' | 'registre' | 'apartamentos' | 'alias' | 'establiments'
+>;
+
+/** Step 1 (shared): the reservation, its exclusion and its current rows; stops at not_found / excluded / cancelled. */
+export async function loadReserva<E extends ExistingRegistre>(
+  numero: string,
+  db: Pick<ReservaReadDb, 'kbReserva' | 'isExcluded'> & { registre(numero: string): Promise<E[]> },
+): Promise<{ ok: true; kb: KbRow; existing: E[] } | { ok: false; code: 'not_found' | 'excluded' | 'cancelled' }> {
+  const kb = await db.kbReserva(numero);
+  if (!kb) return { ok: false, code: 'not_found' };
+  const [excluded, existing] = await Promise.all([db.isExcluded(numero), db.registre(numero)]);
+  if (excluded) return { ok: false, code: 'excluded' };
+  if (!isActiveEstado(kb.estado)) return { ok: false, code: 'cancelled' }; // same Cancelada / No show list as the job
+  return { ok: true, kb, existing };
+}
+
+/** Step 3 (shared): units of the reservation enabled in Partee, and which of them are free of conflicts. */
+export async function resolveUnits(
+  kb: KbRow,
+  db: Pick<ReservaReadDb, 'kbMismaFecha' | 'apartamentos' | 'alias' | 'establiments'>,
+): Promise<
+  | { ok: false; code: 'not_found' | 'no_units' }
+  | { ok: true; date: string; estByApt: Map<number, number>; own: TargetPair[]; mine: TargetPair[] }
+> {
+  const date = kb.checkIn.slice(0, 10);
+  if (!isValidIsoDate(date)) return { ok: false, code: 'not_found' };
+  const [apts, alias, ests, sameDay] = await Promise.all([
+    db.apartamentos(),
+    db.alias(),
+    db.establiments(),
+    db.kbMismaFecha(date),
+  ]);
+  const estByApt = new Map(ests.map((e) => [e.id_apt, e.partee_est_id]));
+  const index = buildRoomIndex(apts, alias);
+  const enabled = new Set(estByApt.keys());
+  const own = buildTargetPairs([kb], index, enabled).pairs; // this reservation alone
+  if (own.length === 0) return { ok: false, code: 'no_units' };
+  const free = new Set(buildTargetPairs(sameDay, index, enabled).pairs.map((p) => `${p.numero_reserva}|${p.id_apt}`));
+  const mine = own.filter((p) => free.has(`${p.numero_reserva}|${p.id_apt}`));
+  return { ok: true, date, estByApt, own, mine };
+}
+
 export async function refreshReserva(
   numeroRaw: string,
   deps: RefreshDeps,
@@ -123,11 +168,9 @@ export async function refreshReserva(
   const numero = numeroRaw.trim();
 
   // 1. Cheap reads first: the reservation, its exclusion and its current rows.
-  const kb = await db.kbReserva(numero);
-  if (!kb) return fail('not_found');
-  const [excluded, existing] = await Promise.all([db.isExcluded(numero), db.registre(numero)]);
-  if (excluded) return fail('excluded');
-  if (!isActiveEstado(kb.estado)) return fail('cancelled'); // same Cancelada / No show list as the job
+  const loaded = await loadReserva(numero, db);
+  if (!loaded.ok) return fail(loaded.code);
+  const { kb, existing } = loaded;
 
   // 2. Cooldown from the most recent ultimo_sync of the reservation's rows (the hourly job updates it too).
   const lastMs = Math.max(
@@ -140,22 +183,10 @@ export async function refreshReserva(
   }
 
   // 3. Units of the reservation that are enabled in Partee, and conflicts with other reservations.
-  const date = kb.checkIn.slice(0, 10);
-  if (!isValidIsoDate(date)) return fail('not_found');
-  const [apts, alias, ests, sameDay] = await Promise.all([
-    db.apartamentos(),
-    db.alias(),
-    db.establiments(),
-    db.kbMismaFecha(date),
-  ]);
-  const estByApt = new Map(ests.map((e) => [e.id_apt, e.partee_est_id]));
-  const index = buildRoomIndex(apts, alias);
-  const enabled = new Set(estByApt.keys());
-  const own = buildTargetPairs([kb], index, enabled).pairs; // this reservation alone
-  if (own.length === 0) return fail('no_units');
+  const units = await resolveUnits(kb, db);
+  if (!units.ok) return fail(units.code);
+  const { estByApt, own, mine } = units;
   if (own.length > REFRESH_MAX_UNITS) return fail('too_many_units');
-  const free = new Set(buildTargetPairs(sameDay, index, enabled).pairs.map((p) => `${p.numero_reserva}|${p.id_apt}`));
-  const mine = own.filter((p) => free.has(`${p.numero_reserva}|${p.id_apt}`));
   if (mine.length === 0) return fail('conflict');
 
   // 4. One Partee query per unit (the job's flow), with the job's delay between Partee calls.

@@ -3,6 +3,7 @@
 // only write is the SECURITY DEFINER RPC partee_refresh_upsert, which re-checks can_edit_menu itself.
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, Json } from "@/integrations/supabase/types";
+import type { LinkDb, LinkExistingRegistre } from "@partee-sync/link";
 import type { ExistingRegistre, RefreshDb, UpsertResult } from "@partee-sync/refresh";
 import type { KbRow, RegistreRow } from "@partee-sync/types";
 
@@ -69,6 +70,38 @@ export function makeRefreshDb(supabase: Client): RefreshDb {
       if (error) throw new Error(`rpc: ${error.message}`.slice(0, 200));
       const out = (data ?? {}) as { upserted?: number; needs_review?: UpsertResult["needs_review"] };
       return { upserted: out.upserted ?? 0, needs_review: out.needs_review ?? [] };
+    },
+  };
+}
+
+/** Data access for generarEnlace: the same reads as the refresh plus the generated URL, and the URL-only RPC. */
+export function makeLinkDb(supabase: Client): LinkDb {
+  const base = makeRefreshDb(supabase);
+  return {
+    kbReserva: base.kbReserva,
+    kbMismaFecha: base.kbMismaFecha,
+    isExcluded: base.isExcluded,
+    apartamentos: base.apartamentos,
+    alias: base.alias,
+    establiments: base.establiments,
+    async registre(numero): Promise<LinkExistingRegistre[]> {
+      const res = await supabase
+        .from("partee_registre")
+        .select(
+          "id_apt, estado, ultimo_sync, partee_reservation_id, parte_id, is_borrador, num_viajeros, num_lote, checkin_url, checkin_url_generado",
+        )
+        .eq("numero_reserva", numero);
+      return must(res, "registre") ?? [];
+    },
+    async setCheckinUrl(numero, idApt, url) {
+      const { data, error } = await supabase.rpc("partee_set_checkin_url", {
+        p_numero_reserva: numero,
+        p_id_apt: idApt,
+        p_url: url,
+      });
+      if (error) throw new Error(`rpc: ${error.message}`.slice(0, 200));
+      const out = (data ?? {}) as { updated?: number };
+      return { updated: out.updated ?? 0 };
     },
   };
 }

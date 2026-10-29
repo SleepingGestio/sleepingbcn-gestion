@@ -6,6 +6,7 @@ import { AppShell } from "@/components/app-shell";
 import { ReservaDetail } from "@/components/reserva-detail";
 import { AddReclamacionDialog } from "@/components/registro-reclamaciones";
 import { ExcluirReservaDialog, IncluirReservaDialog, useExclusiones } from "@/components/registro-exclusion";
+import { GenerarEnlaceButton } from "@/components/registro-generar-enlace";
 import { RefreshButton } from "@/components/registro-refresh";
 import { SyncTodoButton } from "@/components/registro-sync-todo";
 import { Badge } from "@/components/ui/badge";
@@ -43,6 +44,7 @@ import {
   isReclamable,
   isUrgente,
   lastGeneralSync,
+  puedeGenerarEnlace,
   SORT_OPTIONS,
   situacionRegistro,
   situacionTone,
@@ -83,6 +85,8 @@ interface Row {
   situacion: Situacion;
   /** Counted in "Urgentes" (see isUrgente). */
   urgente: boolean;
+  /** "Generar enlace" applies (editor, No generado, single unit, not excluded, check-in today or later). */
+  generable: boolean;
 }
 
 function toSortable({ r, alert, last, count, reclamable }: Row): SortableRow {
@@ -293,9 +297,11 @@ function RegistreHostesPage() {
         exclusion,
         situacion,
         urgente: isUrgente(rowIn, { today, expected }),
+        generable:
+          editor && puedeGenerarEnlace(rowIn, { today, unitCount: countRooms(kb?.Habitaciones), situacion }),
       };
     });
-  }, [q.data, today, exclusiones.map]);
+  }, [q.data, today, exclusiones.map, editor]);
 
   const units = useMemo(() => {
     const m = new Map<number, string>();
@@ -484,7 +490,7 @@ function RegistreHostesPage() {
                   </TableHeader>
                   <TableBody>
                     {visible.map((row) => {
-                      const { r, expected, tone, exclusion } = row;
+                      const { r, expected, tone, exclusion, generable } = row;
                       return (
                         <TableRow key={r.id_registre} className={exclusion ? "opacity-60" : undefined}>
                           <TableCell className="whitespace-nowrap">{fmtDateWeekday(r.fecha_checkin)}</TableCell>
@@ -510,7 +516,11 @@ function RegistreHostesPage() {
                             />
                           </TableCell>
                           <TableCell className="whitespace-nowrap text-right">
-                            <CopyLinkIconButton url={r.checkin_url} noLinkReason={noLinkReason(r.estado)} />
+                            {generable ? (
+                              <GenerarEnlaceButton numero={r.numero_reserva} compact />
+                            ) : (
+                              <CopyLinkIconButton url={r.checkin_url} noLinkReason={noLinkReason(r.estado)} />
+                            )}
                             <Button variant="ghost" size="icon" aria-label="Ver registro de huéspedes" onClick={() => setSelected(r.numero_reserva)}>
                               <Eye className="h-4 w-4" />
                             </Button>
@@ -554,7 +564,7 @@ function RegistreHostesPage() {
               </div>
               <div className="space-y-2 md:hidden">
                 {visible.map((row) => {
-                  const { r, expected, tone, exclusion } = row;
+                  const { r, expected, tone, exclusion, generable } = row;
                   return (
                     <Card key={r.id_registre} className={exclusion ? "opacity-60" : undefined}>
                       <CardContent className="space-y-2 p-3">
@@ -578,7 +588,11 @@ function RegistreHostesPage() {
                         <div className="flex items-center justify-between gap-2">
                           <ViajerosCell n={r.num_viajeros} expected={expected} tone={tone} />
                           <div className="flex items-center">
-                            <CopyLinkIconButton url={r.checkin_url} noLinkReason={noLinkReason(r.estado)} />
+                            {generable ? (
+                              <GenerarEnlaceButton numero={r.numero_reserva} compact />
+                            ) : (
+                              <CopyLinkIconButton url={r.checkin_url} noLinkReason={noLinkReason(r.estado)} />
+                            )}
                             <Button variant="ghost" size="icon" aria-label="Ver registro de huéspedes" onClick={() => setSelected(r.numero_reserva)}>
                               <Eye className="h-4 w-4" />
                             </Button>

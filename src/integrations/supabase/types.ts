@@ -1685,6 +1685,9 @@ export type Database = {
         Row: {
           actualizado_en: string | null
           checkin_url: string | null
+          checkin_url_generado: string | null
+          checkin_url_generado_en: string | null
+          checkin_url_generado_por: number | null
           creado_en: string | null
           estado: string
           fecha_checkin: string
@@ -1708,6 +1711,9 @@ export type Database = {
         Insert: {
           actualizado_en?: string | null
           checkin_url?: string | null
+          checkin_url_generado?: string | null
+          checkin_url_generado_en?: string | null
+          checkin_url_generado_por?: number | null
           creado_en?: string | null
           estado?: string
           fecha_checkin: string
@@ -1731,6 +1737,9 @@ export type Database = {
         Update: {
           actualizado_en?: string | null
           checkin_url?: string | null
+          checkin_url_generado?: string | null
+          checkin_url_generado_en?: string | null
+          checkin_url_generado_por?: number | null
           creado_en?: string | null
           estado?: string
           fecha_checkin?: string
@@ -1772,6 +1781,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "v_reservas_por_apartamento"
             referencedColumns: ["Número"]
+          },
+          {
+            foreignKeyName: "partee_registre_checkin_url_generado_por_fkey"
+            columns: ["checkin_url_generado_por"]
+            isOneToOne: false
+            referencedRelation: "personal"
+            referencedColumns: ["id_persona"]
           },
           {
             foreignKeyName: "partee_registre_registro_confirmado_por_fkey"
@@ -3340,6 +3356,10 @@ export type Database = {
       }
       is_gestor_or_admin: { Args: never; Returns: boolean }
       partee_refresh_upsert: { Args: { p_rows: Json }; Returns: Json }
+      partee_set_checkin_url: {
+        Args: { p_id_apt: number; p_numero_reserva: string; p_url: string }
+        Returns: Json
+      }
       personal_codigos_by_ids: {
         Args: { p_ids: number[] }
         Returns: {

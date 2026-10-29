@@ -24,7 +24,10 @@ export interface RegistreRowFull {
   is_borrador: boolean | null;
   num_viajeros: number | null;
   num_lote: string | null;
+  /** Link to show/copy: Partee's own (`checkin_url`, set by the sync) or else the generated one. */
   checkin_url: string | null;
+  /** Link created from the app ("Generar enlace"); never overwritten by the sync. */
+  checkin_url_generado: string | null;
   ultimo_sync: string | null;
   registro_confirmado: boolean;
   registro_confirmado_por: number | null;
@@ -38,7 +41,7 @@ export interface RegistreRowFull {
 
 // Typed as plain string so supabase-js does not try to parse the quoted column names.
 const SELECT_FULL: string =
-  "id_registre, numero_reserva, id_apt, fecha_checkin, estado, is_borrador, num_viajeros, num_lote, checkin_url, ultimo_sync, " +
+  "id_registre, numero_reserva, id_apt, fecha_checkin, estado, is_borrador, num_viajeros, num_lote, checkin_url, checkin_url_generado, ultimo_sync, " +
   "registro_confirmado, registro_confirmado_por, registro_confirmado_en, registro_confirmado_nota, " +
   'apartamentos(nombre), reservas_kb("Número", Referencia, Portal, "Huéspedes", "Huéspedes menores de edad", "Huéspedes exentos", "Check in", "Check-out", Estado, Habitaciones)';
 
@@ -47,6 +50,12 @@ const SELECT_FULL: string =
 // the paging below still apply to registre rows only.
 const SELECT_WINDOW: string = SELECT_FULL + ", partee_reclamacio(enviada_en, canal)";
 const LAST_RECL = { referencedTable: "partee_reclamacio" } as const;
+
+/** `checkin_url` becomes what the UI shows and copies: Partee's own link first, else the generated one. */
+const withEffectiveUrl = (r: RegistreRowFull): RegistreRowFull => ({
+  ...r,
+  checkin_url: r.checkin_url ?? r.checkin_url_generado ?? null,
+});
 
 const PAGE = 1000; // PostgREST row cap: always page
 
@@ -88,7 +97,7 @@ export async function fetchRegistreByReserva(numero: string): Promise<RegistreRo
     .eq("numero_reserva", numero)
     .order("id_apt");
   if (error) throw error;
-  return (data ?? []) as unknown as RegistreRowFull[];
+  return ((data ?? []) as unknown as RegistreRowFull[]).map(withEffectiveUrl);
 }
 
 /**
@@ -127,7 +136,7 @@ export async function fetchRegistreWindow(from: string, to: string): Promise<Reg
     const kbEstado = r.reservas_kb?.Estado;
     if (kbEstado && ESTADOS_KB_EXCLUIDOS.has(kbEstado)) continue;
     if (isStaleRegistre(r.fecha_checkin, r.reservas_kb?.["Check in"])) continue;
-    rows.push(r);
+    rows.push(withEffectiveUrl(r));
   }
   return rows;
 }

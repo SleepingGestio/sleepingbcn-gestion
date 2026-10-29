@@ -1,4 +1,5 @@
 // Read-only Partee client. Only the two read calls the sync needs; nothing here writes.
+// (The one write, check-in link creation, lives in partee-link.ts, which the cron job never imports.)
 // Responses are reduced to non-personal fields immediately, bodies are never logged.
 import { extractParteFacts, isoToPartee } from './logic';
 import type { ParteFacts, PRecord } from './types';
@@ -42,7 +43,7 @@ export class PartneeClient {
     private readonly f: FetchFn,
   ) {}
 
-  private async request(method: 'GET' | 'POST', path: string, body?: unknown) {
+  protected async request(method: 'GET' | 'POST', path: string, body?: unknown) {
     const res = await this.f(BASE + path, {
       method,
       redirect: 'manual',
