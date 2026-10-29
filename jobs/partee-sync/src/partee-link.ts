@@ -1,6 +1,12 @@
 // The ONLY Partee write: POST /reservation/external/checkinonline/link/create (API §16), for a reservation
 // that already exists in Partee. Kept apart from PartneeClient so the cron job (which only imports partee.ts)
 // can never reach it. The body is fixed: the link is never e-mailed to the guest and never forced.
+//
+// THE ID FIELD IS `id`, NOT `reservationID`. The official docs (§16) name it `reservationID`, but the real API
+// only reads `id`: `reservationID` (number or string), `reservationId` and `idFromChannel` all answer HTTP 400
+// "The provided id is null. It must be the Partee reservation id."; `{ id: <number>, ... }` answers 200 with the
+// link (verified 2026-10-29 with a real probe). Do not "fix" it back to the documented name.
+//
 // Responses are reduced to the URL immediately; the body is never logged or returned. The only thing read from a
 // failed response besides the status is a sanitised `errorMessage` (see safeMessage), for the short `detail`.
 import { PartneeClient } from './partee';
@@ -47,11 +53,16 @@ function messageOf(text: string): string | null {
 const withMessage = (base: string, message: string | null): string => (message ? `${base} "${message}"` : base);
 
 export class PartneeLinkClient extends PartneeClient {
-  async createCheckinLink(reservationId: number | string): Promise<LinkResult> {
+  /** `reservationId` is the Partee reservation `id` (the `id` of a /reservation/external/reservations record). */
+  async createCheckinLink(reservationId: unknown): Promise<LinkResult> {
+    const id = typeof reservationId === 'number' || typeof reservationId === 'string' ? Number(reservationId) : NaN;
+    if (!Number.isInteger(id) || id <= 0 || (typeof reservationId === 'string' && reservationId.trim() === '')) {
+      return { kind: 'error', status: 0, detail: 'link:bad_id' };
+    }
     let out;
     try {
       out = await this.request('POST', '/reservation/external/checkinonline/link/create', {
-        reservationID: reservationId,
+        id,
         requestDocs: false,
         sendLinkToGuest: false,
       });

@@ -15,20 +15,37 @@ function client(res: { status?: number; body?: unknown; text?: string; headers?:
 }
 
 describe('PartneeLinkClient.createCheckinLink', () => {
-  it('sends exactly reservationID + requestDocs:false + sendLinkToGuest:false, never forceLinkCreation', async () => {
+  it('sends exactly id (a number) + requestDocs:false + sendLinkToGuest:false, never reservationID / forceLinkCreation', async () => {
     const { c, calls } = client({ body: { error: false, parteID: 0, checkInOnlineURL: URL_OK } });
-    const r = await c.createCheckinLink(42);
+    const r = await c.createCheckinLink(7053549);
     expect(r).toEqual({ kind: 'ok', url: URL_OK, existed: false });
     expect(calls).toHaveLength(1);
     expect(calls[0].url).toBe('https://app.partee.es/resources/api/reservation/external/checkinonline/link/create');
     expect(calls[0].init.method).toBe('POST');
-    expect(JSON.parse(calls[0].init.body as string)).toEqual({
-      reservationID: 42,
-      requestDocs: false,
-      sendLinkToGuest: false,
-    });
+    const body = JSON.parse(calls[0].init.body as string);
+    expect(body).toEqual({ id: 7053549, requestDocs: false, sendLinkToGuest: false });
+    expect(Object.keys(body).sort()).toEqual(['id', 'requestDocs', 'sendLinkToGuest']);
+    expect(body).not.toHaveProperty('reservationID');
     expect(String(calls[0].init.body)).not.toContain('forceLinkCreation');
+    expect(String(calls[0].init.body)).not.toMatch(/reservationI[dD]/);
   });
+
+  it('a numeric string id is sent as a number', async () => {
+    const { c, calls } = client({ body: { error: false, checkInOnlineURL: URL_OK } });
+    await c.createCheckinLink('7053549');
+    const body = JSON.parse(calls[0].init.body as string);
+    expect(body.id).toBe(7053549);
+    expect(typeof body.id).toBe('number');
+  });
+
+  it.each([null, undefined, 0, -1, 1.5, 'abc', '', ' ', '1.5', '-3', NaN, Infinity, {}, []])(
+    'invalid id %j => link:bad_id and no fetch call',
+    async (bad) => {
+      const { c, calls } = client({ body: { error: false, checkInOnlineURL: URL_OK } });
+      expect(await c.createCheckinLink(bad)).toEqual({ kind: 'error', status: 0, detail: 'link:bad_id' });
+      expect(calls).toHaveLength(0);
+    },
+  );
 
   it('"already existed" is not an error', async () => {
     const { c } = client({
