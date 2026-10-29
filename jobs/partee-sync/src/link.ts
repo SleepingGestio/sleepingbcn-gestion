@@ -50,9 +50,13 @@ export type LinkFailCode =
 
 export type LinkResponse =
   | { ok: true; code: 'created' | 'existing'; url: string }
-  | { ok: false; code: LinkFailCode; retryInSeconds?: number };
+  | { ok: false; code: LinkFailCode; retryInSeconds?: number; detail?: string };
 
-const fail = (code: LinkFailCode): LinkResponse => ({ ok: false, code });
+/** `detail` (only for the Partee failures) is a short fixed-format diagnostic: `read:500`, `link:400 "msg"`, ... */
+const fail = (code: LinkFailCode, detail?: string): LinkResponse =>
+  detail === undefined ? { ok: false, code } : { ok: false, code, detail };
+
+const statusOrError = (status: number): string => (status > 0 ? String(status) : 'error');
 
 export async function generarEnlace(numeroRaw: string, deps: LinkDeps): Promise<LinkResponse> {
   const { db, partee, now } = deps;
@@ -86,9 +90,9 @@ export async function generarEnlace(numeroRaw: string, deps: LinkDeps): Promise<
 
   // 4. One Partee read to find the Partee reservation (a single, unambiguous one).
   const res = await partee.reservations(estId, pair.fecha_checkin);
-  if (res.kind === 'rate_limited') return fail('partee_rate_limited');
-  if (res.kind === 'unauthorized') return fail('partee_unauthorized');
-  if (res.kind === 'error') return fail('partee_error');
+  if (res.kind === 'rate_limited') return fail('partee_rate_limited', 'read:429');
+  if (res.kind === 'unauthorized') return fail('partee_unauthorized', 'read:401');
+  if (res.kind === 'error') return fail('partee_error', `read:${statusOrError(res.status)}`);
   if (res.kind === 'empty') return fail('not_in_partee');
   const target = selectLinkTarget(res.data);
   if (target.kind === 'none') return fail('not_in_partee');
@@ -103,10 +107,11 @@ export async function generarEnlace(numeroRaw: string, deps: LinkDeps): Promise<
     code = 'existing';
   } else {
     const link = await partee.createLink(target.record.id as number | string);
-    if (link.kind === 'unauthorized' || link.kind === 'forbidden') return fail('partee_unauthorized');
-    if (link.kind === 'rate_limited') return fail('partee_rate_limited');
+    if (link.kind === 'unauthorized') return fail('partee_unauthorized', link.detail ?? 'link:401');
+    if (link.kind === 'forbidden') return fail('partee_unauthorized', link.detail ?? 'link:403');
+    if (link.kind === 'rate_limited') return fail('partee_rate_limited', link.detail ?? 'link:429');
     if (link.kind === 'not_found') return fail('not_in_partee');
-    if (link.kind === 'error') return fail('partee_error');
+    if (link.kind === 'error') return fail('partee_error', link.detail ?? `link:${statusOrError(link.status)}`);
     url = link.url;
     code = link.existed ? 'existing' : 'created';
   }

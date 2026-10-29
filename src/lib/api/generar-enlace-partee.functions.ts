@@ -23,7 +23,7 @@ import { PartneeLinkClient } from "@partee-sync/partee-link";
 
 export type GenerarEnlaceResponse =
   | LinkResponse
-  | { ok: false; code: "forbidden" | "missing_token" | "unexpected" };
+  | { ok: false; code: "forbidden" | "missing_token" | "unexpected"; detail?: string };
 
 function leerTokenPartee(): string | null {
   let valor: string | undefined;
@@ -52,7 +52,7 @@ export const generarEnlacePartee = createServerFn({ method: "POST" })
 
       // 3. Guardas, consulta a Partee, creación del enlace y guardado de la URL.
       const client = new PartneeLinkClient(token, (...a) => fetch(...a));
-      return await generarEnlace(data.numero_reserva, {
+      const result = await generarEnlace(data.numero_reserva, {
         db: makeLinkDb(supabase),
         partee: {
           reservations: (est, date) => client.reservations(est, date),
@@ -60,6 +60,9 @@ export const generarEnlacePartee = createServerFn({ method: "POST" })
         },
         now: () => new Date(),
       });
+      // Logs del Worker: solo el código y el diagnóstico corto (nunca la URL ni un cuerpo de Partee).
+      if (!result.ok && result.detail) console.error("[generarEnlacePartee]", result.code, result.detail);
+      return result;
     } catch (e) {
       // Solo el nombre/mensaje corto (sin cuerpos de respuesta, sin URL, sin datos de huéspedes).
       console.error("[generarEnlacePartee]", e instanceof Error ? e.message.slice(0, 200) : "unknown");

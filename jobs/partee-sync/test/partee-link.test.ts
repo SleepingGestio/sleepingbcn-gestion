@@ -1,6 +1,6 @@
 // PartneeLinkClient with a fake fetch. Synthetic data only; no network.
 import { describe, expect, it, vi } from 'vitest';
-import { isParteeUrl, PartneeLinkClient } from '../src/partee-link';
+import { isParteeUrl, MESSAGE_MAX, PartneeLinkClient, safeMessage } from '../src/partee-link';
 
 const URL_OK = 'https://m.partee.es/u123';
 
@@ -37,39 +37,123 @@ describe('PartneeLinkClient.createCheckinLink', () => {
     expect(await c.createCheckinLink(1)).toEqual({ kind: 'ok', url: URL_OK, existed: true });
   });
 
-  it('maps statuses', async () => {
-    expect(await client({ status: 401 }).c.createCheckinLink(1)).toEqual({ kind: 'unauthorized' });
-    expect(await client({ status: 403 }).c.createCheckinLink(1)).toEqual({ kind: 'forbidden' });
-    expect(await client({ status: 404 }).c.createCheckinLink(1)).toEqual({ kind: 'not_found' });
-    expect(await client({ status: 400 }).c.createCheckinLink(1)).toEqual({ kind: 'error', status: 400 });
-    expect(await client({ status: 503 }).c.createCheckinLink(1)).toEqual({ kind: 'error', status: 503 });
+  it('maps statuses, each with its short detail', async () => {
+    expect(await client({ status: 401 }).c.createCheckinLink(1)).toEqual({ kind: 'unauthorized', detail: 'link:401' });
+    expect(await client({ status: 403 }).c.createCheckinLink(1)).toEqual({ kind: 'forbidden', detail: 'link:403' });
+    expect(await client({ status: 404 }).c.createCheckinLink(1)).toEqual({ kind: 'not_found', detail: 'link:404' });
     expect(await client({ status: 429, headers: { 'retry-after': '30' } }).c.createCheckinLink(1)).toEqual({
       kind: 'rate_limited',
       retryAfter: '30',
+      detail: 'link:429',
     });
   });
 
-  it('error:true, bad JSON, missing or foreign URL are errors', async () => {
-    expect(await client({ body: { error: true, errorMessage: 'x' } }).c.createCheckinLink(1)).toEqual({
-      kind: 'error',
-      status: 200,
+  describe('detail variants', () => {
+    it('link:400 with Partee errorMessage', async () => {
+      const { c } = client({ status: 400, body: { error: true, errorMessage: 'Reservation not valid', other: 'x' } });
+      expect(await c.createCheckinLink(1)).toEqual({
+        kind: 'error',
+        status: 400,
+        detail: 'link:400 "Reservation not valid"',
+      });
     });
-    expect(await client({ text: 'nope' }).c.createCheckinLink(1)).toEqual({ kind: 'error', status: 200 });
-    expect(await client({ body: { error: false } }).c.createCheckinLink(1)).toEqual({ kind: 'error', status: 200 });
-    expect(
-      await client({ body: { error: false, checkInOnlineURL: 'https://evil.example/partee.es/x' } }).c.createCheckinLink(1),
-    ).toEqual({ kind: 'error', status: 200 });
+    it('link:500 without message (empty body, non-JSON body, message not a string)', async () => {
+      expect(await client({ status: 500, text: '' }).c.createCheckinLink(1)).toEqual({
+        kind: 'error',
+        status: 500,
+        detail: 'link:500',
+      });
+      expect(await client({ status: 500, text: '<html>oops</html>' }).c.createCheckinLink(1)).toEqual({
+        kind: 'error',
+        status: 500,
+        detail: 'link:500',
+      });
+      expect(await client({ status: 503, body: { errorMessage: 42 } }).c.createCheckinLink(1)).toEqual({
+        kind: 'error',
+        status: 503,
+        detail: 'link:503',
+      });
+    });
+    it('link:error_flag (200 with error:true), with and without message', async () => {
+      expect(
+        await client({ body: { error: true, errorMessage: 'Cannot create' } }).c.createCheckinLink(1),
+      ).toEqual({ kind: 'error', status: 200, detail: 'link:error_flag "Cannot create"' });
+      expect(await client({ body: { error: true } }).c.createCheckinLink(1)).toEqual({
+        kind: 'error',
+        status: 200,
+        detail: 'link:error_flag',
+      });
+    });
+    it('link:bad_json', async () => {
+      expect(await client({ text: 'nope' }).c.createCheckinLink(1)).toEqual({
+        kind: 'error',
+        status: 200,
+        detail: 'link:bad_json',
+      });
+    });
+    it('link:bad_url (missing URL or foreign host); the URL itself is not in the detail', async () => {
+      expect(await client({ body: { error: false } }).c.createCheckinLink(1)).toEqual({
+        kind: 'error',
+        status: 200,
+        detail: 'link:bad_url',
+      });
+      const r = await client({
+        body: { error: false, checkInOnlineURL: 'https://evil.example/partee.es/x' },
+      }).c.createCheckinLink(1);
+      expect(r).toEqual({ kind: 'error', status: 200, detail: 'link:bad_url' });
+      expect(JSON.stringify(r)).not.toContain('evil.example');
+    });
+    it('link:network (fetch threw) and nothing is logged', async () => {
+      const log = vi.spyOn(console, 'log');
+      const err = vi.spyOn(console, 'error');
+      const c = new PartneeLinkClient('tkn', (async () => {
+        throw new Error('boom');
+      }) as unknown as typeof fetch);
+      expect(await c.createCheckinLink(1)).toEqual({ kind: 'error', status: 0, detail: 'link:network' });
+      expect(log).not.toHaveBeenCalled();
+      expect(err).not.toHaveBeenCalled();
+    });
+    it('only the sanitised errorMessage leaves: never the URL, the token or other body fields', async () => {
+      const { c } = client({
+        status: 400,
+        body: { error: true, errorMessage: 'Bad request', checkInOnlineURL: URL_OK, parteID: 7, guest: 'Zzyzx Qwerty' },
+      });
+      const r = await c.createCheckinLink(1);
+      const out = JSON.stringify(r);
+      for (const leak of [URL_OK, 'Zzyzx', 'tkn', '"parteID"']) expect(out).not.toContain(leak);
+    });
+    it('a long errorMessage is cut to 150 characters', async () => {
+      const long = 'x'.repeat(400);
+      const r = await client({ status: 400, body: { errorMessage: long } }).c.createCheckinLink(1);
+      expect(r).toEqual({ kind: 'error', status: 400, detail: `link:400 "${'x'.repeat(150)}"` });
+    });
+    it('an errorMessage containing "@" is dropped', async () => {
+      const r = await client({ status: 400, body: { errorMessage: 'Guest john@example.com not found' } }).c.createCheckinLink(1);
+      expect(r).toEqual({ kind: 'error', status: 400, detail: 'link:400' });
+      const flag = await client({ body: { error: true, errorMessage: 'a@b.c' } }).c.createCheckinLink(1);
+      expect(flag).toEqual({ kind: 'error', status: 200, detail: 'link:error_flag' });
+    });
   });
+});
 
-  it('a network failure is an error and nothing is logged', async () => {
-    const log = vi.spyOn(console, 'log');
-    const err = vi.spyOn(console, 'error');
-    const c = new PartneeLinkClient('tkn', (async () => {
-      throw new Error('boom');
-    }) as unknown as typeof fetch);
-    expect(await c.createCheckinLink(1)).toEqual({ kind: 'error', status: 0 });
-    expect(log).not.toHaveBeenCalled();
-    expect(err).not.toHaveBeenCalled();
+describe('safeMessage', () => {
+  it('keeps short plain messages, collapsing whitespace and turning double quotes into single ones', () => {
+    expect(safeMessage('  Invalid\n  reservation ')).toBe('Invalid reservation');
+    expect(safeMessage('Field "x" missing')).toBe("Field 'x' missing");
+  });
+  it('truncates to exactly MESSAGE_MAX (150) characters', () => {
+    expect(MESSAGE_MAX).toBe(150);
+    expect(safeMessage('y'.repeat(151))).toBe('y'.repeat(150));
+    expect(safeMessage('y'.repeat(150))).toBe('y'.repeat(150));
+    expect(safeMessage('y'.repeat(149))).toBe('y'.repeat(149));
+  });
+  it('drops a message containing "@", even if it would fit', () => {
+    expect(safeMessage('contact me@x.es')).toBeNull();
+    expect(safeMessage('@')).toBeNull();
+    expect(safeMessage(`${'z'.repeat(200)}@`)).toBeNull();
+  });
+  it('drops non-strings and empty strings', () => {
+    for (const v of [undefined, null, 42, {}, [], '', '   ']) expect(safeMessage(v)).toBeNull();
   });
 });
 

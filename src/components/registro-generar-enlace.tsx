@@ -27,11 +27,19 @@ const FAIL_MESSAGE: Record<string, string> = {
 const GENERIC = "No se ha podido generar el enlace";
 
 /** Toast text for a server response (exported to keep the mapping in one place). */
-export function generarEnlaceToast(res: GenerarEnlaceResponse): { kind: "success" | "error"; text: string } {
+export function generarEnlaceToast(res: GenerarEnlaceResponse): {
+  kind: "success" | "error";
+  text: string;
+  /** Short non-sensitive diagnostic (partee_error only), to help report the failure. */
+  description?: string;
+} {
   if (res.ok) {
     return { kind: "success", text: res.code === "existing" ? "Enlace recuperado" : "Enlace generado" };
   }
-  return { kind: "error", text: FAIL_MESSAGE[res.code] ?? GENERIC };
+  const text = FAIL_MESSAGE[res.code] ?? GENERIC;
+  return res.code === "partee_error" && res.detail
+    ? { kind: "error", text, description: `Detalle: ${res.detail}` }
+    : { kind: "error", text };
 }
 
 export function useGenerarEnlace(numero: string) {
@@ -44,8 +52,9 @@ export function useGenerarEnlace(numero: string) {
         const url = res.url;
         toast.success(t.text, { action: { label: "Copiar", onClick: () => void copyLink(url) } });
       } else {
-        toast.error(t.text);
-        if (!FAIL_MESSAGE[res.code]) console.error("[generar-enlace]", res.code);
+        toast.error(t.text, t.description ? { description: t.description } : undefined);
+        if (res.detail) console.error("[generar-enlace]", res.code, res.detail);
+        else if (!FAIL_MESSAGE[res.code]) console.error("[generar-enlace]", res.code);
       }
       // The row changed (ok) or turned out to be out of date (stale_state): reload it either way.
       if (res.ok || res.code === "stale_state") {

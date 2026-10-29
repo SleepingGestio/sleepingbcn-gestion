@@ -143,26 +143,44 @@ describe('generarEnlace', () => {
   });
 
   it.each([
-    ['empty => not_in_partee', { reservations: { kind: 'empty' } }, 'not_in_partee'],
-    ['2 records => ambiguous', { reservations: { kind: 'ok', data: [rec(1), rec(2)] } }, 'ambiguous'],
-    ['record with parteID => stale_state', { reservations: { kind: 'ok', data: [rec(1, { parteID: 9 })] } }, 'stale_state'],
+    ['empty => not_in_partee', { reservations: { kind: 'empty' } }, 'not_in_partee', undefined],
+    ['2 records => ambiguous', { reservations: { kind: 'ok', data: [rec(1), rec(2)] } }, 'ambiguous', undefined],
+    [
+      'record with parteID => stale_state',
+      { reservations: { kind: 'ok', data: [rec(1, { parteID: 9 })] } },
+      'stale_state',
+      undefined,
+    ],
     [
       'PARTEE channel => stale_state',
       { reservations: { kind: 'ok', data: [rec(1, { channel: 'PARTEE' })] } },
       'stale_state',
+      undefined,
     ],
-    ['record without id => not_in_partee', { reservations: { kind: 'ok', data: [rec(null)] } }, 'not_in_partee'],
-    ['read 401', { reservations: { kind: 'unauthorized' } }, 'partee_unauthorized'],
-    ['read 429', { reservations: { kind: 'rate_limited', retryAfter: '5' } }, 'partee_rate_limited'],
-    ['read error', { reservations: { kind: 'error', status: 500 } }, 'partee_error'],
-    ['link 401', { link: { kind: 'unauthorized' } }, 'partee_unauthorized'],
-    ['link 403', { link: { kind: 'forbidden' } }, 'partee_unauthorized'],
-    ['link 429', { link: { kind: 'rate_limited', retryAfter: null } }, 'partee_rate_limited'],
-    ['link 404', { link: { kind: 'not_found' } }, 'not_in_partee'],
-    ['link 400/5xx', { link: { kind: 'error', status: 400 } }, 'partee_error'],
-  ] as const)('%s writes nothing', async (_n, world, code) => {
+    ['record without id => not_in_partee', { reservations: { kind: 'ok', data: [rec(null)] } }, 'not_in_partee', undefined],
+    ['read 401', { reservations: { kind: 'unauthorized' } }, 'partee_unauthorized', 'read:401'],
+    ['read 429', { reservations: { kind: 'rate_limited', retryAfter: '5' } }, 'partee_rate_limited', 'read:429'],
+    ['read error 500', { reservations: { kind: 'error', status: 500 } }, 'partee_error', 'read:500'],
+    ['read error 404', { reservations: { kind: 'error', status: 404 } }, 'partee_error', 'read:404'],
+    ['read network error (status 0)', { reservations: { kind: 'error', status: 0 } }, 'partee_error', 'read:error'],
+    ['link 401 (no detail from the client)', { link: { kind: 'unauthorized' } }, 'partee_unauthorized', 'link:401'],
+    ['link 403', { link: { kind: 'forbidden' } }, 'partee_unauthorized', 'link:403'],
+    ['link 403 keeps the client detail', { link: { kind: 'forbidden', detail: 'link:403 "x"' } }, 'partee_unauthorized', 'link:403 "x"'],
+    ['link 429', { link: { kind: 'rate_limited', retryAfter: null } }, 'partee_rate_limited', 'link:429'],
+    ['link 404', { link: { kind: 'not_found', detail: 'link:404' } }, 'not_in_partee', undefined],
+    ['link 400', { link: { kind: 'error', status: 400 } }, 'partee_error', 'link:400'],
+    [
+      'link 400 with message',
+      { link: { kind: 'error', status: 400, detail: 'link:400 "Invalid reservation"' } },
+      'partee_error',
+      'link:400 "Invalid reservation"',
+    ],
+    ['link network', { link: { kind: 'error', status: 0, detail: 'link:network' } }, 'partee_error', 'link:network'],
+    ['link status 0 without detail', { link: { kind: 'error', status: 0 } }, 'partee_error', 'link:error'],
+  ] as const)('%s writes nothing', async (_n, world, code, detail) => {
     const { deps, log } = setup(world as World);
-    expect(await generarEnlace('R1', deps)).toEqual({ ok: false, code });
+    const expected = detail === undefined ? { ok: false, code } : { ok: false, code, detail };
+    expect(await generarEnlace('R1', deps)).toEqual(expected);
     expect(log.sets).toEqual([]);
   });
 
