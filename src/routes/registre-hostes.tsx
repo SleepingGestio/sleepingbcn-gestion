@@ -47,6 +47,9 @@ import {
   puedeGenerarEnlace,
   SORT_OPTIONS,
   situacionRegistro,
+  cerradosForzados,
+  esCerrado,
+  ocultarCerrados,
   situacionTone,
   situacionTooltip,
   sortRows,
@@ -257,6 +260,7 @@ function RegistreHostesPage() {
   };
   const editor = canEdit("registre_hostes");
   const [showExcluidas, setShowExcluidas] = useState(false);
+  const [showCerrados, setShowCerrados] = useState(false); // page state only: off again on reload
   const [excluirFor, setExcluirFor] = useState<string | null>(null);
   const [incluirFor, setIncluirFor] = useState<string | null>(null);
   const exclusiones = useExclusiones();
@@ -311,13 +315,10 @@ function RegistreHostesPage() {
 
   const excludedCount = useMemo(() => rows.filter((x) => x.exclusion).length, [rows]);
 
-  // Filters other than the clickable counters. Excluded rows are only here when the switch is on.
-  const base = useMemo(() => {
+  // Search + apartment text filters, shared by the list and the "Mostrar finalizados (N)" count.
+  const textFiltered = useMemo(() => {
     const t = search.trim().toLowerCase();
-    return rows.filter(({ urgente, exclusion, situacion, r }) => {
-      if (exclusion && !showExcluidas) return false;
-      if (alerta === URGENTE && !urgente) return false;
-      if (estado !== ALL && situacion.code !== estado) return false;
+    return rows.filter(({ r }) => {
       if (unit !== ALL && String(r.id_apt) !== unit) return false;
       if (t) {
         const hay = `${r.numero_reserva} ${r.reservas_kb?.Referencia ?? ""}`.toLowerCase();
@@ -325,17 +326,47 @@ function RegistreHostesPage() {
       }
       return true;
     });
-  }, [rows, alerta, estado, unit, search, showExcluidas]);
+  }, [rows, unit, search]);
 
-  // Excluded rows never count: counters, the Total and the quick filters only see these.
+  // Closed (Finalizado / Anulado) rows in the range, whatever the switch says.
+  const closedCount = useMemo(() => textFiltered.filter((x) => esCerrado(x.situacion)).length, [textFiltered]);
+
+  // An explicit filter on closed rows wins over the hiding: the switch then shows as on (and locked).
+  const forzados = cerradosForzados({ quick, estado });
+  const mostrarCerrados = showCerrados || forzados;
+  const hideOpts = { mostrar: showCerrados, quick, estado };
+
+  // Filters other than the clickable counters and the closed-rows switch. Excluded rows are only here when the switch is on.
+  const preHide = useMemo(() => {
+    const keep = new Set(textFiltered);
+    return rows.filter((x) => {
+      if (!keep.has(x)) return false;
+      if (x.exclusion && !showExcluidas) return false;
+      if (alerta === URGENTE && !x.urgente) return false;
+      if (estado !== ALL && x.situacion.code !== estado) return false;
+      return true;
+    });
+  }, [rows, textFiltered, alerta, estado, showExcluidas]);
+
+  // Excluded rows never count: counters and the quick filters see these (closed rows included).
+  const countedAll = useMemo(() => preHide.filter((x) => !x.exclusion), [preHide]);
+
+  // What the list shows (table and mobile cards) and what the Total counts.
+  const base = useMemo(
+    () => ocultarCerrados(preHide, hideOpts),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [preHide, showCerrados, quick, estado],
+  );
   const counted = useMemo(() => base.filter((x) => !x.exclusion), [base]);
+  const hiddenCount = preHide.length - base.length;
 
   const visible = useMemo(() => {
     const test = QUICK.find((c) => c.key === quick)?.test;
-    const list = test ? counted.filter(test) : base;
+    const list = test ? ocultarCerrados(countedAll.filter(test), hideOpts) : base;
     // Stable client-side sort over the loaded rows (default: entry date asc, most urgent first).
     return sortRows(list, sortKey, sortDir, toSortable);
-  }, [base, counted, quick, sortKey, sortDir]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [base, countedAll, quick, showCerrados, estado, sortKey, sortDir]);
 
   // Last GENERAL sync: robust to single-reservation refreshes (see lastGeneralSync).
   const lastSync = useMemo(
@@ -351,7 +382,8 @@ function RegistreHostesPage() {
     [rows, today],
   );
 
-  const counts = QUICK.map((c) => ({ ...c, n: counted.filter(c.test).length }));
+  // Counter cards keep their meaning: they count every row in the range, hidden closed ones included.
+  const counts = QUICK.map((c) => ({ ...c, n: countedAll.filter(c.test).length }));
 
   return (
     <AppShell title="Registre hostes">
@@ -453,12 +485,26 @@ function RegistreHostesPage() {
           </div>
           <p className="text-xs text-muted-foreground">
             Entradas del rango elegido; los partes anteriores sin finalizar se muestran siempre.
+            {!mostrarCerrados && " Los partes finalizados y anulados están ocultos; actívalo con «Mostrar finalizados»."}
           </p>
-          <div className="flex items-center gap-2">
-            <Switch id="mostrar-excluidas" checked={showExcluidas} onCheckedChange={setShowExcluidas} />
-            <Label htmlFor="mostrar-excluidas" className="text-sm">
-              Mostrar excluidas ({excludedCount})
-            </Label>
+          <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
+            <div className="flex items-center gap-2">
+              <Switch id="mostrar-excluidas" checked={showExcluidas} onCheckedChange={setShowExcluidas} />
+              <Label htmlFor="mostrar-excluidas" className="text-sm">
+                Mostrar excluidas ({excludedCount})
+              </Label>
+            </div>
+            <div className="flex items-center gap-2">
+              <Switch
+                id="mostrar-finalizados"
+                checked={mostrarCerrados}
+                onCheckedChange={setShowCerrados}
+                disabled={forzados}
+              />
+              <Label htmlFor="mostrar-finalizados" className="text-sm">
+                Mostrar finalizados ({closedCount})
+              </Label>
+            </div>
           </div>
 
           {!rangeOk ? (
@@ -468,7 +514,9 @@ function RegistreHostesPage() {
           ) : q.error ? (
             <Card><CardContent className="py-8 text-center text-sm text-destructive">No se pudo cargar el registro de huéspedes.</CardContent></Card>
           ) : visible.length === 0 ? (
-            <Card><CardContent className="py-8 text-center text-sm text-muted-foreground">No hay registros que coincidan.</CardContent></Card>
+            <Card><CardContent className="py-8 text-center text-sm text-muted-foreground">{hiddenCount > 0 && quick === null
+              ? "Todos los partes del rango están finalizados o anulados. Activa «Mostrar finalizados» para verlos."
+              : "No hay registros que coincidan."}</CardContent></Card>
           ) : (
             <>
               {/* Desktop table */}

@@ -561,6 +561,32 @@ export const SITUACIONES_FILTRO: { code: SituacionCode; label: string }[] = [
   { code: "manual", label: "Marcado a mano" },
 ];
 
+/** A parte already closed with the authorities (sent) or cancelled: noise in a work list. */
+export function esCerrado(situacion: { code: string }): boolean {
+  return situacion.code === "finalizado" || situacion.code === "anulado";
+}
+
+/**
+ * True when an explicit filter asks for closed rows (the "Finalizados" counter or the Estado select on
+ * Finalizado / Anulado): it wins over the hiding, whatever the "Mostrar finalizados" switch says.
+ */
+export function cerradosForzados(opts: { quick: string | null; estado: string }): boolean {
+  return opts.quick === "finalizado" || opts.estado === "finalizado" || opts.estado === "anulado";
+}
+
+/**
+ * The single hide rule of the Registre hostes list (table, mobile cards and the Total all go through it):
+ * Finalizado / Anulado rows are dropped unless the switch is on or an explicit filter asks for them.
+ * Excluded and overdue-unfinalized rows are never closed, so they always stay.
+ */
+export function ocultarCerrados<T extends { situacion: { code: string } }>(
+  rows: T[],
+  opts: { mostrar: boolean; quick: string | null; estado: string },
+): T[] {
+  if (opts.mostrar || cerradosForzados(opts)) return rows;
+  return rows.filter((x) => !esCerrado(x.situacion));
+}
+
 /**
  * The single, action-oriented label shown for a row (instead of Partee's raw estado + a second
  * interpretation line). The colour still comes from alertLevel; this only decides the words.

@@ -28,6 +28,9 @@ import {
   masQuePrevistos,
   enlaceVigente,
   ESTADOS_ENLACE_CERRADO,
+  esCerrado,
+  cerradosForzados,
+  ocultarCerrados,
   reclamacionTooltip,
   todayMadrid,
   toMadridLocalInput,
@@ -1018,5 +1021,59 @@ describe("enlaceVigente (dead guest link on closed partes)", () => {
     for (const estado of ["sin_registro", "iniciado", "borrador", "manual", "error", "finalizado", "anulado"]) {
       for (const v of [null, undefined, ""]) assert.equal(enlaceVigente(estado, v), null);
     }
+  });
+});
+
+describe("ocultar finalizados / anulados", () => {
+  const sit = (code: string) => ({ code, label: code });
+  const row = (id: number, code: string, extra: object = {}) => ({ id, situacion: sit(code), ...extra });
+  const rows = [
+    row(1, "finalizado"),
+    row(2, "anulado"),
+    row(3, "excluida", { exclusion: { motivo: "x" } }),
+    row(4, "manual"),
+    row(5, "error"),
+    row(6, "en_curso"),
+    row(7, "parcial", { overdue: true }), // overdue-unfinalized: not closed
+    row(8, "no_generado"),
+  ];
+  const ids = (xs: { id: number }[]) => xs.map((x) => x.id);
+  const off = { mostrar: false, quick: null, estado: "all" };
+
+  it("esCerrado: only finalizado and anulado", () => {
+    assert.equal(esCerrado(sit("finalizado")), true);
+    assert.equal(esCerrado(sit("anulado")), true);
+    for (const c of ["excluida", "manual", "error", "en_curso", "parcial", "no_generado", "generado_sin_registros", "completado", "otro"]) {
+      assert.equal(esCerrado(sit(c)), false, c);
+    }
+  });
+  it("switch off hides closed rows, keeps every other one (excluded and overdue included)", () => {
+    assert.deepEqual(ids(ocultarCerrados(rows, off)), [3, 4, 5, 6, 7, 8]);
+  });
+  it("switch on shows everything", () => {
+    assert.deepEqual(ids(ocultarCerrados(rows, { ...off, mostrar: true })), [1, 2, 3, 4, 5, 6, 7, 8]);
+  });
+  it("quick filter finalizado overrides the hiding", () => {
+    assert.equal(cerradosForzados({ quick: "finalizado", estado: "all" }), true);
+    assert.deepEqual(ids(ocultarCerrados(rows, { ...off, quick: "finalizado" })), [1, 2, 3, 4, 5, 6, 7, 8]);
+  });
+  it("estado dropdown finalizado / anulado overrides the hiding; other estados do not", () => {
+    assert.equal(cerradosForzados({ quick: null, estado: "finalizado" }), true);
+    assert.equal(cerradosForzados({ quick: null, estado: "anulado" }), true);
+    assert.equal(cerradosForzados({ quick: null, estado: "parcial" }), false);
+    assert.equal(cerradosForzados({ quick: "urgente", estado: "all" }), false);
+    assert.equal(ocultarCerrados(rows, { ...off, estado: "anulado" }).length, rows.length);
+    assert.deepEqual(ids(ocultarCerrados(rows, { ...off, estado: "parcial" })), [3, 4, 5, 6, 7, 8]);
+  });
+  it("Total (non-excluded rows after the rule) and N (closed rows)", () => {
+    const counted = rows.filter((x) => !("exclusion" in x));
+    assert.equal(ocultarCerrados(counted, off).length, 5); // 4,5,6,7,8
+    assert.equal(ocultarCerrados(counted, { ...off, mostrar: true }).length, 7);
+    assert.equal(counted.filter((x) => esCerrado(x.situacion)).length, 2);
+  });
+  it("does not mutate its input", () => {
+    const copy = [...rows];
+    ocultarCerrados(rows, off);
+    assert.deepEqual(rows, copy);
   });
 });
