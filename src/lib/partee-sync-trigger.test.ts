@@ -4,6 +4,9 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
   buildDispatchBody,
+  buildHourlyDispatchBody,
+  decidirCron,
+  horaMadridEnRango,
   hasActiveRun,
   isActiveRun,
   parseRuns,
@@ -94,5 +97,74 @@ describe("syncState of the manual run we dispatched", () => {
       run({ created_at: "2026-10-28T10:00:01Z", status: "completed", conclusion: "failure" }),
     ];
     assert.equal(syncState(runs, SINCE), "running");
+  });
+});
+
+describe("buildHourlyDispatchBody", () => {
+  it("light job, real or dry, on main", () => {
+    assert.deepEqual(buildHourlyDispatchBody(false), { ref: "main", inputs: { dry: "false", mode: "hourly" } });
+    assert.deepEqual(buildHourlyDispatchBody(true), { ref: "main", inputs: { dry: "true", mode: "hourly" } });
+  });
+  it("the button's body is unchanged: no `mode`", () => {
+    assert.deepEqual(buildDispatchBody(), { ref: "main", inputs: { dry: "false" } });
+  });
+});
+
+describe("horaMadridEnRango", () => {
+  const at = (iso: string) => horaMadridEnRango(new Date(iso));
+  it("winter (UTC+1): 07:00Z = 08:00 Madrid in, 06:59Z out, 19:59Z = 20:59 in, 20:00Z = 21:00 out", () => {
+    assert.equal(at("2026-01-15T06:59:00Z"), false);
+    assert.equal(at("2026-01-15T07:00:00Z"), true);
+    assert.equal(at("2026-01-15T19:59:00Z"), true);
+    assert.equal(at("2026-01-15T20:00:00Z"), false);
+  });
+  it("summer (UTC+2): 06:00Z = 08:00 Madrid in, 05:59Z out, 18:59Z = 20:59 in, 19:00Z = 21:00 out", () => {
+    assert.equal(at("2026-07-15T05:59:00Z"), false);
+    assert.equal(at("2026-07-15T06:00:00Z"), true);
+    assert.equal(at("2026-07-15T18:59:00Z"), true);
+    assert.equal(at("2026-07-15T19:00:00Z"), false);
+  });
+  it("DST start, 29 March 2026 (then UTC+2)", () => {
+    assert.equal(at("2026-03-29T05:59:00Z"), false); // 07:59 Madrid
+    assert.equal(at("2026-03-29T06:00:00Z"), true); // 08:00
+    assert.equal(at("2026-03-29T18:59:00Z"), true); // 20:59
+    assert.equal(at("2026-03-29T19:00:00Z"), false); // 21:00
+  });
+  it("DST end, 25 October 2026 (then UTC+1)", () => {
+    assert.equal(at("2026-10-25T06:59:00Z"), false); // 07:59 Madrid
+    assert.equal(at("2026-10-25T07:00:00Z"), true); // 08:00
+    assert.equal(at("2026-10-25T19:59:00Z"), true); // 20:59
+    assert.equal(at("2026-10-25T20:00:00Z"), false); // 21:00
+  });
+  it("custom bounds", () => {
+    assert.equal(horaMadridEnRango(new Date("2026-01-15T10:00:00Z"), 11, 11), true); // 11:00
+    assert.equal(horaMadridEnRango(new Date("2026-01-15T11:00:00Z"), 11, 11), false); // 12:00
+  });
+});
+
+describe("decidirCron", () => {
+  const inHour = new Date("2026-01-15T10:00:00Z"); // 11:00 Madrid
+  const outHour = new Date("2026-01-15T22:00:00Z"); // 23:00 Madrid
+  const idle = [{ status: "completed" }];
+  const busy = [{ status: "completed" }, { status: "in_progress" }];
+  it("secret missing or anything but 1 / dry: skip_disabled", () => {
+    for (const enabled of [undefined, null, "", "0", "true", "yes", "DRY", " 1"]) {
+      assert.equal(decidirCron({ enabled, date: inHour, runs: idle }), "skip_disabled", String(enabled));
+    }
+  });
+  it("1 = real run, dry = dry run", () => {
+    assert.equal(decidirCron({ enabled: "1", date: inHour, runs: idle }), "lanzar_real");
+    assert.equal(decidirCron({ enabled: "dry", date: inHour, runs: [] }), "lanzar_dry");
+  });
+  it("outside 08-20 Madrid: skip_hora", () => {
+    assert.equal(decidirCron({ enabled: "1", date: outHour, runs: idle }), "skip_hora");
+  });
+  it("a queued / in-progress run: skip_activo", () => {
+    assert.equal(decidirCron({ enabled: "1", date: inHour, runs: busy }), "skip_activo");
+    assert.equal(decidirCron({ enabled: "dry", date: inHour, runs: [{ status: "queued" }] }), "skip_activo");
+  });
+  it("check order: disabled wins over hour; hour wins over active run", () => {
+    assert.equal(decidirCron({ enabled: undefined, date: outHour, runs: busy }), "skip_disabled");
+    assert.equal(decidirCron({ enabled: "1", date: outHour, runs: busy }), "skip_hora");
   });
 });

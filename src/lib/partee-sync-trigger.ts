@@ -56,3 +56,40 @@ export function syncState(runs: GhRun[], sinceMs: number): SyncState {
   if (run.status === "completed") return run.conclusion === "success" ? "success" : "failed";
   return "running";
 }
+
+// ---------- hourly cron (Nitro scheduled task in the app Worker, see src/tasks/partee-hourly.ts) ----------
+
+/**
+ * Body of the dispatch fired by the hourly cron: the LIGHT job of the workflow (mode = "hourly": window
+ * yesterday..today+3, no install / typecheck / tests, never fails on sync errors). `dry = true` only reads.
+ * "Actualizar todo" keeps using buildDispatchBody() above, which sends no `mode` (the workflow defaults to full).
+ */
+export function buildHourlyDispatchBody(dry: boolean): { ref: string; inputs: { dry: string; mode: string } } {
+  return { ref: PARTEE_SYNC_REF, inputs: { dry: dry ? "true" : "false", mode: "hourly" } };
+}
+
+const MADRID_HOUR = new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/Madrid", hour: "2-digit", hourCycle: "h23" });
+
+/** True when the Madrid wall-clock hour of `date` is within min..max inclusive (default 08:00 to 20:59). */
+export function horaMadridEnRango(date: Date, min = 8, max = 20): boolean {
+  const h = Number(MADRID_HOUR.format(date));
+  return h >= min && h <= max;
+}
+
+export type DecisionCron = "skip_disabled" | "skip_hora" | "skip_activo" | "lanzar_real" | "lanzar_dry";
+
+/**
+ * What the hourly cron does. `enabled` is the raw Worker secret PARTEE_CRON_ENABLED: "1" = real run, "dry" =
+ * dispatch with dry = "true" (validates the whole chain without writing), anything else or missing = off.
+ * Checks in this order, so the cheap ones never need the network: disabled, Madrid hour, run already active.
+ */
+export function decidirCron(opts: {
+  enabled: string | null | undefined;
+  date: Date;
+  runs: Array<Pick<GhRun, "status">>;
+}): DecisionCron {
+  if (opts.enabled !== "1" && opts.enabled !== "dry") return "skip_disabled";
+  if (!horaMadridEnRango(opts.date)) return "skip_hora";
+  if (hasActiveRun(opts.runs)) return "skip_activo";
+  return opts.enabled === "dry" ? "lanzar_dry" : "lanzar_real";
+}

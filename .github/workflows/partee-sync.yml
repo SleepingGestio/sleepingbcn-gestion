@@ -7,7 +7,7 @@ name: Partee sync
 # format() makes the dry check work whether the input arrives as a boolean or as the string "true"/"false"
 # (the app dispatches strings). If a real run were ever labelled "dry run" by mistake, the only effect is that
 # the guard does not count it, so a scheduled full run still happens (the safe direction).
-run-name: ${{ (github.event_name == 'schedule' && github.event.schedule == '40 6-19 * * *' && 'Partee sync (hourly)') || (github.event_name == 'workflow_dispatch' && format('{0}', inputs.dry) == 'true' && 'Partee sync (dry run)') || 'Partee sync' }}
+run-name: ${{ (github.event_name == 'schedule' && github.event.schedule == '40 6-19 * * *' && 'Partee sync (hourly)') || (github.event_name == 'workflow_dispatch' && format('{0}', inputs.dry) == 'true' && 'Partee sync (dry run)') || (github.event_name == 'workflow_dispatch' && inputs.mode == 'hourly' && 'Partee sync (hourly)') || 'Partee sync' }}
 
 # Two kinds of scheduled runs (GitHub cron is UTC only; Madrid is UTC+1 in winter, UTC+2 in summer):
 #
@@ -48,6 +48,11 @@ on:
         description: "Window end YYYY-MM-DD (optional, needs 'from')"
         type: string
         required: false
+      mode:
+        description: "full = install, typecheck, tests, window yesterday..+7 (default, the app button); hourly = the light job (window yesterday..today+3, only 08-20 Madrid, never fails on sync errors)"
+        type: choice
+        options: [full, hourly]
+        default: full
 
 # Runs never overlap and a running one is never cancelled: a new run waits for the running one.
 # GitHub keeps at most ONE pending run per group (a newer pending run replaces an older pending one).
@@ -94,7 +99,8 @@ jobs:
     if: >-
       ${{ !cancelled()
       && (needs.guard.result == 'skipped' || needs.guard.outputs.skip != 'true')
-      && (github.event_name != 'schedule' || github.event.schedule != '40 6-19 * * *') }}
+      && (github.event_name != 'schedule' || github.event.schedule != '40 6-19 * * *')
+      && !(github.event_name == 'workflow_dispatch' && inputs.mode == 'hourly') }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     defaults:
@@ -155,7 +161,9 @@ jobs:
 
   # ------------------------------------------------------------------ hourly (light)
   hourly:
-    if: github.event_name == 'schedule' && github.event.schedule == '40 6-19 * * *'
+    if: >-
+      ${{ (github.event_name == 'schedule' && github.event.schedule == '40 6-19 * * *')
+      || (github.event_name == 'workflow_dispatch' && inputs.mode == 'hourly') }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -216,9 +224,13 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           WINDOW_FROM: ${{ steps.hour.outputs.from }}
           WINDOW_TO: ${{ steps.hour.outputs.to }}
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_DRY: ${{ inputs.dry }}
         run: |
           code=0
-          bun src/cli.ts "--from=$WINDOW_FROM" "--to=$WINDOW_TO" || code=$?
+          args=("--from=$WINDOW_FROM" "--to=$WINDOW_TO")
+          if [ "$EVENT_NAME" = "workflow_dispatch" ] && [ "$INPUT_DRY" = "true" ]; then args+=(--dry); fi
+          bun src/cli.ts "${args[@]}" || code=$?
           if [ "$code" -ne 0 ]; then
             echo "::warning::Hourly Partee sync finished with exit code $code (1 = a call failed or Partee rate-limited, 2 = aborted). See the log above; the next run retries and the daily full runs will fail loudly if this persists."
           fi

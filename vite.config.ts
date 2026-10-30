@@ -65,6 +65,9 @@ export default defineConfig(({ mode }) => ({
     }),
     nitro({
       preset: "cloudflare-module",
+      experimental: { tasks: true },
+      tasks: { "partee:hourly": { handler: `${process.cwd()}/src/tasks/partee-hourly.ts`, description: "Hourly Partee sync dispatch" } },
+      scheduledTasks: { "10 6-19 * * *": "partee:hourly" },
       cloudflare: {
         nodeCompat: true,
         wrangler: {
