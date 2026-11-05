@@ -751,7 +751,13 @@ export function ReservaDetail({
               </div>
 
               {/* ── Cuenta verificada y cerrada (ámbito: esta pestaña) ── */}
-              <div className="space-y-3 border-t pt-3">
+              <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-t pt-3">
+                <Check
+                  label="Cuenta verificada y cerrada"
+                  checked={!!g.CuentaVerificada}
+                  onChange={(v) => setG({ ...g, CuentaVerificada: v })}
+                  disabled={readOnly}
+                />
                 <label
                   className={cn(
                     "flex items-center gap-2 text-sm",
@@ -766,12 +772,6 @@ export function ReservaDetail({
                   <span>Requiere factura</span>
                   <strong>{g.requiere_factura ? "SÍ" : "NO"}</strong>
                 </label>
-                <Check
-                  label="Cuenta verificada y cerrada"
-                  checked={!!g.CuentaVerificada}
-                  onChange={(v) => setG({ ...g, CuentaVerificada: v })}
-                  disabled={readOnly}
-                />
               </div>
               </TabsContent>
 
