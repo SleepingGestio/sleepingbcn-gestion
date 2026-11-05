@@ -59,6 +59,8 @@ export type ReservaGestio = {
   TasaTuristica: number | null;
   /** Tourist tax actually collected in cash — manual entry, informational. */
   TasaTuristicaCobrada: number | null;
+  /** "Requiere factura" SÍ/NO switch (Inf. económica tab). Column is NOT NULL DEFAULT false; undefined = no reservas_gestio row yet = NO. */
+  requiere_factura: boolean;
 };
 
 /** A persisted extra charge line for a reservation (reservas_extras row). */

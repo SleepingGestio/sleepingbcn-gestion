@@ -1762,6 +1762,13 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "partee_registre_checkin_url_generado_por_fkey"
+            columns: ["checkin_url_generado_por"]
+            isOneToOne: false
+            referencedRelation: "personal"
+            referencedColumns: ["id_persona"]
+          },
+          {
             foreignKeyName: "partee_registre_id_apt_fkey"
             columns: ["id_apt"]
             isOneToOne: false
@@ -1781,13 +1788,6 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "v_reservas_por_apartamento"
             referencedColumns: ["Número"]
-          },
-          {
-            foreignKeyName: "partee_registre_checkin_url_generado_por_fkey"
-            columns: ["checkin_url_generado_por"]
-            isOneToOne: false
-            referencedRelation: "personal"
-            referencedColumns: ["id_persona"]
           },
           {
             foreignKeyName: "partee_registre_registro_confirmado_por_fkey"
@@ -2318,6 +2318,7 @@ export type Database = {
           PctPorCobro: number | null
           PersLImpAsig: number | null
           ReadyCheckIn: boolean | null
+          requiere_factura: boolean
           TasaTuristica: number | null
           TasaTuristicaCobrada: number | null
           TaxCobradas: number | null
@@ -2341,6 +2342,7 @@ export type Database = {
           PctPorCobro?: number | null
           PersLImpAsig?: number | null
           ReadyCheckIn?: boolean | null
+          requiere_factura?: boolean
           TasaTuristica?: number | null
           TasaTuristicaCobrada?: number | null
           TaxCobradas?: number | null
@@ -2364,6 +2366,7 @@ export type Database = {
           PctPorCobro?: number | null
           PersLImpAsig?: number | null
           ReadyCheckIn?: boolean | null
+          requiere_factura?: boolean
           TasaTuristica?: number | null
           TasaTuristicaCobrada?: number | null
           TaxCobradas?: number | null

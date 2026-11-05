@@ -751,7 +751,21 @@ export function ReservaDetail({
               </div>
 
               {/* ── Cuenta verificada y cerrada (ámbito: esta pestaña) ── */}
-              <div className="border-t pt-3">
+              <div className="space-y-3 border-t pt-3">
+                <label
+                  className={cn(
+                    "flex items-center gap-2 text-sm",
+                    readOnly ? "cursor-not-allowed" : "cursor-pointer",
+                  )}
+                >
+                  <Switch
+                    checked={!!g.requiere_factura}
+                    disabled={readOnly}
+                    onCheckedChange={(v) => setG({ ...g, requiere_factura: v })}
+                  />
+                  <span>Requiere factura</span>
+                  <strong>{g.requiere_factura ? "SÍ" : "NO"}</strong>
+                </label>
                 <Check
                   label="Cuenta verificada y cerrada"
                   checked={!!g.CuentaVerificada}
