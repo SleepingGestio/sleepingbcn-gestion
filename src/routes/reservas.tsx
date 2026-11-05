@@ -350,9 +350,14 @@ function ReservasPage() {
                 <TableCell>
                   {r.gestio?.CuentaVerificada ? (
                     <span
-                      title="Cuenta verificada y cerrada"
-                      aria-label="Cuenta verificada y cerrada"
-                      className="inline-grid h-4 w-4 shrink-0 place-content-center rounded-sm border border-primary bg-primary text-primary-foreground shadow"
+                      title={r.gestio?.requiere_factura ? "Cuenta verificada y cerrada — requiere factura" : "Cuenta verificada y cerrada"}
+                      aria-label={r.gestio?.requiere_factura ? "Cuenta verificada y cerrada — requiere factura" : "Cuenta verificada y cerrada"}
+                      className={cn(
+                        "inline-grid h-4 w-4 shrink-0 place-content-center rounded-sm border shadow",
+                        r.gestio?.requiere_factura
+                          ? "border-orange-500 bg-orange-500 text-white"
+                          : "border-primary bg-primary text-primary-foreground",
+                      )}
                     >
                       <Check className="h-3.5 w-3.5" />
                     </span>
