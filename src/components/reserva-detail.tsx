@@ -757,6 +757,7 @@ export function ReservaDetail({
                   checked={!!g.CuentaVerificada}
                   onChange={(v) => setG({ ...g, CuentaVerificada: v })}
                   disabled={readOnly}
+                  orangeWhenChecked={!!g.requiere_factura}
                 />
                 <label
                   className={cn(
@@ -864,15 +865,26 @@ function Check({
   checked,
   onChange,
   disabled,
+  orangeWhenChecked,
 }: {
   label: string;
   checked: boolean;
   onChange: (v: boolean) => void;
   disabled?: boolean;
+  /** Opt-in: render the checked state in orange instead of the primary colour (default off). */
+  orangeWhenChecked?: boolean;
 }) {
   return (
     <label className={cn("flex items-center gap-2 text-sm", disabled ? "cursor-not-allowed" : "cursor-pointer")}>
-      <Checkbox checked={checked} onCheckedChange={(v) => onChange(!!v)} disabled={disabled} />
+      <Checkbox
+        checked={checked}
+        onCheckedChange={(v) => onChange(!!v)}
+        disabled={disabled}
+        className={cn(
+          orangeWhenChecked &&
+            "data-[state=checked]:border-orange-500 data-[state=checked]:bg-orange-500 data-[state=checked]:text-white",
+        )}
+      />
       <span>{label}</span>
     </label>
   );
