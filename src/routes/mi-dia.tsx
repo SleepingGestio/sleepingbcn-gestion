@@ -1195,6 +1195,26 @@ function WorkerView({
   });
   const activeMantSession = activeMantSessionQ.data ?? null;
 
+  // The worker's own open cleaning session (with the apartment name), same shape as activeMantSessionQ.
+  // Only used as a label fallback in the "open task" dialog; every decision uses fetchOpenSessions (fresh).
+  const activeCleaningQ = useQuery({
+    queryKey: ["mi-dia-active-cleaning", personalId],
+    queryFn: async (): Promise<OpenCleaning | null> => {
+      const { data, error } = await supabase
+        .from("limpiezas_registre")
+        .select(OPEN_CLEANING_SELECT)
+        .eq("id_persona", personalId)
+        .is("fi", null)
+        .order("inici", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (error) throw error;
+      return (data as unknown as OpenCleaning | null) ?? null;
+    },
+    refetchInterval: 60_000,
+  });
+  const activeCleaning = activeCleaningQ.data ?? null;
+
   const mantAdjuntoTiposQ = useQuery({
     queryKey: ["mi-dia-mant-adjunto-tipos", mantIncIdsKey],
     enabled: mantIncIds.length > 0,
@@ -1244,6 +1264,7 @@ function WorkerView({
     mantIncidenciasQ.refetch();
     mantMisSesionesQ.refetch();
     activeMantSessionQ.refetch();
+    activeCleaningQ.refetch();
   }
 
   const mantActions = useMantenimientoActions(refetchMant);
@@ -1367,10 +1388,8 @@ function WorkerView({
   }
 
   // ---- Starting a maintenance incidencia while a tarea genérica is open ----
-  // Out of scope: the reverse (starting a generic task while an incidencia is
-  // open) and any broader "only one active thing" rule — this only covers
-  // Iniciar-on-incidencia-while-activeGen, and the matching Fin Total/Fin
-  // Parcial afterward on that SAME incidencia.
+  // The generic<->incidencia interruptions below were the first "only one active thing" rules; open
+  // CLEANINGS are covered by the openInterrupt dialog (pauseOpenCleaningsBeforeStart / beforeStartCleaning).
   type PendingReopenGenTrigger =
     | { kind: "incidencia"; id: number }
     | { kind: "generic"; id: number };
@@ -1403,6 +1422,17 @@ function WorkerView({
   const [confirmCloseGenInterrupt, setConfirmCloseGenInterrupt] = useState<PendingGenInterrupt | null>(null);
   const [confirmPauseMant, setConfirmPauseMant] = useState<PendingMantInterrupt | null>(null);
   const [pendingReopenGen, setPendingReopenGen] = useState<PendingReopenGen | null>(null);
+  // "Only one open task": the user wants to start something while other sessions are open (cleaning /
+  // incidencia / tarea genérica). `resolve(true)` once they were paused/closed, `resolve(false)` if the user
+  // cancelled or pausing failed. Sessions closed this way get NO reopen offer (pendingReopenGen is untouched).
+  // `refresh` re-reads what is still open (same scope as the original check): it runs on every confirm click,
+  // so a retry after a partial failure only touches what is still open.
+  const [openInterrupt, setOpenInterrupt] = useState<{
+    sessions: OpenSessions;
+    resolve: (ok: boolean) => void;
+    refresh: () => Promise<OpenSessions | null>;
+  } | null>(null);
+  const [openInterruptBusy, setOpenInterruptBusy] = useState(false);
   const [reopenGenDialogOpen, setReopenGenDialogOpen] = useState(false);
 
   // Optional, skippable "add adjuntos + nota de finalización" follow-up after the
@@ -1423,7 +1453,132 @@ function WorkerView({
     );
   }
 
-  function handleIniciarIncidencia(inc: Incidencia) {
+  function askOpenInterrupt(sessions: OpenSessions, refresh: () => Promise<OpenSessions | null>): Promise<boolean> {
+    return new Promise<boolean>((resolve) => setOpenInterrupt({ sessions, resolve, refresh }));
+  }
+
+  function cancelOpenInterrupt() {
+    openInterrupt?.resolve(false);
+    setOpenInterrupt(null);
+  }
+
+  // Confirm: re-read what is open, pause/close it, resolve(true). If anything fails the dialog STAYS open
+  // (with the still-open sessions) and a Spanish toast is shown, so the worker can retry; nothing new starts.
+  async function confirmOpenInterrupt() {
+    const target = openInterrupt;
+    if (!target || openInterruptBusy) return;
+    setOpenInterruptBusy(true);
+    try {
+      const fresh = await target.refresh();
+      if (!fresh) return; // fetchOpenSessions already showed its toast; dialog stays
+      const { cleanings, maint, generic } = fresh;
+      let ok = true;
+      if (cleanings.length > 0) ok = await pauseOpenCleanings(cleanings);
+      // Same as confirmPauseMantAndProceed: finParcial per open session (also puts the incidencia back to "validada").
+      for (const m of ok ? maint : []) {
+        const done = await mantActions.finParcial({ id_incidencia: m.id_incidencia }, personalId, [m]);
+        if (!done) { ok = false; break; }
+      }
+      // Same update as finishGeneric(false), on the fresh rows (no reopen offer, no end-of-task sheet).
+      const nowIso = new Date().toISOString();
+      for (const g of ok ? generic : []) {
+        const { error } = await supabase
+          .from("registre_temps_generic")
+          .update({ fi: nowIso, hores_totals: diffHoursMinutes(g.inici, nowIso) })
+          .eq("id_registre", g.id_registre)
+          .is("fi", null);
+        if (error) { console.error("close generic:", error.message); ok = false; break; }
+      }
+      refetchAll();
+      refetchJornada();
+      activeMantSessionQ.refetch();
+      if (!ok) {
+        const still = await target.refresh();
+        const left = still ? still.cleanings.length + still.maint.length + still.generic.length : 1;
+        if (left === 0) {
+          // The failed step left nothing open: it is safe to continue with the new task.
+          target.resolve(true);
+          setOpenInterrupt(null);
+          return;
+        }
+        toast.error("No se pudo pausar la tarea abierta. Inténtalo de nuevo.");
+        if (still) setOpenInterrupt({ ...target, sessions: still });
+        return;
+      }
+      target.resolve(true);
+      setOpenInterrupt(null);
+    } finally {
+      setOpenInterruptBusy(false);
+    }
+  }
+
+  // Fresh check + (if something is open) the confirmation dialog. Resolves true when it is OK to start.
+  //  - excludeCleaningId: that cleaning being open is not an interruption (starting it again is idempotent).
+  //  - onlyCleanings: ignore open incidencias / tareas genéricas (their own existing dialogs handle those).
+  async function fetchScopedOpenSessions(scope: { excludeCleaningId?: number; onlyCleanings?: boolean }) {
+    const open = await fetchOpenSessions(personalId);
+    if (!open) return null;
+    return {
+      cleanings: open.cleanings.filter((c) => c.id_limpieza !== scope.excludeCleaningId),
+      maint: scope.onlyCleanings ? [] : open.maint,
+      generic: scope.onlyCleanings ? [] : open.generic,
+    } satisfies OpenSessions;
+  }
+
+  async function gateOpenSessions(scope: { excludeCleaningId?: number; onlyCleanings?: boolean }): Promise<boolean> {
+    if (disabled) return true;
+    const sessions = await fetchScopedOpenSessions(scope);
+    if (!sessions) return false;
+    if (sessions.cleanings.length + sessions.maint.length + sessions.generic.length === 0) return true;
+    return askOpenInterrupt(sessions, () => fetchScopedOpenSessions(scope));
+  }
+
+  // Starting a CLEANING (TaskCard / DetailView): any other open session is an interruption.
+  const beforeStartCleaning = (idLimpieza: number) => gateOpenSessions({ excludeCleaningId: idLimpieza });
+  // Starting an incidencia / confirming a new generic task: only open CLEANINGS are handled here (new rule);
+  // generic<->incidencia interruptions keep their existing dialogs.
+  const pauseOpenCleaningsBeforeStart = () => gateOpenSessions({ onlyCleanings: true });
+
+  function openCleaningLabel(c: OpenCleaning): string {
+    const fromRow = c.limpiezas?.apartamentos?.nombre;
+    if (fromRow) return fromRow;
+    const task = (tasksQ.data ?? []).find((x) => x.id_limpieza === c.id_limpieza);
+    const fromTasks = task ? aptById.get(task.id_apt)?.nombre : undefined;
+    if (fromTasks) return fromTasks;
+    if (activeCleaning?.id_limpieza === c.id_limpieza && activeCleaning.limpiezas?.apartamentos?.nombre) {
+      return activeCleaning.limpiezas.apartamentos.nombre;
+    }
+    return `limpieza #${c.id_limpieza}`;
+  }
+
+  function openInterruptText(sessions: OpenSessions): { title: string; description: string } {
+    const { cleanings, maint, generic } = sessions;
+    const parts: string[] = [];
+    if (cleanings.length > 0) {
+      parts.push(`la limpieza de '${cleanings.map(openCleaningLabel).join("', '")}' (se pausará)`);
+    }
+    if (maint.length > 0) {
+      parts.push(`la incidencia '${maint.map((m) => m.manteniment_incidencies?.titol ?? "sin título").join("', '")}' (se pausará)`);
+    }
+    if (generic.length > 0) {
+      parts.push(
+        `la tarea genérica '${generic.map((g) => g.tipos_tarea_generica?.nombre ?? "Tarea genérica").join("', '")}' (se cerrará y no se te ofrecerá reabrirla)`,
+      );
+    }
+    const kinds = [cleanings.length > 0, maint.length > 0, generic.length > 0].filter(Boolean).length;
+    const title =
+      kinds > 1 ? "Tareas en curso"
+      : cleanings.length > 0 ? "Limpieza en curso"
+      : maint.length > 0 ? "Incidencia en curso"
+      : "Tarea genérica abierta";
+    return {
+      title,
+      description: `Tienes en curso ${parts.join(", ")}. ¿Quieres continuar e iniciar la nueva tarea?`,
+    };
+  }
+
+  async function handleIniciarIncidencia(inc: Incidencia) {
+    if (!(await pauseOpenCleaningsBeforeStart())) return;
     if (activeGen) {
       setConfirmCloseGenInterrupt({ kind: "incidencia", inc });
       return;
@@ -1455,6 +1610,9 @@ function WorkerView({
     idApt: number | null,
     idEspacioComun: number | null,
   ) {
+    // Fresh check only now that the worker confirmed the sheet: cancelling the sheet (or the dialog)
+    // leaves every open session untouched. The sheet stays open under the dialog.
+    if (!(await pauseOpenCleaningsBeforeStart())) return;
     if (activeGen) {
       setStartSheetOpen(false);
       setConfirmCloseGenInterrupt({ kind: "generic-start", idTipus, notes, idGrupo, idApt, idEspacioComun });
@@ -1580,9 +1738,15 @@ function WorkerView({
 
   async function confirmReopenGen() {
     const p = pendingReopenGen;
-    setReopenGenDialogOpen(false);
-    setPendingReopenGen(null);
     if (!p) return;
+    setReopenGenDialogOpen(false);
+    // Fresh check of everything open (cleaning, incidencia, generic). If the worker cancels or pausing fails
+    // the reopen offer comes back instead of silently disappearing.
+    if (!(await gateOpenSessions({}))) {
+      setReopenGenDialogOpen(true);
+      return;
+    }
+    setPendingReopenGen(null);
     await startGeneric(p.id_tipus, p.notes ?? "", p.idGrupo, p.idApt, p.idEspacioComun);
   }
 
@@ -1740,6 +1904,7 @@ function WorkerView({
     monthMantQ.refetch();
     monthGenericQ.refetch();
     monthAjustosQ.refetch();
+    activeCleaningQ.refetch();
   };
 
   const detailTask = detailId != null ? (tasksQ.data ?? []).find((t) => t.id_limpieza === detailId) ?? null : null;
@@ -2127,6 +2292,7 @@ function WorkerView({
                 notifTipo={notifByReferencia.get(t.id_limpieza)?.slice(-1)[0]?.tipo}
                 disabled={disabled}
                 finishing={finishingTask}
+                onBeforeStart={beforeStartCleaning}
                 onChanged={refetchAll}
                 onOpenDetail={() => setDetailId(t.id_limpieza)}
                 onFinish={() => finishTask(t)}
@@ -2204,6 +2370,7 @@ function WorkerView({
               disabled={disabled}
               onClose={() => setDetailId(null)}
               onChanged={refetchAll}
+              onBeforeStart={beforeStartCleaning}
             />
           )}
         </SheetContent>
@@ -2266,6 +2433,29 @@ function WorkerView({
               No, volver
             </Button>
             <Button className="bg-[#26215C] hover:bg-[#1e1a48] text-white" onClick={confirmPauseMantAndProceed}>
+              Sí, pausar e iniciar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Only one open task: starting something while a cleaning / incidencia / tarea genérica is open
+          pauses (or, for a tarea genérica, closes) it first. */}
+      <Dialog open={!!openInterrupt} onOpenChange={(o) => { if (!o && !openInterruptBusy) cancelOpenInterrupt(); }}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>{openInterrupt ? openInterruptText(openInterrupt.sessions).title : ""}</DialogTitle>
+            <DialogDescription>{openInterrupt ? openInterruptText(openInterrupt.sessions).description : ""}</DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" disabled={openInterruptBusy} onClick={cancelOpenInterrupt}>
+              No, volver
+            </Button>
+            <Button
+              className="bg-[#26215C] hover:bg-[#1e1a48] text-white"
+              disabled={openInterruptBusy}
+              onClick={confirmOpenInterrupt}
+            >
               Sí, pausar e iniciar
             </Button>
           </DialogFooter>
@@ -2594,8 +2784,103 @@ function TimeChip({ time, informed }: { time: string | null; informed: boolean |
   return <TimeBadge time={time} informed={informed} size="md" className="rounded-md" />;
 }
 
+/**
+ * Idempotent "start cleaning": opens a `limpiezas_registre` session only if the worker has none open for this
+ * cleaning yet. A second tap (stale UI, bad signal, card + detail sheet) therefore never creates a duplicate
+ * open session. A unique violation (23505, partial index on open sessions) also means "already started".
+ * Returns the error message to show, or null when a session is open (new or pre-existing).
+ */
+async function startCleaningSession(idLimpieza: number, idPersona: number, nowIso: string): Promise<string | null> {
+  const { data: open, error: eSel } = await supabase
+    .from("limpiezas_registre")
+    .select("id_registre")
+    .eq("id_limpieza", idLimpieza)
+    .eq("id_persona", idPersona)
+    .is("fi", null)
+    .limit(1)
+    .maybeSingle();
+  if (eSel) return eSel.message;
+  if (open) return null;
+  const { error: e1 } = await supabase.from("limpiezas_registre").insert({
+    id_limpieza: idLimpieza,
+    id_persona: idPersona,
+    inici: nowIso,
+  });
+  if (e1 && e1.code !== "23505") return e1.message;
+  return null;
+}
+
+// ---- "Only one open task per worker" (cleaning / maintenance / generic) ----
+type OpenCleaning = {
+  id_registre: number;
+  id_limpieza: number;
+  inici: string;
+  limpiezas: { apartamentos: { nombre: string | null } | null } | null;
+};
+type OpenMaint = Registre & { manteniment_incidencies: { titol: string } | null };
+type OpenGeneric = { id_registre: number; inici: string; tipos_tarea_generica: { nombre: string } | null };
+type OpenSessions = { cleanings: OpenCleaning[]; maint: OpenMaint[]; generic: OpenGeneric[] };
+const OPEN_CLEANING_SELECT = "id_registre, id_limpieza, inici, limpiezas(apartamentos(nombre))";
+
+/**
+ * FRESH check (three direct SELECTs, never cached query data) of what the worker has open right now.
+ * Returns null (after a Spanish toast) when any SELECT fails: the caller must not start anything.
+ */
+async function fetchOpenSessions(personalId: number): Promise<OpenSessions | null> {
+  const [c, m, g] = await Promise.all([
+    supabase.from("limpiezas_registre").select(OPEN_CLEANING_SELECT).eq("id_persona", personalId).is("fi", null),
+    supabase
+      .from("manteniment_registre")
+      .select(`${REGISTRE_COLUMNS},manteniment_incidencies(titol)`)
+      .eq("id_persona", personalId)
+      .is("fi", null),
+    supabase
+      .from("registre_temps_generic")
+      .select("id_registre, inici, tipos_tarea_generica(nombre)")
+      .eq("id_persona", personalId)
+      .is("fi", null),
+  ]);
+  if (c.error || m.error || g.error) {
+    toast.error("No se pudo comprobar tus tareas abiertas. Inténtalo de nuevo.");
+    return null;
+  }
+  return {
+    cleanings: (c.data ?? []) as unknown as OpenCleaning[],
+    maint: (m.data ?? []) as unknown as OpenMaint[],
+    generic: (g.data ?? []) as unknown as OpenGeneric[],
+  };
+}
+
+/**
+ * Pauses open cleaning sessions, same as TaskCard.finParcial: back to "aceptada" (only if still "en_curso"),
+ * then close the sessions. No toast here (the caller shows one).
+ */
+async function pauseOpenCleanings(rows: { id_registre: number; id_limpieza: number; inici: string }[]): Promise<boolean> {
+  // 1) Back to "aceptada", but ONLY if it is still "en_curso" (never revert a finished/other state).
+  //    Done first so a retry after a partial failure still finds the open session and self-heals.
+  for (const id of new Set(rows.map((r) => r.id_limpieza))) {
+    const { error } = await supabase
+      .from("limpiezas")
+      .update({ estado: "aceptada" })
+      .eq("id_limpieza", id)
+      .eq("estado", "en_curso");
+    if (error) { console.error("pauseOpenCleanings:", error.message); return false; }
+  }
+  // 2) Close the open sessions (`.is("fi", null)` so a retry can never overwrite an already closed row).
+  const nowIso = new Date().toISOString();
+  for (const r of rows) {
+    const { error } = await supabase
+      .from("limpiezas_registre")
+      .update({ fi: nowIso, hores: diffHoursMinutes(r.inici, nowIso) })
+      .eq("id_registre", r.id_registre)
+      .is("fi", null);
+    if (error) { console.error("pauseOpenCleanings:", error.message); return false; }
+  }
+  return true;
+}
+
 function TaskCard({
-  t, apt, resv, kbDiff, kbDiffsLoading, notifTipo, disabled, finishing, onChanged, onOpenDetail, onFinish, onReportIncidencia,
+  t, apt, resv, kbDiff, kbDiffsLoading, notifTipo, disabled, finishing, onChanged, onOpenDetail, onFinish, onReportIncidencia, onBeforeStart,
 }: {
   t: LimpiezaDia;
   apt: Apartamento | undefined;
@@ -2604,6 +2889,8 @@ function TaskCard({
   kbDiffsLoading: boolean;
   notifTipo?: string;
   disabled: boolean;
+  /** Resolves true when it is OK to start (no other open task, or the user agreed to pause/close it). */
+  onBeforeStart: (idLimpieza: number) => Promise<boolean>;
   finishing: boolean;
   onChanged: () => void;
   onOpenDetail: () => void;
@@ -2655,17 +2942,14 @@ function TaskCard({
     if (startInFlightRef.current) return;
     if (t.worker == null) { toast.error("La limpieza no tiene un operario asignado"); return; }
     startInFlightRef.current = true;
-    setBusy(true);
     try {
+      if (!disabled && !(await onBeforeStart(t.id_limpieza))) return;
+      setBusy(true);
       const nowIso = new Date().toISOString();
-      const { error: e1 } = await supabase.from("limpiezas_registre").insert({
-        id_limpieza: t.id_limpieza,
-        id_persona: t.worker,
-        inici: nowIso,
-      });
+      const e1 = await startCleaningSession(t.id_limpieza, t.worker, nowIso);
       if (e1) {
         setBusy(false);
-        toast.error("Error: " + e1.message);
+        toast.error("Error: " + e1);
         return;
       }
       const patch: Partial<Limpieza> = { estado: "en_curso" };
@@ -3077,7 +3361,7 @@ function MantenimientoTaskCard({
 /* ---------------- Detail view ---------------- */
 
 function DetailView({
-  t, apt, resv, kbDiff, kbDiffsLoading, disabled, onClose, onChanged,
+  t, apt, resv, kbDiff, kbDiffsLoading, disabled, onClose, onChanged, onBeforeStart,
 }: {
   t: Limpieza;
   apt: Apartamento | undefined;
@@ -3087,6 +3371,8 @@ function DetailView({
   disabled: boolean;
   onClose: () => void;
   onChanged: () => void;
+  /** Resolves true when it is OK to start (no other open task, or the user agreed to pause/close it). */
+  onBeforeStart: (idLimpieza: number) => Promise<boolean>;
 }) {
   const [local, setLocal] = useState<Limpieza>(t);
   const [incLocal, setIncLocal] = useState<string>(t.incidencias ?? "");
@@ -3157,17 +3443,14 @@ function DetailView({
     if (startInFlightRef.current) return;
     if (t.worker == null) { toast.error("La limpieza no tiene un operario asignado"); return; }
     startInFlightRef.current = true;
-    setBusy(true);
     try {
+      if (!(await onBeforeStart(t.id_limpieza))) return;
+      setBusy(true);
       const nowIso = new Date().toISOString();
-      const { error: e1 } = await supabase.from("limpiezas_registre").insert({
-        id_limpieza: t.id_limpieza,
-        id_persona: t.worker,
-        inici: nowIso,
-      });
+      const e1 = await startCleaningSession(t.id_limpieza, t.worker, nowIso);
       if (e1) {
         setBusy(false);
-        toast.error("Error: " + e1.message);
+        toast.error("Error: " + e1);
         return;
       }
       const patch: Partial<Limpieza> = { estado: "en_curso" };
