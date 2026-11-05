@@ -78,6 +78,7 @@ type Fila = {
   nHabitaciones: number | null;
   idGrupo: number | null;
   verificada: boolean;
+  requiereFactura: boolean;
   pagadoEstancia: number;
   pagadoLimpieza: number;
   tasaTuristica: number;
@@ -193,6 +194,7 @@ function calcularFila(
     nHabitaciones: r["N. Habitaciones"],
     idGrupo: aptoGrupo?.id_grupo ?? null,
     verificada: !!r.gestio?.CuentaVerificada,
+    requiereFactura: !!r.gestio?.requiere_factura,
     pagadoEstancia,
     pagadoLimpieza,
     tasaTuristica,
@@ -416,12 +418,18 @@ function agruparPorApartamento(filasGrupo: Fila[]): { nombre: string; filas: Fil
   return out;
 }
 
-function VerifBadge({ verificada }: { verificada: boolean }) {
+function VerifBadge({ verificada, requiereFactura }: { verificada: boolean; requiereFactura: boolean }) {
+  // Verificada + requiere factura → naranja; verificada sin factura → color de siempre; no verificada → vacío.
   return verificada ? (
     <span
-      title="Cuenta verificada y cerrada"
-      aria-label="Cuenta verificada y cerrada"
-      className="inline-grid h-4 w-4 shrink-0 place-content-center rounded-sm border border-primary bg-primary text-primary-foreground shadow"
+      title={requiereFactura ? "Cuenta verificada y cerrada — requiere factura" : "Cuenta verificada y cerrada"}
+      aria-label={requiereFactura ? "Cuenta verificada y cerrada — requiere factura" : "Cuenta verificada y cerrada"}
+      className={cn(
+        "inline-grid h-4 w-4 shrink-0 place-content-center rounded-sm border shadow",
+        requiereFactura
+          ? "border-orange-500 bg-orange-500 text-white"
+          : "border-primary bg-primary text-primary-foreground",
+      )}
     >
       <Check className="h-3.5 w-3.5" />
     </span>
@@ -1168,7 +1176,7 @@ function InformeEconomicoPage() {
                             )}
                             {cols.has("verif") && (
                               <TableCell className="text-center">
-                                <VerifBadge verificada={f.verificada} />
+                                <VerifBadge verificada={f.verificada} requiereFactura={f.requiereFactura} />
                               </TableCell>
                             )}
                             {cols.has("pctOta") && (
