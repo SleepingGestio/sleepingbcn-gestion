@@ -83,6 +83,12 @@ type Fila = {
   pagadoLimpieza: number;
   tasaTuristica: number;
   totalPagadoCliente: number;
+  /** Extras pagados por el cliente (sin IVA + con IVA bruto). Solo se muestra
+   *  en el diseño "Reduït LIQ. CLIENT"; no entra en ningún cálculo. */
+  pagadoExtras: number;
+  /** totalPagadoCliente + pagadoExtras — valor SOLO de visualización/CSV del
+   *  diseño "Reduït LIQ. CLIENT" (en los demás diseños se usa totalPagadoCliente). */
+  totalClienteConExtras: number;
   pctOta: number | null;
   pctCobro: number | null;
   aplicaCobro: boolean;
@@ -180,6 +186,11 @@ function calcularFila(
 
   const totalIngresosNetos = ingresoNeto + extrasSinIva + netConIva;
 
+  // Només per al disseny "Reduït LIQ. CLIENT": el que ha pagat el client per
+  // extres i el total cobrat incloent-los (la tasa turística segueix fora).
+  const pagadoExtras = extrasSinIva + extraConIvaBruto;
+  const totalClienteConExtras = totalPagadoCliente + pagadoExtras;
+
   return {
     numero: r["Número"],
     referencia: r["Referencia"],
@@ -199,6 +210,8 @@ function calcularFila(
     pagadoLimpieza,
     tasaTuristica,
     totalPagadoCliente,
+    pagadoExtras,
+    totalClienteConExtras,
     pctOta,
     pctCobro,
     aplicaCobro: comision.aplicaCobro,
@@ -260,6 +273,7 @@ type ColumnKey =
   | "referencia"
   | "estado"
   | "pagadoEstancia"
+  | "pagadoExtras"
   | "pagadoLimpieza"
   | "tasaTuristica"
   | "totalPagadoCliente"
@@ -292,6 +306,7 @@ const ALL_COLUMN_KEYS: ColumnKey[] = [
   "referencia",
   "estado",
   "pagadoEstancia",
+  "pagadoExtras",
   "pagadoLimpieza",
   "tasaTuristica",
   "totalPagadoCliente",
@@ -320,7 +335,9 @@ const ALL_COLUMN_KEYS: ColumnKey[] = [
 // subconjunt de Datos validados/Cálculos + IMP. OTA menys COMISIO NETA +
 // Liquidado + Ingrés net, sense Extras/desglossament estada-neteja/Total).
 // "liq_cliente" = resum "Ariqus" (només Identificación + Datos validados
-// bàsics, sense res més).
+// bàsics, sense res més) + "Pagado extras" just després de "Pagado estancia";
+// en aquest disseny (i NOMÉS en aquest) "Total pagado cliente" inclou els
+// extres (totalClienteConExtras), a pantalla i al CSV.
 const COLUMN_DISENOS: Record<ColumnKey, DisenoId[]> = {
   checkout: ["general", "liq_ota", "liq_cliente"],
   noches: ["general", "liq_ota", "liq_cliente"],
@@ -332,6 +349,7 @@ const COLUMN_DISENOS: Record<ColumnKey, DisenoId[]> = {
   referencia: ["general", "liq_ota", "liq_cliente"],
   estado: ["general", "liq_ota", "liq_cliente"],
   pagadoEstancia: ["general", "liq_ota", "liq_cliente"],
+  pagadoExtras: ["liq_cliente"],
   pagadoLimpieza: ["general", "liq_ota", "liq_cliente"],
   tasaTuristica: ["general", "liq_ota", "liq_cliente"],
   totalPagadoCliente: ["general", "liq_ota", "liq_cliente"],
@@ -369,9 +387,11 @@ function columnasVisibles(diseno: DisenoId, mostrarExtraConIva: boolean): Set<Co
 
 const SUBTOTAL_KEYS = [
   "pagadoEstancia",
+  "pagadoExtras",
   "pagadoLimpieza",
   "tasaTuristica",
   "totalPagadoCliente",
+  "totalClienteConExtras",
   "baseSinIva",
   "iva",
   "comisionOta",
@@ -453,12 +473,14 @@ function SubtotalRow({
   label,
   s,
   cols,
+  diseno,
   className,
   tintExtra = true,
 }: {
   label: string;
   s: Subtotal;
   cols: Set<ColumnKey>;
+  diseno: DisenoId;
   className?: string;
   tintExtra?: boolean;
 }) {
@@ -468,6 +490,9 @@ function SubtotalRow({
       {cols.has("pagadoEstancia") && (
         <TableCell className="text-right">{fmtEUR(s.pagadoEstancia)}</TableCell>
       )}
+      {cols.has("pagadoExtras") && (
+        <TableCell className="text-right">{fmtEUR(s.pagadoExtras)}</TableCell>
+      )}
       {cols.has("pagadoLimpieza") && (
         <TableCell className="text-right">{fmtEUR(s.pagadoLimpieza)}</TableCell>
       )}
@@ -475,7 +500,9 @@ function SubtotalRow({
         <TableCell className="text-right">{fmtEUR(s.tasaTuristica)}</TableCell>
       )}
       {cols.has("totalPagadoCliente") && (
-        <TableCell className="text-right font-semibold">{fmtEUR(s.totalPagadoCliente)}</TableCell>
+        <TableCell className="text-right font-semibold">
+          {fmtEUR(diseno === "liq_cliente" ? s.totalClienteConExtras : s.totalPagadoCliente)}
+        </TableCell>
       )}
       {cols.has("verif") && <TableCell />}
       {cols.has("pctOta") && <TableCell />}
@@ -542,8 +569,8 @@ function csvCell(v: string | number): string {
 type CsvColDef = {
   key: ColumnKey;
   header: string;
-  value: (f: Fila) => string | number;
-  subtotal: (s: Subtotal) => string | number;
+  value: (f: Fila, diseno: DisenoId) => string | number;
+  subtotal: (s: Subtotal, diseno: DisenoId) => string | number;
 };
 
 // Mateix ordre que ALL_COLUMN_KEYS a partir de "Estado" — la identificació
@@ -555,6 +582,12 @@ const CSV_COLUMNS: CsvColDef[] = [
     header: "Pagado estancia",
     value: (f) => f.pagadoEstancia,
     subtotal: (s) => s.pagadoEstancia,
+  },
+  {
+    key: "pagadoExtras",
+    header: "Pagado extras",
+    value: (f) => f.pagadoExtras,
+    subtotal: (s) => s.pagadoExtras,
   },
   {
     key: "pagadoLimpieza",
@@ -571,8 +604,8 @@ const CSV_COLUMNS: CsvColDef[] = [
   {
     key: "totalPagadoCliente",
     header: "Total pagado cliente",
-    value: (f) => f.totalPagadoCliente,
-    subtotal: (s) => s.totalPagadoCliente,
+    value: (f, d) => (d === "liq_cliente" ? f.totalClienteConExtras : f.totalPagadoCliente),
+    subtotal: (s, d) => (d === "liq_cliente" ? s.totalClienteConExtras : s.totalPagadoCliente),
   },
   {
     key: "verif",
@@ -704,7 +737,7 @@ function exportarCsv(
     f.portal ?? "",
     f.referencia ?? "",
     f.estado ?? "",
-    ...activeCols.map((c) => c.value(f)),
+    ...activeCols.map((c) => c.value(f, diseno)),
   ];
   const subtotalRow = (nombre: string, s: Subtotal): (string | number)[] => [
     "",
@@ -716,7 +749,7 @@ function exportarCsv(
     "",
     "",
     `Subtotal ${nombre}`,
-    ...activeCols.map((c) => c.subtotal(s)),
+    ...activeCols.map((c) => c.subtotal(s, diseno)),
   ];
 
   const rows: (string | number)[][] = [headers];
@@ -859,6 +892,7 @@ function InformeEconomicoPage() {
   const nDatosValidados = (
     [
       "pagadoEstancia",
+      "pagadoExtras",
       "pagadoLimpieza",
       "tasaTuristica",
       "totalPagadoCliente",
@@ -1036,6 +1070,9 @@ function InformeEconomicoPage() {
               {cols.has("pagadoEstancia") && (
                 <TableHead className="text-right">Pagado estancia</TableHead>
               )}
+              {cols.has("pagadoExtras") && (
+                <TableHead className="text-right">Pagado extras</TableHead>
+              )}
               {cols.has("pagadoLimpieza") && (
                 <TableHead className="text-right">Pagado limpieza</TableHead>
               )}
@@ -1159,6 +1196,11 @@ function InformeEconomicoPage() {
                                 {fmtEUR(f.pagadoEstancia)}
                               </TableCell>
                             )}
+                            {cols.has("pagadoExtras") && (
+                              <TableCell className="text-right">
+                                {fmtEUR(f.pagadoExtras)}
+                              </TableCell>
+                            )}
                             {cols.has("pagadoLimpieza") && (
                               <TableCell className="text-right">
                                 {fmtEUR(f.pagadoLimpieza)}
@@ -1171,7 +1213,11 @@ function InformeEconomicoPage() {
                             )}
                             {cols.has("totalPagadoCliente") && (
                               <TableCell className="text-right font-semibold">
-                                {fmtEUR(f.totalPagadoCliente)}
+                                {fmtEUR(
+                                  diseno === "liq_cliente"
+                                    ? f.totalClienteConExtras
+                                    : f.totalPagadoCliente,
+                                )}
                               </TableCell>
                             )}
                             {cols.has("verif") && (
@@ -1262,6 +1308,7 @@ function InformeEconomicoPage() {
                             label={`Subtotal ${bloque.nombre} (${bloque.filas.length})`}
                             s={sumar(bloque.filas)}
                             cols={cols}
+                            diseno={diseno}
                             className="bg-slate-50 hover:bg-slate-50 text-[13px]"
                           />
                         )}
@@ -1271,6 +1318,7 @@ function InformeEconomicoPage() {
                       label={`Subtotal ${grupo.nombre} (${filasGrupo.length})`}
                       s={sub}
                       cols={cols}
+                      diseno={diseno}
                       className="bg-muted/30 hover:bg-muted/30 font-semibold"
                     />
                   </Fragment>
@@ -1281,6 +1329,7 @@ function InformeEconomicoPage() {
                 label={`Total (${filas.length} reservas)`}
                 s={total}
                 cols={cols}
+                diseno={diseno}
                 className="bg-slate-900 text-white hover:bg-slate-900 font-semibold"
                 tintExtra={false}
               />
