@@ -1,0 +1,512 @@
+name: Media optimize (R2)
+
+# Optimiza (reduce) los adjuntos de mantenimiento del bucket R2 en producción:
+#   - vídeos -> MP4 H.264 a 720p máx. (CRF 28, AAC 96k, faststart)
+#   - fotos  -> JPEG con lado mayor <= 1600 px, calidad 75, sin metadatos
+# Se ejecuta ANTES de "Media backup (R2 to R2)" (03:13 vs 03:43 UTC) para que el
+# bucket de backup solo reciba las versiones ligeras. Los dos workflows comparten
+# el grupo de concurrencia "media-pipeline" y nunca se solapan.
+#
+# ATENCIÓN: este workflow REEMPLAZA los originales a propósito (el propietario
+# acepta perderlos). Por eso: dry-run por defecto en ejecuciones manuales, límite
+# de objetos, verificación de cada fichero antes de reemplazar, y aislamiento de
+# fallos por objeto (un fallo no detiene el resto; el job acaba en rojo al final).
+#
+# Secrets necesarios (nunca se imprimen):
+#   R2_BACKUP_ENDPOINT                 https://<account-id>.r2.cloudflarestorage.com
+#   R2_MEDIA_RW_ACCESS_KEY_ID          \ token R2 de lectura, escritura y borrado de
+#   R2_MEDIA_RW_SECRET_ACCESS_KEY      / objetos SOLO sobre sleepingbcn-manteniment
+#   SUPABASE_DB_URL                    URI del Session pooler (usuario postgres)
+#
+# Idempotencia: cada objeto ya procesado lleva el metadato personalizado
+# optimized=1 y se salta en las siguientes ejecuciones. Los objetos con 0 filas en
+# manteniment_adjunts (huérfanos, p. ej. una subida en curso) no se tocan nunca.
+# Solo se opera sobre claves manteniment/<id>/<fichero>; el audio (.m4a) y los
+# documentos (.pdf/.doc/.docx) no se tocan. Se clasifica por extensión / content
+# type, NO por la columna tipus.
+#
+# Variable de repositorio MEDIA_OPTIMIZE_SCHEDULE_ENABLED: las ejecuciones
+# PROGRAMADAS solo corren si vale 'true' (interruptor de seguridad hasta validar
+# el paso 4 del plan). Las manuales (workflow_dispatch) corren siempre.
+#
+# PLAN DE DESPLIEGUE
+#   1) Ejecución manual con dry_run=true (solo lista candidatos y totales).
+#   2) Manual con dry_run=false, limit=3, kinds=videos. El propietario comprueba
+#      en la app los 3 vídeos (se reproducen, en vertical si procede, con audio).
+#   3) Manual con dry_run=false, limit=10, kinds=photos y revisión visual.
+#   4) Ejecución completa manual (dry_run=false, limit=0, kinds=all). Después,
+#      crear la variable MEDIA_OPTIMIZE_SCHEDULE_ENABLED=true.
+#   5) El propietario lanza a mano "Media backup (R2 to R2)" una vez y reactiva su
+#      schedule. Mientras tanto, media-backup está DESACTIVADO por el propietario.
+
+on:
+  schedule:
+    - cron: "13 3 * * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Solo listar candidatos y totales (no descarga, no convierte, no sube, no borra, no escribe en BD)"
+        type: boolean
+        default: true
+      limit:
+        description: "Máximo de objetos a procesar en esta ejecución (0 = sin límite)"
+        type: number
+        default: 0
+      kinds:
+        description: "Qué optimizar"
+        type: choice
+        options:
+          - all
+          - photos
+          - videos
+        default: all
+
+permissions:
+  contents: read
+
+concurrency:
+  group: media-pipeline
+  cancel-in-progress: false
+
+jobs:
+  optimize:
+    name: Optimizar adjuntos
+    if: ${{ github.event_name == 'workflow_dispatch' || vars.MEDIA_OPTIMIZE_SCHEDULE_ENABLED == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    steps:
+      # ImageMagick para las fotos: libjpeg real (progresivo, 4:2:0), -auto-orient y
+      # -strip fiables, y viene en la imagen de ubuntu-latest. ffmpeg/ffprobe para los
+      # vídeos. awscli v2 y jq ya están en la imagen; psql se instala si falta.
+      - name: Instalar herramientas
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg imagemagick jq postgresql-client
+          aws --version
+          ffmpeg -version | head -1
+          ffprobe -version | head -1
+          (magick -version 2>/dev/null || convert -version) | head -1
+          jq --version
+          psql --version
+
+      - name: Optimizar adjuntos
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_MEDIA_RW_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_MEDIA_RW_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+          AWS_REQUEST_CHECKSUM_CALCULATION: when_required
+          AWS_RESPONSE_CHECKSUM_VALIDATION: when_required
+          R2_BACKUP_ENDPOINT: ${{ secrets.R2_BACKUP_ENDPOINT }}
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          MEDIA_BUCKET: sleepingbcn-manteniment
+          # En ejecuciones programadas no existen inputs: se fuerza dry_run=false,
+          # limit=0 y kinds=all (la ejecución real).
+          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || 'false' }}
+          LIMIT: ${{ github.event_name == 'workflow_dispatch' && inputs.limit || '0' }}
+          KINDS: ${{ github.event_name == 'workflow_dispatch' && inputs.kinds || 'all' }}
+        run: |
+          set -euo pipefail
+          mkdir -p "${RUNNER_TEMP}/media-optimize"
+          SCRIPT="${RUNNER_TEMP}/media-optimize.sh"
+          cat > "$SCRIPT" <<'MEDIA_OPTIMIZE_SCRIPT'
+          #!/usr/bin/env bash
+          set -euo pipefail
+
+          BUCKET="${MEDIA_BUCKET:?}"
+          EP="${R2_BACKUP_ENDPOINT:?}"
+          RUN_DIR="${RUNNER_TEMP:?}/media-optimize"
+          KEY_RE='^manteniment/[0-9]+/[^/[:space:]]+$'
+
+          s3api() { aws s3api --endpoint-url "$EP" "$@"; }
+
+          lower() { printf '%s' "$1" | tr '[:upper:]' '[:lower:]'; }
+
+          # Nunca se toca nada fuera de manteniment/<id>/<fichero>.
+          assert_key() {
+            if ! [[ "$1" =~ $KEY_RE ]]; then
+              echo "Clave fuera del patrón permitido: $1" >&2
+              return 1
+            fi
+          }
+
+          ext_of() {
+            local f="${1##*/}"
+            if [[ "$f" == *.* ]]; then lower "${f##*.}"; else echo ""; fi
+          }
+
+          kind_of() {
+            case "$(ext_of "$1")" in
+              jpg|jpeg|png|webp) echo photo ;;
+              heic|heif) echo heic ;;
+              mp4|mov|m4v|webm|3gp) echo video ;;
+              m4a|pdf|doc|docx|mp3|aac|wav|ogg|opus|txt|csv|xls|xlsx) echo ignore ;;
+              *) echo unknown ;;
+            esac
+          }
+
+          # Filas de manteniment_adjunts que apuntan a la clave (solo lectura).
+          db_count() {
+            psql "$SUPABASE_DB_URL" -X -q -At -v ON_ERROR_STOP=1 -v k="$1" <<'SQL'
+          select count(*) from public.manteniment_adjunts where url = :'k';
+          SQL
+          }
+
+          # absent | present | present-optimized
+          key_state() {
+            local out
+            if out="$(s3api head-object --bucket "$BUCKET" --key "$1" --query 'Metadata.optimized' --output text 2>&1)"; then
+              if [ "$out" = "1" ]; then echo present-optimized; else echo present; fi
+            elif [[ "$out" == *"404"* || "$out" == *"Not Found"* ]]; then
+              echo absent
+            else
+              echo "head-object ha fallado: $out" >&2
+              return 1
+            fi
+          }
+
+          object_size() {
+            s3api head-object --bucket "$BUCKET" --key "$1" --query 'ContentLength' --output text
+          }
+
+          # Lista "clave<TAB>tamaño" de todo manteniment/ (el CLI pagina solo).
+          list_all() {
+            s3api list-objects-v2 --bucket "$BUCKET" --prefix manteniment/ \
+              --query 'Contents[].[Key,Size]' --output text | awk -F'\t' 'NF==2'
+          }
+
+          totals() { awk -F'\t' '{n++; s+=$2} END{printf "%d %d\n", n+0, s+0}' "$1"; }
+
+          # ---------------------------------------------------------------- conversión
+          if command -v magick >/dev/null 2>&1; then
+            CONVERT=(magick)
+            IDENTIFY=(magick identify)
+          else
+            CONVERT=(convert)
+            IDENTIFY=(identify)
+          fi
+
+          # Foto -> JPEG: orientación EXIF aplicada, lado mayor <= 1600 (sin ampliar),
+          # sin metadatos, calidad 75, 4:2:0, progresivo. Transparencias sobre blanco.
+          convert_photo() {
+            local in="$1" out="$2"
+            "${CONVERT[@]}" "${in}[0]" -auto-orient -background white -alpha remove -alpha off \
+              -strip -resize '1600x1600>' -sampling-factor 4:2:0 -interlace Plane -quality 75 "$out"
+          }
+
+          # Vídeo -> MP4 H.264 <= 720 px de alto (sin ampliar, ancho par), CRF 28,
+          # veryfast, yuv420p, AAC 96k (o sin audio), faststart. ffmpeg aplica la
+          # rotación (autorotate) antes del filtro, así que "ih" es el alto real.
+          convert_video() {
+            local in="$1" out="$2"
+            timeout 25m ffmpeg -nostdin -hide_banner -loglevel error -y -i "$in" \
+              -map 0:v:0 -map '0:a:0?' -sn -dn -map_metadata -1 \
+              -vf "scale=-2:'min(720,ih)'" \
+              -c:v libx264 -preset veryfast -crf 28 -pix_fmt yuv420p \
+              -c:a aac -b:a 96k -movflags +faststart "$out"
+          }
+
+          content_type_for() {
+            case "$(ext_of "$1")" in
+              jpg|jpeg) echo image/jpeg ;;
+              png) echo image/png ;;
+              webp) echo image/webp ;;
+              mp4|m4v) echo video/mp4 ;;
+              mov) echo video/quicktime ;;
+              webm) echo video/webm ;;
+              3gp) echo video/3gpp ;;
+              *) echo application/octet-stream ;;
+            esac
+          }
+
+          # "Mantener el original y solo marcarlo": copy-object sobre sí mismo.
+          mark_only() {
+            local key="$1" ct
+            assert_key "$key"
+            ct="$(s3api head-object --bucket "$BUCKET" --key "$key" --query 'ContentType' --output text)"
+            if [ -z "$ct" ] || [ "$ct" = "None" ]; then ct="$(content_type_for "$key")"; fi
+            s3api copy-object --bucket "$BUCKET" --key "$key" --copy-source "${BUCKET}/${key}" \
+              --metadata-directive REPLACE --metadata optimized=1 --content-type "$ct" >/dev/null
+          }
+
+          # Cambia la clave en BD (transacción, filas afectadas == filas encontradas).
+          db_rekey() {
+            local old="$1" new="$2" expected="$3" result
+            result="$(psql "$SUPABASE_DB_URL" -X -q -At -v ON_ERROR_STOP=1 \
+              -v old="$old" -v new="$new" -v expected="$expected" <<'SQL'
+          begin;
+          with u as (update public.manteniment_adjunts set url = :'new' where url = :'old' returning 1)
+          select count(*) as n from u \gset
+          select (:n = :expected) as ok \gset
+          \if :ok
+          commit;
+          \echo UPDATED_OK
+          \else
+          rollback;
+          \echo UPDATED_MISMATCH
+          \endif
+          SQL
+            )"
+            [[ "$result" == *UPDATED_OK* ]]
+          }
+
+          # Códigos de salida de "one": 0 reemplazado, 10 solo marcado, 11 huérfano,
+          # cualquier otro = fallo. Nunca se imprimen claves aquí (las imprime main
+          # solo en los fallos).
+          one() {
+            local kind="$1" key="$2" size="$3"
+            assert_key "$key"
+
+            local tmp
+            tmp="$(mktemp -d "${RUN_DIR}/obj.XXXXXX")"
+            trap 'rm -rf "$tmp"' EXIT
+
+            local file="${key##*/}" prefix="${key%/*}" stem ext out_ext out_ct same
+            ext="$(ext_of "$key")"
+            if [[ "$file" == *.* ]]; then stem="${file%.*}"; else stem="$file"; fi
+
+            if [ "$kind" = photo ]; then
+              out_ext=jpg; out_ct=image/jpeg
+              if [ "$ext" = jpg ] || [ "$ext" = jpeg ]; then same=1; else same=0; fi
+            else
+              out_ext=mp4; out_ct=video/mp4
+              if [ "$ext" = mp4 ]; then same=1; else same=0; fi
+            fi
+            local newkey="$key"
+            if [ "$same" = 0 ]; then newkey="${prefix}/${stem}.${out_ext}"; fi
+            assert_key "$newkey"
+
+            # Huérfano (0 filas): no se toca (también protege una subida en curso).
+            local rows
+            rows="$(db_count "$key")"
+            if [ "$rows" -lt 1 ]; then echo "huérfano: omitido"; return 11; fi
+
+            # Reintento tras una caída entre el PUT y la BD: el nuevo objeto ya existe y
+            # está marcado -> se reutiliza sin volver a convertir.
+            local reuse=0
+            if [ "$newkey" != "$key" ]; then
+              case "$(key_state "$newkey")" in
+                present-optimized) reuse=1 ;;
+                present) echo "la clave destino ya existe sin marcar" >&2; return 1 ;;
+                absent) ;;
+              esac
+            fi
+
+            local in="$tmp/in" out="$tmp/out" out_size=0
+            if [ "$reuse" = 0 ]; then
+              s3api get-object --bucket "$BUCKET" --key "$key" "$in" >/dev/null
+              local in_size
+              in_size="$(stat -c %s "$in")"
+              if [ "$in_size" -le 0 ]; then echo "original vacío" >&2; return 1; fi
+
+              if [ "$kind" = photo ]; then
+                local w h
+                read -r w h < <("${IDENTIFY[@]}" -format '%w %h' "${in}[0]")
+                convert_photo "$in" "${out}.jpg"
+                out="${out}.jpg"
+                [ -s "$out" ] || { echo "salida vacía" >&2; return 1; }
+                "${CONVERT[@]}" "$out" null:            # decodificación completa
+                local w2 h2
+                read -r w2 h2 < <("${IDENTIFY[@]}" -format '%w %h' "$out")
+                awk -v w="$w" -v h="$h" -v w2="$w2" -v h2="$h2" 'BEGIN{
+                  li=(w>h)?w:h; si=(w>h)?h:w; lo=(w2>h2)?w2:h2; so=(w2>h2)?h2:w2;
+                  el=(li>1600)?1600:li; d=lo-el; if(d<0)d=-d;
+                  if (d>1) exit 1;
+                  r=(so*li-si*lo)/(si*lo); if(r<0)r=-r; if (r>0.02) exit 1; exit 0 }' \
+                  || { echo "dimensiones inesperadas" >&2; return 1; }
+                out_size="$(stat -c %s "$out")"
+                echo "foto: ${in_size} -> ${out_size} bytes (ratio $(awk -v a="$out_size" -v b="$in_size" 'BEGIN{printf "%.2f", a/b}'))"
+                if ! (( out_size * 10 <= in_size * 9 )); then
+                  mark_only "$key"
+                  echo "$kind $in_size $in_size" >> "$RUN_DIR/bytes.tsv"
+                  return 10
+                fi
+              else
+                local vinfo vcodec vw vh din
+                vinfo="$(ffprobe -v error -select_streams v:0 -show_entries stream=codec_name,width,height -of csv=p=0 "$in")" \
+                  || { echo "ffprobe no puede leer el original" >&2; return 1; }
+                IFS=, read -r vcodec vw vh <<<"$vinfo"
+                [ -n "${vcodec:-}" ] || { echo "sin pista de vídeo" >&2; return 1; }
+                din="$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$in")"
+                [[ "$din" =~ ^[0-9]+(\.[0-9]+)?$ ]] || { echo "duración ilegible" >&2; return 1; }
+
+                out="${out}.mp4"
+                convert_video "$in" "$out"
+                [ -s "$out" ] || { echo "salida vacía" >&2; return 1; }
+                local oinfo ocodec ow oh dout
+                oinfo="$(ffprobe -v error -select_streams v:0 -show_entries stream=codec_name,width,height -of csv=p=0 "$out")" \
+                  || { echo "ffprobe no puede leer la salida" >&2; return 1; }
+                IFS=, read -r ocodec ow oh <<<"$oinfo"
+                if [ "$ocodec" != h264 ] || [ "$oh" -gt 720 ]; then echo "códec/alto de salida inesperado" >&2; return 1; fi
+                dout="$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$out")"
+                [[ "$dout" =~ ^[0-9]+(\.[0-9]+)?$ ]] || { echo "duración de salida ilegible" >&2; return 1; }
+                awk -v a="$din" -v b="$dout" 'BEGIN{d=a-b; if(d<0)d=-d; t=a*0.02; if(t<1)t=1; exit !(d<=t)}' \
+                  || { echo "la duración difiere demasiado" >&2; return 1; }
+                out_size="$(stat -c %s "$out")"
+                echo "vídeo: ${vcodec} ${vw}x${vh} ${in_size} -> ${ocodec} ${ow}x${oh} ${out_size} bytes (ratio $(awk -v a="$out_size" -v b="$in_size" 'BEGIN{printf "%.2f", a/b}'))"
+                # Un MP4/H.264 que no encoge >=10% se deja como está; cualquier otro
+                # formato (mov, HEVC...) se convierte siempre por compatibilidad.
+                if [ "$ext" = mp4 ] && [ "$vcodec" = h264 ] && ! (( out_size * 10 <= in_size * 9 )); then
+                  mark_only "$key"
+                  echo "$kind $in_size $in_size" >> "$RUN_DIR/bytes.tsv"
+                  return 10
+                fi
+              fi
+
+              # (a) subir el nuevo contenido (PUT atómico) y confirmar el tamaño.
+              assert_key "$newkey"
+              s3api put-object --bucket "$BUCKET" --key "$newkey" --body "$out" \
+                --content-type "$out_ct" --metadata optimized=1 >/dev/null
+              local remote
+              remote="$(object_size "$newkey")"
+              [ "$remote" = "$out_size" ] || { echo "el tamaño remoto no coincide tras el PUT" >&2; return 1; }
+            else
+              local in_size
+              in_size="$size"
+              out_size="$(object_size "$newkey")"
+              [ "$out_size" -gt 0 ] || { echo "objeto reutilizado vacío" >&2; return 1; }
+            fi
+
+            # (b) clave nueva: actualizar la BD (todas las filas) y (c) borrar el original.
+            local deleted=0
+            if [ "$newkey" != "$key" ]; then
+              rows="$(db_count "$key")"
+              if [ "$rows" -lt 1 ]; then echo "huérfano tras subir: no se actualiza ni se borra nada" >&2; return 11; fi
+              db_rekey "$key" "$newkey" "$rows" || { echo "la actualización de BD no coincide; revertida" >&2; return 1; }
+              assert_key "$key"
+              if s3api delete-object --bucket "$BUCKET" --key "$key" >/dev/null; then
+                deleted=1
+              else
+                echo "::warning::no se ha podido borrar el original (queda como sobrante)"
+              fi
+            fi
+
+            echo "$kind $in_size $out_size" >> "$RUN_DIR/bytes.tsv"
+            if [ "$deleted" = 1 ]; then echo x >> "$RUN_DIR/deleted.log"; fi
+            return 0
+          }
+
+          # ------------------------------------------------------------------- main
+          main() {
+            : "${DRY_RUN:?}" "${LIMIT:?}" "${KINDS:?}"
+            [[ "$LIMIT" =~ ^[0-9]+$ ]] || LIMIT="${LIMIT%%.*}"
+            : > "$RUN_DIR/candidates.tsv"; : > "$RUN_DIR/bytes.tsv"
+            : > "$RUN_DIR/deleted.log"; : > "$RUN_DIR/failed.txt"; : > "$RUN_DIR/orphans.txt"
+
+            echo "Modo: dry_run=${DRY_RUN} limit=${LIMIT} kinds=${KINDS}"
+            list_all > "$RUN_DIR/list_before.tsv"
+            local before_n before_b
+            read -r before_n before_b < <(totals "$RUN_DIR/list_before.tsv")
+            echo "Bucket antes: ${before_n} objetos, ${before_b} bytes"
+
+            local already=0 orphans=0 heic=0 cand_photo=0 cand_video=0 cand_bytes=0
+            local kind key size state ct
+            while IFS=$'\t' read -r -u 3 key size; do
+              [[ "$key" == manteniment/* ]] || continue
+              [[ "$key" == */ ]] && continue
+              kind="$(kind_of "$key")"
+              case "$kind" in
+                heic) heic=$((heic + 1)); continue ;;
+                ignore) continue ;;
+                unknown)
+                  ct="$(s3api head-object --bucket "$BUCKET" --key "$key" --query 'ContentType' --output text)"
+                  if [[ "$ct" == video/* ]]; then kind=video; else continue; fi ;;
+              esac
+              if [ "$KINDS" = photos ] && [ "$kind" != photo ]; then continue; fi
+              if [ "$KINDS" = videos ] && [ "$kind" != video ]; then continue; fi
+
+              state="$(key_state "$key")"
+              if [ "$state" = present-optimized ]; then already=$((already + 1)); continue; fi
+              if [ "$(db_count "$key")" -lt 1 ]; then
+                orphans=$((orphans + 1)); echo "$key" >> "$RUN_DIR/orphans.txt"; continue
+              fi
+              printf '%s\t%s\t%s\n' "$kind" "$key" "$size" >> "$RUN_DIR/candidates.tsv"
+              cand_bytes=$((cand_bytes + size))
+              if [ "$kind" = photo ]; then cand_photo=$((cand_photo + 1)); else cand_video=$((cand_video + 1)); fi
+            done 3< "$RUN_DIR/list_before.tsv"
+
+            echo "Candidatos: ${cand_photo} fotos, ${cand_video} vídeos (${cand_bytes} bytes); ya optimizados: ${already}; huérfanos: ${orphans}; HEIC/HEIF ignorados: ${heic}"
+
+            if [ "$DRY_RUN" = true ]; then
+              {
+                echo "### Media optimize — DRY RUN (no se ha modificado nada)"
+                echo "| Concepto | Valor |"
+                echo "|---|---:|"
+                echo "| Fotos candidatas | ${cand_photo} |"
+                echo "| Vídeos candidatos | ${cand_video} |"
+                echo "| Bytes de candidatos | ${cand_bytes} |"
+                echo "| Ya optimizados | ${already} |"
+                echo "| Huérfanos (0 filas en BD) | ${orphans} |"
+                echo "| HEIC/HEIF ignorados | ${heic} |"
+                echo "| Bucket: objetos / bytes | ${before_n} / ${before_b} |"
+              } >> "$GITHUB_STEP_SUMMARY"
+              return 0
+            fi
+
+            local total replaced=0 marked=0 failed=0 orphans2=0 done_n=0 i=0 rc
+            total="$(wc -l < "$RUN_DIR/candidates.tsv")"
+            while IFS=$'\t' read -r -u 3 kind key size; do
+              if [ "$LIMIT" -gt 0 ] && [ "$done_n" -ge "$LIMIT" ]; then
+                echo "Límite de ${LIMIT} objetos alcanzado."
+                break
+              fi
+              i=$((i + 1))
+              echo "[${i}/${total}] ${kind}, ${size} bytes"
+              rc=0
+              bash "$0" one "$kind" "$key" "$size" </dev/null || rc=$?
+              case "$rc" in
+                0) replaced=$((replaced + 1)); done_n=$((done_n + 1)) ;;
+                10) marked=$((marked + 1)); done_n=$((done_n + 1)) ;;
+                11) orphans2=$((orphans2 + 1)); echo "$key" >> "$RUN_DIR/orphans.txt" ;;
+                *) failed=$((failed + 1)); echo "$key" >> "$RUN_DIR/failed.txt"
+                   echo "::error::Fallo al procesar un objeto (código ${rc}): ${key}" ;;
+              esac
+            done 3< "$RUN_DIR/candidates.tsv"
+
+            list_all > "$RUN_DIR/list_after.tsv"
+            local after_n after_b deleted
+            read -r after_n after_b < <(totals "$RUN_DIR/list_after.tsv")
+            deleted="$(wc -l < "$RUN_DIR/deleted.log")"
+
+            local pb pa vb va
+            read -r pb pa < <(awk '$1=="photo"{b+=$2;a+=$3} END{printf "%d %d\n", b+0, a+0}' "$RUN_DIR/bytes.tsv")
+            read -r vb va < <(awk '$1=="video"{b+=$2;a+=$3} END{printf "%d %d\n", b+0, a+0}' "$RUN_DIR/bytes.tsv")
+
+            echo "Bucket después: ${after_n} objetos, ${after_b} bytes"
+            {
+              echo "### Media optimize"
+              echo "| Concepto | Valor |"
+              echo "|---|---:|"
+              echo "| Reemplazados | ${replaced} |"
+              echo "| Original conservado (solo marcado) | ${marked} |"
+              echo "| Fallidos | ${failed} |"
+              echo "| Huérfanos (omitidos) | $((orphans + orphans2)) |"
+              echo "| Originales borrados | ${deleted} |"
+              echo "| Fotos: bytes antes / después | ${pb} / ${pa} |"
+              echo "| Vídeos: bytes antes / después | ${vb} / ${va} |"
+              echo "| Bucket antes: objetos / bytes | ${before_n} / ${before_b} |"
+              echo "| Bucket después: objetos / bytes | ${after_n} / ${after_b} |"
+            } >> "$GITHUB_STEP_SUMMARY"
+
+            if [ -s "$RUN_DIR/failed.txt" ]; then
+              echo "Claves con fallo:"; cat "$RUN_DIR/failed.txt"
+              { echo; echo "Claves con fallo:"; echo '```'; cat "$RUN_DIR/failed.txt"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+            fi
+            if [ -s "$RUN_DIR/orphans.txt" ]; then
+              echo "Claves huérfanas (sin fila en manteniment_adjunts):"; cat "$RUN_DIR/orphans.txt"
+            fi
+            if [ "$failed" -gt 0 ]; then
+              echo "::error::${failed} objeto(s) han fallado; el resto se ha procesado."
+              return 1
+            fi
+          }
+
+          if [ "${BASH_SOURCE[0]}" = "$0" ]; then
+            case "${1:-main}" in
+              main) main ;;
+              one) shift; one "$@" ;;
+              *) echo "uso: $0 [main|one]" >&2; exit 2 ;;
+            esac
+          fi
+          MEDIA_OPTIMIZE_SCRIPT
+          bash "$SCRIPT" main
