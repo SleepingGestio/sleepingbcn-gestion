@@ -1,0 +1,202 @@
+# Daily logical backup of the Supabase Postgres database -> private Cloudflare R2 bucket.
+#
+# What it does: pg_dump (custom format, compressed) of schemas public, pricing and auth,
+# validates the dump, writes a small manifest (no personal data) and uploads both to the
+# R2 bucket "sleepingbcn-backups-bd". Supabase Free makes NO backups: this is the only copy.
+# The dump contains personal data: it is never uploaded as a GitHub artifact nor printed.
+#
+# Required repository secrets:
+#   SUPABASE_DB_URL              Supabase Session pooler URI (IPv4, user "postgres.<ref>")
+#   R2_BACKUP_ENDPOINT           https://<account-id>.r2.cloudflarestorage.com (no bucket path)
+#   R2_BACKUP_ACCESS_KEY_ID      R2 token scoped to the bucket (Object Read & Write)
+#   R2_BACKUP_SECRET_ACCESS_KEY
+#
+# Retention: handled by an R2 lifecycle rule configured in the Cloudflare dashboard,
+# NOT in this workflow (this workflow never deletes anything).
+#
+# Restore hint: pg_restore --no-owner --dbname "<target-url>" dump.pgdump
+
+name: DB backup (Supabase to R2)
+
+on:
+  schedule:
+    - cron: "17 2 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: db-backup
+  cancel-in-progress: false
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      R2_BUCKET: sleepingbcn-backups-bd
+    steps:
+      - name: Detect server version and install matching PostgreSQL client
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          set -euo pipefail
+
+          if ! command -v psql >/dev/null 2>&1; then
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq postgresql-client
+          fi
+
+          VERSION_NUM="$(psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -Atc 'show server_version_num')"
+          PG_MAJOR=$(( VERSION_NUM / 10000 ))
+          echo "Server major version: ${PG_MAJOR}"
+
+          sudo install -d -m 0755 /usr/share/keyrings
+          curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc \
+            | sudo gpg --dearmor --yes -o /usr/share/keyrings/pgdg.gpg
+          echo "deb [signed-by=/usr/share/keyrings/pgdg.gpg] https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" \
+            | sudo tee /etc/apt/sources.list.d/pgdg.list >/dev/null
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq "postgresql-client-${PG_MAJOR}"
+
+          PGBIN="/usr/lib/postgresql/${PG_MAJOR}/bin"
+          "${PGBIN}/pg_dump" --version
+          {
+            echo "PG_MAJOR=${PG_MAJOR}"
+            echo "PGBIN=${PGBIN}"
+            echo "SERVER_VERSION_NUM=${VERSION_NUM}"
+          } >> "$GITHUB_ENV"
+
+      - name: Dump database
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          set -euo pipefail
+
+          EXISTING="$("${PGBIN}/psql" "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -Atc \
+            "select schema_name from information_schema.schemata where schema_name in ('public','pricing','auth') order by schema_name")"
+
+          if ! printf '%s\n' "$EXISTING" | grep -qx 'public'; then
+            echo "ERROR: schema public not found" >&2
+            exit 1
+          fi
+
+          SCHEMA_ARGS=()
+          for s in public pricing auth; do
+            if printf '%s\n' "$EXISTING" | grep -qx "$s"; then
+              SCHEMA_ARGS+=("--schema=$s")
+            else
+              echo "Schema $s not present, skipping"
+            fi
+          done
+          echo "Dumping with: ${SCHEMA_ARGS[*]}"
+
+          "${PGBIN}/pg_dump" "$SUPABASE_DB_URL" \
+            --format=custom --compress=9 --no-owner --no-privileges \
+            "${SCHEMA_ARGS[@]}" \
+            --file=dump.pgdump
+
+      - name: Validate dump
+        run: |
+          set -euo pipefail
+
+          test -f dump.pgdump
+          SIZE="$(stat -c%s dump.pgdump)"
+          echo "Dump size: ${SIZE} bytes"
+          if [ "$SIZE" -le 10240 ]; then
+            echo "ERROR: dump is not larger than 10 KB" >&2
+            exit 1
+          fi
+
+          "${PGBIN}/pg_restore" --list dump.pgdump > restore-list.txt
+          if ! grep -q 'reservas_kb' restore-list.txt; then
+            echo "ERROR: table reservas_kb not found in dump" >&2
+            exit 1
+          fi
+          rm -f restore-list.txt
+
+          SHA256="$(sha256sum dump.pgdump | cut -d' ' -f1)"
+          echo "sha256: ${SHA256}"
+          {
+            echo "DUMP_SIZE=${SIZE}"
+            echo "DUMP_SHA256=${SHA256}"
+          } >> "$GITHUB_ENV"
+
+      - name: Write manifest
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          set -euo pipefail
+
+          TS_ISO="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          TS_NAME="$(date -u +%Y%m%d-%H%M%SZ)"
+          YEAR="$(date -u +%Y)"
+          MONTH="$(date -u +%m)"
+          PGDUMP_VERSION="$("${PGBIN}/pg_dump" --version)"
+          SERVER_VERSION="$("${PGBIN}/psql" "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -Atc 'show server_version')"
+
+          {
+            echo "timestamp_utc: ${TS_ISO}"
+            echo "git_sha: ${GITHUB_SHA}"
+            echo "server_version: ${SERVER_VERSION}"
+            echo "pg_dump_version: ${PGDUMP_VERSION}"
+            echo "dump_size_bytes: ${DUMP_SIZE}"
+            echo "dump_sha256: ${DUMP_SHA256}"
+            echo "row_counts:"
+            for t in reservas_kb reservas_gestio personal limpiezas fichajes partee_registre; do
+              EXISTS="$("${PGBIN}/psql" "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -Atc "select to_regclass('public.${t}') is not null")"
+              if [ "$EXISTS" = "t" ]; then
+                COUNT="$("${PGBIN}/psql" "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -Atc "select count(*) from public.${t}")"
+                echo "  ${t}: ${COUNT}"
+              else
+                echo "  ${t}: (table not found)"
+              fi
+            done
+          } > manifest.txt
+
+          {
+            echo "OBJECT_BASE=daily/${YEAR}/${MONTH}/sleepingbcn-db-${TS_NAME}"
+          } >> "$GITHUB_ENV"
+
+          echo "Manifest written (no personal data):"
+          cat manifest.txt
+
+      - name: Upload to R2 and verify
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_BACKUP_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_BACKUP_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+          AWS_REQUEST_CHECKSUM_CALCULATION: when_required
+          AWS_RESPONSE_CHECKSUM_VALIDATION: when_required
+          R2_BACKUP_ENDPOINT: ${{ secrets.R2_BACKUP_ENDPOINT }}
+        run: |
+          set -euo pipefail
+
+          aws --version
+
+          DUMP_KEY="${OBJECT_BASE}.pgdump"
+          MANIFEST_KEY="${OBJECT_BASE}.manifest.txt"
+
+          aws s3 cp dump.pgdump "s3://${R2_BUCKET}/${DUMP_KEY}" \
+            --endpoint-url "$R2_BACKUP_ENDPOINT" --no-progress
+          aws s3 cp manifest.txt "s3://${R2_BUCKET}/${MANIFEST_KEY}" \
+            --endpoint-url "$R2_BACKUP_ENDPOINT" --no-progress
+
+          REMOTE_SIZE="$(aws s3api head-object \
+            --bucket "$R2_BUCKET" --key "$DUMP_KEY" \
+            --endpoint-url "$R2_BACKUP_ENDPOINT" \
+            --query ContentLength --output text)"
+          LOCAL_SIZE="$(stat -c%s dump.pgdump)"
+
+          if [ "$REMOTE_SIZE" != "$LOCAL_SIZE" ]; then
+            echo "ERROR: size mismatch (remote=${REMOTE_SIZE}, local=${LOCAL_SIZE})" >&2
+            exit 1
+          fi
+          echo "Uploaded ${DUMP_KEY} (${REMOTE_SIZE} bytes) and manifest; size verified."
+
+      - name: Remove local dump
+        if: always()
+        run: |
+          set -euo pipefail
+          rm -f dump.pgdump manifest.txt restore-list.txt
