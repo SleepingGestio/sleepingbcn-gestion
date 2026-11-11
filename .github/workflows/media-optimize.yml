@@ -1,8 +1,8 @@
 name: Media optimize (R2)
 
 # Optimiza (reduce) los adjuntos de mantenimiento del bucket R2 en producción:
-#   - vídeos -> MP4 H.264 con el lado CORTO <= 720 px (1080x1920 -> 720x1280,
-#               1920x1080 -> 1280x720; CRF 28, AAC 96k, faststart)
+#   - vídeos -> política por vídeo (ver "POLÍTICA DE VÍDEO"): remux sin pérdida,
+#               solo marcar, o recodificar a MP4 H.264 con el lado CORTO <= 720 px
 #   - fotos  -> JPEG con lado mayor <= 1600 px, calidad 75, sin metadatos
 # Se ejecuta ANTES de "Media backup (R2 to R2)" (03:13 vs 03:43 UTC) para que el
 # bucket de backup solo reciba las versiones ligeras. Los dos workflows comparten
@@ -34,6 +34,21 @@ name: Media optimize (R2)
 # comas (p. ej. "mov" o "mov,m4v"). Si no está vacío, solo se consideran los
 # objetos cuya extensión esté en la lista (en el dry-run y en las ejecuciones
 # reales, además de "kinds"). Las ejecuciones programadas usan el valor vacío.
+#
+# POLÍTICA DE VÍDEO (se decide con ffprobe sobre el original descargado)
+#   - REMUX (sin pérdida): H.264, lado corto <= 720, bitrate de vídeo <= 2 Mbit/s y
+#     contenedor .mov -> -c:v copy a .mp4 (audio copiado si es AAC, si no AAC 128k),
+#     +faststart, la rotación se conserva.
+#   - SOLO MARCAR: ya es .mp4 H.264, lado corto <= 720 y <= 2 Mbit/s.
+#   - RECODIFICAR en cualquier otro caso (H.264 por encima de los umbrales, HEVC u
+#     otro códec, lado corto > 720): libx264 con los inputs crf (def. 23) y preset
+#     (def. medium), yuv420p, lado corto <= 720 sin ampliar, AAC 128k, +faststart.
+#     Solo se conserva si pesa <= 75% del original (>= 25% menos); si no, un H.264 en
+#     .mov se remuxa y uno ya en .mp4 se marca. HEVC/otros códecs se recodifican
+#     siempre (compatibilidad), aunque el ahorro sea menor.
+#   - Si cambia la extensión de la clave (p. ej. .MOV -> .mp4), la transacción de BD
+#     actualiza también manteniment_adjunts.nom_fitxer (solo vídeos).
+#   - Fotos: sin cambios.
 #
 # PLAN DE DESPLIEGUE
 #   1) Ejecución manual con dry_run=true (solo lista candidatos y totales).
@@ -73,6 +88,19 @@ on:
         description: "Solo estas extensiones, separadas por comas y en minúsculas (p. ej. mov,m4v). Vacío = todas"
         type: string
         default: ""
+      crf:
+        description: "CRF de libx264 para recodificar vídeos (entero 18-32; menor = más calidad)"
+        type: string
+        default: "23"
+      preset:
+        description: "Preset de libx264 para recodificar vídeos"
+        type: choice
+        options:
+          - veryfast
+          - fast
+          - medium
+          - slow
+        default: medium
 
 permissions:
   contents: read
@@ -142,6 +170,8 @@ jobs:
           LIMIT: ${{ github.event_name == 'workflow_dispatch' && inputs.limit || '0' }}
           KINDS: ${{ github.event_name == 'workflow_dispatch' && inputs.kinds || 'all' }}
           ONLY_EXT: ${{ github.event_name == 'workflow_dispatch' && inputs.only_ext || '' }}
+          CRF: ${{ github.event_name == 'workflow_dispatch' && inputs.crf || '23' }}
+          PRESET: ${{ github.event_name == 'workflow_dispatch' && inputs.preset || 'medium' }}
         run: |
           set -euo pipefail
           mkdir -p "${RUNNER_TEMP}/media-optimize"
@@ -231,18 +261,75 @@ jobs:
               -strip -resize '1600x1600>' -sampling-factor 4:2:0 -interlace Plane -quality 75 "$out"
           }
 
-          # Vídeo -> MP4 H.264 con el lado CORTO <= 720 px (sin ampliar, lados pares),
-          # CRF 28, veryfast, yuv420p, AAC 96k (o sin audio), faststart. ffmpeg aplica
-          # la rotación (autorotate) antes del filtro, así que iw/ih son los reales.
-          # Apaisado: alto = min(720, ih), ancho automático par. Vertical/cuadrado:
-          # ancho = min(720, iw), alto automático par.
-          convert_video() {
+          # --- Vídeo ---
+          # Umbral de bitrate de vídeo para "ya está bien" (remux / solo marcar).
+          REMUX_MAX_BPS=2000000
+
+          # ffprobe del original: define V_CODEC V_W V_H V_BR (puede venir vacío) V_DUR
+          # A_CODEC (vacío si no hay audio). Devuelve != 0 si no se puede leer.
+          probe_video() {
+            local f="$1" out k v
+            V_CODEC="" V_W="" V_H="" V_BR="" V_DUR="" A_CODEC=""
+            out="$(ffprobe -v error -select_streams v:0 -show_entries stream=codec_name,width,height,bit_rate -of default=noprint_wrappers=1 "$f")" || return 1
+            while IFS='=' read -r k v; do
+              case "$k" in
+                codec_name) V_CODEC="$v" ;;
+                width) V_W="$v" ;;
+                height) V_H="$v" ;;
+                bit_rate) V_BR="$v" ;;
+              esac
+            done <<<"$out"
+            A_CODEC="$(ffprobe -v error -select_streams a:0 -show_entries stream=codec_name -of default=noprint_wrappers=1:nokey=1 "$f")" || return 1
+            V_DUR="$(ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "$f")" || return 1
+            [ -n "$V_CODEC" ] && [[ "$V_W" =~ ^[0-9]+$ ]] && [[ "$V_H" =~ ^[0-9]+$ ]] \
+              && [[ "$V_DUR" =~ ^[0-9]+(\.[0-9]+)?$ ]] && awk -v d="$V_DUR" 'BEGIN{exit !(d>0)}'
+          }
+
+          # Recodificar: libx264 (CRF y preset de los inputs), lado CORTO <= 720 sin
+          # ampliar (lados pares), yuv420p, AAC 128k, faststart. ffmpeg aplica la rotación
+          # (autorotate) antes del filtro, así que iw/ih son los reales. Apaisado:
+          # alto = min(720, ih), ancho automático par. Vertical/cuadrado: ancho =
+          # min(720, iw), alto automático par.
+          reencode_video() {
             local in="$1" out="$2"
             timeout 25m ffmpeg -nostdin -hide_banner -loglevel error -y -i "$in" \
               -map 0:v:0 -map '0:a:0?' -sn -dn -map_metadata -1 \
               -vf "scale='if(gt(iw,ih),-2,trunc(min(720,iw)/2)*2)':'if(gt(iw,ih),trunc(min(720,ih)/2)*2,-2)'" \
-              -c:v libx264 -preset veryfast -crf 28 -pix_fmt yuv420p \
-              -c:a aac -b:a 96k -movflags +faststart "$out"
+              -c:v libx264 -preset "${PRESET:-medium}" -crf "${CRF:-23}" -pix_fmt yuv420p \
+              -c:a aac -b:a 128k -movflags +faststart "$out"
+          }
+
+          # Remux sin pérdida a .mp4: vídeo copiado (la matriz de rotación se conserva),
+          # audio copiado si es AAC y, si no, AAC 128k. Solo se usa con H.264.
+          remux_video() {
+            local in="$1" out="$2" acodec="$3" audio=()
+            if [ "$acodec" = aac ]; then
+              audio=(-c:a copy)
+            elif [ -n "$acodec" ]; then
+              audio=(-c:a aac -b:a 128k)
+            fi
+            timeout 25m ffmpeg -nostdin -hide_banner -loglevel error -y -i "$in" \
+              -map 0:v:0 -map '0:a:0?' -sn -dn -c:v copy "${audio[@]}" \
+              -movflags +faststart "$out"
+          }
+
+          # Verifica la salida: existe, se lee, códec esperado (y lado corto <= 720 si se
+          # recodificó) y duración dentro de max(1 s, 2%). Define O_CODEC O_W O_H.
+          # Uso: verify_video <salida> <duración original> <reencode|remux> <códec original>
+          verify_video() {
+            local out="$1" din="$2" mode="$3" vcodec="$4"
+            [ -s "$out" ] || { echo "salida vacía" >&2; return 1; }
+            probe_video "$out" || { echo "ffprobe no puede leer la salida" >&2; return 1; }
+            O_CODEC="$V_CODEC"; O_W="$V_W"; O_H="$V_H"
+            if [ "$mode" = reencode ]; then
+              if [ "$O_CODEC" != h264 ] || [ "$(( O_W < O_H ? O_W : O_H ))" -gt 720 ]; then
+                echo "códec/tamaño de salida inesperado" >&2; return 1
+              fi
+            elif [ "$O_CODEC" != "$vcodec" ]; then
+              echo "el remux ha cambiado el códec" >&2; return 1
+            fi
+            awk -v a="$din" -v b="$V_DUR" 'BEGIN{d=a-b; if(d<0)d=-d; t=a*0.02; if(t<1)t=1; exit !(d<=t)}' \
+              || { echo "la duración difiere demasiado" >&2; return 1; }
           }
 
           content_type_for() {
@@ -288,12 +375,21 @@ jobs:
           }
 
           # Cambia la clave en BD (transacción, filas afectadas == filas encontradas).
+          # Con 4º argumento (extensión nueva, solo vídeos) también corrige la extensión
+          # final de nom_fitxer en la MISMA transacción y con la misma aserción de filas.
           db_rekey() {
-            local old="$1" new="$2" expected="$3" result
+            local old="$1" new="$2" expected="$3" ext="${4:-}" result
             result="$(psql "$SUPABASE_DB_URL" -X -q -At -v ON_ERROR_STOP=1 \
-              -v old="$old" -v new="$new" -v expected="$expected" <<'SQL'
+              -v old="$old" -v new="$new" -v expected="$expected" -v ext="$ext" <<'SQL'
           begin;
-          with u as (update public.manteniment_adjunts set url = :'new' where url = :'old' returning 1)
+          with u as (
+            update public.manteniment_adjunts
+               set url = :'new',
+                   nom_fitxer = case when :'ext' <> '' and nom_fitxer is not null
+                                     then regexp_replace(nom_fitxer, '\.[^./]+$', '') || '.' || :'ext'
+                                     else nom_fitxer end
+             where url = :'old'
+            returning 1)
           select count(*) as n from u \gset
           select (:n = :expected) as ok \gset
           \if :ok
@@ -383,35 +479,49 @@ jobs:
                   return 10
                 fi
               else
-                local vinfo vcodec vw vh din
-                vinfo="$(ffprobe -v error -select_streams v:0 -show_entries stream=codec_name,width,height -of csv=p=0 "$in")" \
-                  || { echo "ffprobe no puede leer el original" >&2; return 1; }
-                IFS=, read -r vcodec vw vh <<<"$vinfo"
-                [ -n "${vcodec:-}" ] || { echo "sin pista de vídeo" >&2; return 1; }
-                din="$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$in")"
-                [[ "$din" =~ ^[0-9]+(\.[0-9]+)?$ ]] || { echo "duración ilegible" >&2; return 1; }
+                local vcodec vw vh vbr acodec din short decision low=0 vdesc
+                probe_video "$in" || { echo "ffprobe no puede leer el original" >&2; return 1; }
+                vcodec="$V_CODEC"; vw="$V_W"; vh="$V_H"; acodec="$A_CODEC"; din="$V_DUR"
+                short=$(( vw < vh ? vw : vh ))
+                vbr="$V_BR"
+                if ! [[ "$vbr" =~ ^[0-9]+$ ]]; then
+                  vbr="$(awk -v s="$in_size" -v d="$din" 'BEGIN{printf "%d", s*8/d}')"   # bitrate medio del fichero
+                fi
+                vdesc="source=${vcodec} ${vw}x${vh} ${vbr}bps"
+
+                if [ "$vcodec" = h264 ] && [ "$short" -le 720 ] && [ "$vbr" -le "$REMUX_MAX_BPS" ]; then low=1; fi
+                if [ "$low" = 1 ] && [ "$ext" = mp4 ]; then
+                  decision=mark
+                elif [ "$low" = 1 ] && [ "$ext" = mov ]; then
+                  decision=remux
+                else
+                  decision=reencode
+                fi
 
                 out="${out}.mp4"
-                convert_video "$in" "$out"
-                [ -s "$out" ] || { echo "salida vacía" >&2; return 1; }
-                local oinfo ocodec ow oh dout
-                oinfo="$(ffprobe -v error -select_streams v:0 -show_entries stream=codec_name,width,height -of csv=p=0 "$out")" \
-                  || { echo "ffprobe no puede leer la salida" >&2; return 1; }
-                IFS=, read -r ocodec ow oh <<<"$oinfo"
-                if [ "$ocodec" != h264 ] || [ "$(( ow < oh ? ow : oh ))" -gt 720 ]; then echo "códec/tamaño de salida inesperado" >&2; return 1; fi
-                dout="$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$out")"
-                [[ "$dout" =~ ^[0-9]+(\.[0-9]+)?$ ]] || { echo "duración de salida ilegible" >&2; return 1; }
-                awk -v a="$din" -v b="$dout" 'BEGIN{d=a-b; if(d<0)d=-d; t=a*0.02; if(t<1)t=1; exit !(d<=t)}' \
-                  || { echo "la duración difiere demasiado" >&2; return 1; }
-                out_size="$(stat -c %s "$out")"
-                echo "vídeo: ${vcodec} ${vw}x${vh} ${in_size} -> ${ocodec} ${ow}x${oh} ${out_size} bytes (ratio $(awk -v a="$out_size" -v b="$in_size" 'BEGIN{printf "%.2f", a/b}'))"
-                # Un MP4/H.264 que no encoge >=10% se deja como está; cualquier otro
-                # formato (mov, HEVC...) se convierte siempre por compatibilidad.
-                if [ "$ext" = mp4 ] && [ "$vcodec" = h264 ] && ! (( out_size * 10 <= in_size * 9 )); then
+                if [ "$decision" = reencode ]; then
+                  reencode_video "$in" "$out"
+                  verify_video "$out" "$din" reencode "$vcodec" || return 1
+                  out_size="$(stat -c %s "$out")"
+                  # Solo se conserva si pesa <= 75% del original. HEVC/otros códecs se
+                  # recodifican siempre (compatibilidad); un H.264 que no encoge vuelve
+                  # a remux (.mov u otro contenedor) o se marca (.mp4).
+                  if [ "$vcodec" = h264 ] && ! (( out_size * 100 <= in_size * 75 )); then
+                    if [ "$ext" = mp4 ]; then decision=mark; else decision=remux; fi
+                  fi
+                fi
+                if [ "$decision" = remux ]; then
+                  remux_video "$in" "$out" "$acodec"
+                  verify_video "$out" "$din" remux "$vcodec" || return 1
+                  out_size="$(stat -c %s "$out")"
+                fi
+                if [ "$decision" = mark ]; then
+                  echo "decision=mark ${vdesc} -> ${in_size} bytes (ratio 1.00)"
                   mark_only "$key"
                   echo "$kind $in_size $in_size" >> "$RUN_DIR/bytes.tsv"
                   return 10
                 fi
+                echo "decision=${decision} ${vdesc} -> ${out_size} bytes (ratio $(awk -v a="$out_size" -v b="$in_size" 'BEGIN{printf "%.2f", a/b}'))"
               fi
 
               # (a) subir el nuevo contenido (PUT atómico) y confirmar el tamaño.
@@ -433,7 +543,9 @@ jobs:
             if [ "$newkey" != "$key" ]; then
               rows="$(db_count "$key")"
               if [ "$rows" -lt 1 ]; then echo "huérfano tras subir: no se actualiza ni se borra nada" >&2; return 11; fi
-              db_rekey "$key" "$newkey" "$rows" || { echo "la actualización de BD no coincide; revertida" >&2; return 1; }
+              local chg_ext=""
+              if [ "$kind" = video ]; then chg_ext="$out_ext"; fi
+              db_rekey "$key" "$newkey" "$rows" "$chg_ext" || { echo "la actualización de BD no coincide; revertida" >&2; return 1; }
               assert_key "$key"
               if s3api delete-object --bucket "$BUCKET" --key "$key" >/dev/null; then
                 deleted=1
@@ -455,11 +567,19 @@ jobs:
             only_ext="${only_ext//[[:space:]]/}"
             if [ -n "$only_ext" ]; then only_ext=",${only_ext},"; fi
             [[ "$LIMIT" =~ ^[0-9]+$ ]] || LIMIT="${LIMIT%%.*}"
+            if ! [[ "${CRF:-}" =~ ^[0-9]+$ ]] || [ "$CRF" -lt 18 ] || [ "$CRF" -gt 32 ]; then
+              echo "::error::crf debe ser un entero entre 18 y 32 (recibido: '${CRF:-}')"
+              return 1
+            fi
+            case "${PRESET:-}" in
+              veryfast|fast|medium|slow) ;;
+              *) echo "::error::preset no válido: '${PRESET:-}'"; return 1 ;;
+            esac
             : > "$RUN_DIR/candidates.tsv"; : > "$RUN_DIR/bytes.tsv"
             : > "$RUN_DIR/deleted.log"; : > "$RUN_DIR/failed.txt"; : > "$RUN_DIR/orphans.txt"
 
             local T0=$SECONDS
-            echo "Modo: dry_run=${DRY_RUN} limit=${LIMIT} kinds=${KINDS} only_ext=${ONLY_EXT:-}"
+            echo "Modo: dry_run=${DRY_RUN} limit=${LIMIT} kinds=${KINDS} only_ext=${ONLY_EXT:-} crf=${CRF} preset=${PRESET}"
             list_all > "$RUN_DIR/list_before.tsv"
             local before_n before_b
             read -r before_n before_b < <(totals "$RUN_DIR/list_before.tsv")
