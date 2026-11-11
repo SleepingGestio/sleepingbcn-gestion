@@ -136,6 +136,7 @@ jobs:
           set -euo pipefail
           export DEBIAN_FRONTEND=noninteractive
           pkgs=()
+          APT_OPTS=(-o Acquire::Retries=3 -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20)
           command -v aws >/dev/null 2>&1 || { echo "::error::Falta awscli en el runner y no se instala por apt."; exit 1; }
           { command -v ffmpeg >/dev/null 2>&1 && command -v ffprobe >/dev/null 2>&1; } || pkgs+=(ffmpeg)
           { command -v magick >/dev/null 2>&1 || command -v convert >/dev/null 2>&1; } || pkgs+=(imagemagick)
@@ -144,7 +145,6 @@ jobs:
 
           if [ "${#pkgs[@]}" -gt 0 ]; then
             echo "Instalando con apt: ${pkgs[*]}"
-            APT_OPTS=(-o Acquire::Retries=3 -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20)
             if ! sudo apt-get update -qq "${APT_OPTS[@]}"; then
               echo "::warning::apt-get update ha fallado; se intenta instalar con los índices actuales."
             fi
@@ -154,6 +154,13 @@ jobs:
             fi
           else
             echo "Todas las herramientas ya están instaladas; se omite apt."
+          fi
+
+          # Perfil sRGB (para convertir fotos Display-P3 antes de quitar los metadatos).
+          # No es crítico: si no se puede instalar, las fotos se convierten sin perfil.
+          if ! dpkg -s icc-profiles-free >/dev/null 2>&1; then
+            sudo apt-get install -y -qq "${APT_OPTS[@]}" icc-profiles-free \
+              || echo "::warning::No se ha podido instalar icc-profiles-free (perfil sRGB)."
           fi
 
           aws --version
@@ -264,11 +271,50 @@ jobs:
             IDENTIFY=(identify)
           fi
 
-          # Foto -> JPEG: orientación EXIF aplicada, lado mayor <= 1600 (sin ampliar),
-          # sin metadatos, calidad 75, 4:2:0, progresivo. Transparencias sobre blanco.
+          # Perfil sRGB para convertir fotos con otro perfil (p. ej. Display-P3 del iPhone)
+          # ANTES de -strip; sin esto, al quitar el perfil los colores salen apagados.
+          # Solo se acepta un perfil ICC v2 de monitor RGB y pequeño (matriz/TRC, el sRGB
+          # IEC61966-2.1 clásico): los de la familia v4 "perceptual" o con tablas LUT
+          # (p. ej. el sRGB.icc que trae ImageMagick) DISTORSIONAN los colores. Cabecera
+          # ICC: bytes 8-11 versión (02..), 12-15 clase (mntr), 16-19 espacio (RGB ).
+          icc_ok() {
+            local f="$1" hdr
+            [ -f "$f" ] && [ "$(stat -c %s "$f")" -le 20000 ] || return 1
+            hdr="$(od -An -tx1 -j8 -N12 "$f" | tr -d ' \n')"
+            [[ "$hdr" == 02??????6d6e747252474220 ]]
+          }
+          pick_srgb_icc() {
+            local f
+            while IFS= read -r f; do
+              if icc_ok "$f"; then echo "$f"; return 0; fi
+            done < <(find /usr/share/color/icc /usr/share/ghostscript /usr/share/ImageMagick* /etc/ImageMagick* \
+              -iname 'srgb*.ic[cm]' 2>/dev/null | sort)
+            return 0
+          }
+          SRGB_ICC="$(pick_srgb_icc)"
+
+          # Dimensiones "ancho alto" de una imagen. -format no emite salto de línea final,
+          # y "read" devuelve 1 en EOF sin newline (con set -e mataba el proceso en silencio),
+          # así que se captura con $(...) y se valida; los errores de ImageMagick salen por stderr.
+          image_dims() {
+            local d w h
+            d="$("${IDENTIFY[@]}" -format '%w %h' "$1")" || return 1
+            read -r w h <<<"$d"
+            if ! [[ "$w" =~ ^[0-9]+$ && "$h" =~ ^[0-9]+$ ]]; then
+              echo "identify ha devuelto dimensiones no válidas: '${d}'" >&2
+              return 1
+            fi
+            echo "$w $h"
+          }
+
+          # Foto -> JPEG: orientación EXIF aplicada, color convertido a sRGB (con perfil
+          # incrustado si lo hay), lado mayor <= 1600 (sin ampliar), sin metadatos,
+          # calidad 75, 4:2:0, progresivo. Transparencias sobre blanco.
           convert_photo() {
-            local in="$1" out="$2"
+            local in="$1" out="$2" icc=()
+            if [ -n "$SRGB_ICC" ]; then icc=(-profile "$SRGB_ICC"); fi
             "${CONVERT[@]}" "${in}[0]" -auto-orient -background white -alpha remove -alpha off \
+              "${icc[@]}" -colorspace sRGB \
               -strip -resize '1600x1600>' -sampling-factor 4:2:0 -interlace Plane -quality 75 "$out"
           }
 
@@ -468,14 +514,15 @@ jobs:
               if [ "$in_size" -le 0 ]; then echo "original vacío" >&2; return 1; fi
 
               if [ "$kind" = photo ]; then
-                local w h
-                read -r w h < <("${IDENTIFY[@]}" -format '%w %h' "${in}[0]")
+                local dims w h w2 h2
+                dims="$(image_dims "${in}[0]")" || { echo "identify no puede leer el original" >&2; return 1; }
+                read -r w h <<<"$dims"
                 convert_photo "$in" "${out}.jpg"
                 out="${out}.jpg"
                 [ -s "$out" ] || { echo "salida vacía" >&2; return 1; }
                 "${CONVERT[@]}" "$out" null:            # decodificación completa
-                local w2 h2
-                read -r w2 h2 < <("${IDENTIFY[@]}" -format '%w %h' "$out")
+                dims="$(image_dims "$out")" || { echo "identify no puede leer la salida" >&2; return 1; }
+                read -r w2 h2 <<<"$dims"
                 awk -v w="$w" -v h="$h" -v w2="$w2" -v h2="$h2" 'BEGIN{
                   li=(w>h)?w:h; si=(w>h)?h:w; lo=(w2>h2)?w2:h2; so=(w2>h2)?h2:w2;
                   el=(li>1600)?1600:li; d=lo-el; if(d<0)d=-d;
@@ -591,6 +638,13 @@ jobs:
               veryfast|fast|medium|slow) ;;
               *) echo "::error::preset no válido: '${PRESET:-}'"; return 1 ;;
             esac
+            local v
+            echo "Herramientas: magick=$(command -v magick || echo no) convert=$(command -v convert || echo no) identify=$(command -v identify || echo no) ffmpeg=$(command -v ffmpeg || echo no) ffprobe=$(command -v ffprobe || echo no)"
+            v="$("${CONVERT[@]}" -version 2>&1)" || v="(no se pudo ejecutar ${CONVERT[*]} -version)"
+            echo "ImageMagick: ${v%%$'\n'*}"
+            v="$(ffmpeg -version 2>&1)" || v="(no se pudo ejecutar ffmpeg -version)"
+            echo "ffmpeg: ${v%%$'\n'*}"
+            echo "Perfil sRGB: ${SRGB_ICC:-ninguno (las fotos con otro perfil perderán fidelidad de color)}"
             : > "$RUN_DIR/candidates.tsv"; : > "$RUN_DIR/bytes.tsv"
             : > "$RUN_DIR/deleted.log"; : > "$RUN_DIR/failed.txt"; : > "$RUN_DIR/orphans.txt"
 
@@ -781,6 +835,12 @@ jobs:
                 shift
                 WORKDIR=""
                 trap 'rm -rf "${WORKDIR:-}" || true' EXIT
+                # Un fallo no controlado deja constancia: línea del script generado, estado y
+                # comando. Los "return N" de la propia lógica (10 = marcado, 11 = huérfano, o
+                # un fallo que ya imprimió su mensaje) no se reportan. No cambia los códigos de
+                # salida (0/10/11/otro) ni la limpieza.
+                set -E
+                trap 'st=$?; case "$BASH_COMMAND" in "return "*) ;; *) echo "::error::ERR línea ${LINENO}: ${BASH_COMMAND} (estado ${st})" >&2 ;; esac' ERR
                 one "$@"
                 ;;
               probe) shift; probe "$@" ;;
