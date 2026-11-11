@@ -315,9 +315,12 @@ jobs:
             local kind="$1" key="$2" size="$3"
             assert_key "$key"
 
-            local tmp
-            tmp="$(mktemp -d "${RUN_DIR}/obj.XXXXXX")"
-            trap 'rm -rf "$tmp"' EXIT
+            # Directorio de trabajo único de este objeto. WORKDIR es GLOBAL (no local)
+            # y lo borra el trap EXIT del despachador, instalado a nivel de script: así
+            # la limpieza no depende de variables locales de la función, no puede fallar
+            # con "unbound variable" y es best-effort (nunca cambia el código de salida).
+            WORKDIR="$(mktemp -d "${RUN_DIR}/obj.XXXXXX")"
+            local tmp="$WORKDIR"
 
             local file="${key##*/}" prefix="${key%/*}" stem ext out_ext out_ct same
             ext="$(ext_of "$key")"
@@ -546,25 +549,32 @@ jobs:
               return 0
             fi
 
-            local total replaced=0 marked=0 failed=0 orphans2=0 done_n=0 i=0 rc
+            local total selected replaced=0 marked=0 failed=0 orphans2=0 attempted=0 consec=0 aborted=0 rc
             total="$(wc -l < "$RUN_DIR/candidates.tsv")"
+            # limit = nº de objetos INTENTADOS (con éxito o con fallo); 0 = sin límite.
+            selected="$total"
+            if [ "$LIMIT" -gt 0 ] && [ "$LIMIT" -lt "$total" ]; then selected="$LIMIT"; fi
+            if [ "$LIMIT" -gt 0 ]; then
+              echo "Límite aplicado: ${selected} de ${total} candidatos"
+            else
+              echo "Sin límite: ${total} candidatos"
+            fi
+            head -n "$selected" "$RUN_DIR/candidates.tsv" > "$RUN_DIR/selected.tsv"
             while IFS=$'\t' read -r -u 3 kind key size; do
-              if [ "$LIMIT" -gt 0 ] && [ "$done_n" -ge "$LIMIT" ]; then
-                echo "Límite de ${LIMIT} objetos alcanzado."
-                break
-              fi
-              i=$((i + 1))
-              echo "[${i}/${total}] ${kind}, ${size} bytes"
+              attempted=$((attempted + 1))
+              echo "[${attempted}/${selected}] ${kind}, ${size} bytes"
               rc=0
               bash "$0" one "$kind" "$key" "$size" </dev/null || rc=$?
               case "$rc" in
-                0) replaced=$((replaced + 1)); done_n=$((done_n + 1)) ;;
-                10) marked=$((marked + 1)); done_n=$((done_n + 1)) ;;
+                0) replaced=$((replaced + 1)); consec=0 ;;
+                10) marked=$((marked + 1)); consec=0 ;;
                 11) orphans2=$((orphans2 + 1)); echo "$key" >> "$RUN_DIR/orphans.txt" ;;
-                *) failed=$((failed + 1)); echo "$key" >> "$RUN_DIR/failed.txt"
-                   echo "::error::Fallo al procesar un objeto (código ${rc}): ${key}" ;;
+                *) failed=$((failed + 1)); consec=$((consec + 1)); echo "$key" >> "$RUN_DIR/failed.txt"
+                   echo "::error::Fallo al procesar un objeto (código ${rc}): ${key}"
+                   # Salvaguarda: 3 fallos CONSECUTIVOS paran la ejecución (un éxito reinicia).
+                   if [ "$consec" -ge 3 ]; then aborted=1; break; fi ;;
               esac
-            done 3< "$RUN_DIR/candidates.tsv"
+            done 3< "$RUN_DIR/selected.tsv"
 
             list_all > "$RUN_DIR/list_after.tsv"
             local after_n after_b deleted
@@ -599,6 +609,10 @@ jobs:
               echo "Claves huérfanas (sin fila en manteniment_adjunts):"; cat "$RUN_DIR/orphans.txt"
             fi
             echo "Duración total: $((SECONDS - T0)) s"
+            if [ "$aborted" = 1 ]; then
+              echo "::error::Abortado: 3 fallos consecutivos ($((selected - attempted)) candidatos sin procesar)."
+              return 1
+            fi
             if [ "$failed" -gt 0 ]; then
               echo "::error::${failed} objeto(s) han fallado; el resto se ha procesado."
               return 1
@@ -608,7 +622,12 @@ jobs:
           if [ "${BASH_SOURCE[0]}" = "$0" ]; then
             case "${1:-main}" in
               main) main ;;
-              one) shift; one "$@" ;;
+              one)
+                shift
+                WORKDIR=""
+                trap 'rm -rf "${WORKDIR:-}" || true' EXIT
+                one "$@"
+                ;;
               probe) shift; probe "$@" ;;
               *) echo "uso: $0 [main|one]" >&2; exit 2 ;;
             esac
