@@ -89,13 +89,35 @@ jobs:
     timeout-minutes: 150
     steps:
       # ImageMagick para las fotos: libjpeg real (progresivo, 4:2:0), -auto-orient y
-      # -strip fiables, y viene en la imagen de ubuntu-latest. ffmpeg/ffprobe para los
-      # vídeos. awscli v2 y jq ya están en la imagen; psql se instala si falta.
+      # -strip fiables. ffmpeg/ffprobe para los vídeos. Solo se instala (apt) lo que
+      # falte; con reintentos y timeouts de red para fallar rápido en vez de colgarse
+      # (un fallo transitorio de red del runner dejó este paso 36 minutos parado).
       - name: Instalar herramientas
+        timeout-minutes: 10
         run: |
           set -euo pipefail
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq ffmpeg imagemagick jq postgresql-client
+          export DEBIAN_FRONTEND=noninteractive
+          pkgs=()
+          command -v aws >/dev/null 2>&1 || { echo "::error::Falta awscli en el runner y no se instala por apt."; exit 1; }
+          { command -v ffmpeg >/dev/null 2>&1 && command -v ffprobe >/dev/null 2>&1; } || pkgs+=(ffmpeg)
+          { command -v magick >/dev/null 2>&1 || command -v convert >/dev/null 2>&1; } || pkgs+=(imagemagick)
+          command -v jq >/dev/null 2>&1 || pkgs+=(jq)
+          command -v psql >/dev/null 2>&1 || pkgs+=(postgresql-client)
+
+          if [ "${#pkgs[@]}" -gt 0 ]; then
+            echo "Instalando con apt: ${pkgs[*]}"
+            APT_OPTS=(-o Acquire::Retries=3 -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20)
+            if ! sudo apt-get update -qq "${APT_OPTS[@]}"; then
+              echo "::warning::apt-get update ha fallado; se intenta instalar con los índices actuales."
+            fi
+            if ! sudo apt-get install -y -qq "${APT_OPTS[@]}" "${pkgs[@]}"; then
+              echo "::error::No se han podido instalar los paquetes (${pkgs[*]}); posible fallo de red del runner."
+              exit 1
+            fi
+          else
+            echo "Todas las herramientas ya están instaladas; se omite apt."
+          fi
+
           aws --version
           ffmpeg -version | head -1
           ffprobe -version | head -1
@@ -104,6 +126,7 @@ jobs:
           psql --version
 
       - name: Optimizar adjuntos
+        timeout-minutes: 140
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.R2_MEDIA_RW_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_MEDIA_RW_SECRET_ACCESS_KEY }}
@@ -243,6 +266,25 @@ jobs:
             if [ -z "$ct" ] || [ "$ct" = "None" ]; then ct="$(content_type_for "$key")"; fi
             s3api copy-object --bucket "$BUCKET" --key "$key" --copy-source "${BUCKET}/${key}" \
               --metadata-directive REPLACE --metadata optimized=1 --content-type "$ct" >/dev/null
+          }
+
+          # Descubrimiento: estado del objeto + content type con UN head-object.
+          # Se ejecuta en paralelo (xargs -P) y escribe "clave<TAB>estado<TAB>ct".
+          # Estado: absent | present | present-optimized. Un error inesperado de
+          # head-object hace fallar la ejecución (nunca se trata como "no optimizado").
+          probe() {
+            local key out opt ct state
+            key="$1"
+            if out="$(s3api head-object --bucket "$BUCKET" --key "$key" --query '[Metadata.optimized, ContentType]' --output text 2>&1)"; then
+              IFS=$'\t' read -r opt ct <<<"$out"
+              if [ "$opt" = "1" ]; then state=present-optimized; else state=present; fi
+              printf '%s\t%s\t%s\n' "$key" "$state" "${ct:-}"
+            elif [[ "$out" == *"404"* || "$out" == *"Not Found"* ]]; then
+              printf '%s\tabsent\t\n' "$key"
+            else
+              echo "head-object ha fallado: $out" >&2
+              return 1
+            fi
           }
 
           # Cambia la clave en BD (transacción, filas afectadas == filas encontradas).
@@ -413,14 +455,17 @@ jobs:
             : > "$RUN_DIR/candidates.tsv"; : > "$RUN_DIR/bytes.tsv"
             : > "$RUN_DIR/deleted.log"; : > "$RUN_DIR/failed.txt"; : > "$RUN_DIR/orphans.txt"
 
+            local T0=$SECONDS
             echo "Modo: dry_run=${DRY_RUN} limit=${LIMIT} kinds=${KINDS} only_ext=${ONLY_EXT:-}"
             list_all > "$RUN_DIR/list_before.tsv"
             local before_n before_b
             read -r before_n before_b < <(totals "$RUN_DIR/list_before.tsv")
             echo "Bucket antes: ${before_n} objetos, ${before_b} bytes"
 
-            local already=0 orphans=0 heic=0 cand_photo=0 cand_video=0 cand_bytes=0
-            local kind key size state ct
+            # --- Descubrimiento ---
+            # 1) Clasificación por extensión y filtros (sin red).
+            local heic=0 kind key size
+            : > "$RUN_DIR/pre.tsv"
             while IFS=$'\t' read -r -u 3 key size; do
               [[ "$key" == manteniment/* ]] || continue
               [[ "$key" == */ ]] && continue
@@ -429,22 +474,58 @@ jobs:
               case "$kind" in
                 heic) heic=$((heic + 1)); continue ;;
                 ignore) continue ;;
-                unknown)
-                  ct="$(s3api head-object --bucket "$BUCKET" --key "$key" --query 'ContentType' --output text)"
-                  if [[ "$ct" == video/* ]]; then kind=video; else continue; fi ;;
+                photo) if [ "$KINDS" = videos ]; then continue; fi ;;
+                video) if [ "$KINDS" = photos ]; then continue; fi ;;
+                # Extensión desconocida: solo puede acabar siendo vídeo (por content type).
+                unknown) if [ "$KINDS" = photos ]; then continue; fi ;;
               esac
-              if [ "$KINDS" = photos ] && [ "$kind" != photo ]; then continue; fi
-              if [ "$KINDS" = videos ] && [ "$kind" != video ]; then continue; fi
+              printf '%s\t%s\t%s\n' "$kind" "$key" "$size" >> "$RUN_DIR/pre.tsv"
+            done 3< "$RUN_DIR/list_before.tsv"
+            local pre_n
+            pre_n="$(wc -l < "$RUN_DIR/pre.tsv")"
 
-              state="$(key_state "$key")"
-              if [ "$state" = present-optimized ]; then already=$((already + 1)); continue; fi
-              if [ "$(db_count "$key")" -lt 1 ]; then
+            # 2) Una sola consulta (solo lectura) con las filas por clave en BD.
+            psql "$SUPABASE_DB_URL" -X -q -At -F $'\t' -v ON_ERROR_STOP=1 \
+              -c 'select url, count(*) from public.manteniment_adjunts group by url' \
+              > "$RUN_DIR/db_urls.tsv"
+
+            # 3) head-object en paralelo (8 a la vez) solo para los objetos restantes.
+            : > "$RUN_DIR/probe.tsv"
+            if [ "$pre_n" -gt 0 ]; then
+              cut -f2 "$RUN_DIR/pre.tsv" \
+                | xargs -d '\n' -r -n 1 -P 8 bash "$0" probe > "$RUN_DIR/probe.tsv" &
+              local xpid=$!
+              while kill -0 "$xpid" 2>/dev/null; do
+                sleep 5
+                echo "head-object: $(wc -l < "$RUN_DIR/probe.tsv")/${pre_n}"
+              done
+              wait "$xpid"   # falla (y con set -e aborta) si algún head-object ha fallado
+            fi
+
+            declare -A STATE CTYPE ROWS
+            local st ct n
+            while IFS=$'\t' read -r key st ct; do STATE["$key"]="$st"; CTYPE["$key"]="$ct"; done < "$RUN_DIR/probe.tsv"
+            while IFS=$'\t' read -r key n; do ROWS["$key"]="$n"; done < "$RUN_DIR/db_urls.tsv"
+
+            # 4) Reparto en candidatos / ya optimizados / huérfanos.
+            local already=0 orphans=0 cand_photo=0 cand_video=0 cand_bytes=0 seen=0
+            while IFS=$'\t' read -r -u 3 kind key size; do
+              seen=$((seen + 1))
+              if [ $((seen % 25)) -eq 0 ]; then echo "discovery: ${seen}/${pre_n}"; fi
+              if [ "$kind" = unknown ]; then
+                ct="${CTYPE[$key]:-}"
+                if [[ "$ct" == video/* ]]; then kind=video; else continue; fi
+              fi
+              st="${STATE[$key]:?sin resultado de head-object}"
+              if [ "$st" = present-optimized ]; then already=$((already + 1)); continue; fi
+              if [ "${ROWS[$key]:-0}" -lt 1 ]; then
                 orphans=$((orphans + 1)); echo "$key" >> "$RUN_DIR/orphans.txt"; continue
               fi
               printf '%s\t%s\t%s\n' "$kind" "$key" "$size" >> "$RUN_DIR/candidates.tsv"
               cand_bytes=$((cand_bytes + size))
               if [ "$kind" = photo ]; then cand_photo=$((cand_photo + 1)); else cand_video=$((cand_video + 1)); fi
-            done 3< "$RUN_DIR/list_before.tsv"
+            done 3< "$RUN_DIR/pre.tsv"
+            echo "Descubrimiento terminado en $((SECONDS - T0)) s"
 
             echo "Candidatos: ${cand_photo} fotos, ${cand_video} vídeos (${cand_bytes} bytes); ya optimizados: ${already}; huérfanos: ${orphans}; HEIC/HEIF ignorados: ${heic}"
 
@@ -461,6 +542,7 @@ jobs:
                 echo "| HEIC/HEIF ignorados | ${heic} |"
                 echo "| Bucket: objetos / bytes | ${before_n} / ${before_b} |"
               } >> "$GITHUB_STEP_SUMMARY"
+              echo "Duración total: $((SECONDS - T0)) s"
               return 0
             fi
 
@@ -516,6 +598,7 @@ jobs:
             if [ -s "$RUN_DIR/orphans.txt" ]; then
               echo "Claves huérfanas (sin fila en manteniment_adjunts):"; cat "$RUN_DIR/orphans.txt"
             fi
+            echo "Duración total: $((SECONDS - T0)) s"
             if [ "$failed" -gt 0 ]; then
               echo "::error::${failed} objeto(s) han fallado; el resto se ha procesado."
               return 1
@@ -526,6 +609,7 @@ jobs:
             case "${1:-main}" in
               main) main ;;
               one) shift; one "$@" ;;
+              probe) shift; probe "$@" ;;
               *) echo "uso: $0 [main|one]" >&2; exit 2 ;;
             esac
           fi
