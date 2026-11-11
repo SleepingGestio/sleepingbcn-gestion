@@ -39,6 +39,7 @@ import {
   REGISTRE_COLUMNS,
   PRIORIDAD_RANK,
   resolveLocation,
+  incidenciaGrupoId,
   rightPanelStyle,
   type Incidencia,
   type Registre,
@@ -296,7 +297,7 @@ function MantenimientoPage() {
 
   const filteredTareas = useMemo(() => {
     return (tareasQ.data ?? []).filter((t) => {
-      if (grupoFilter !== "todos" && t.id_grup !== grupoFilter) return false;
+      if (grupoFilter !== "todos" && incidenciaGrupoId(t, aptById) !== grupoFilter) return false;
       if (ubicacionFilter !== "todos") {
         if (ubicacionFilter.startsWith("apt-")) {
           if (t.id_apt !== Number(ubicacionFilter.slice(4))) return false;
@@ -316,7 +317,7 @@ function MantenimientoPage() {
       }
       return true;
     });
-  }, [tareasQ.data, grupoFilter, ubicacionFilter, operarioFilter, reclamacionFilter, reclamacionEstadoByIncidencia]);
+  }, [tareasQ.data, aptById, grupoFilter, ubicacionFilter, operarioFilter, reclamacionFilter, reclamacionEstadoByIncidencia]);
 
   const sortedTareas = useMemo(() => {
     const arr = [...filteredTareas];
