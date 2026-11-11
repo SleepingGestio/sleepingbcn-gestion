@@ -35,6 +35,12 @@ name: Media optimize (R2)
 # objetos cuya extensión esté en la lista (en el dry-run y en las ejecuciones
 # reales, además de "kinds"). Las ejecuciones programadas usan el valor vacío.
 #
+# Input manual opcional only_prefix: prefijo de clave (p. ej. "manteniment/250/", una
+# carpeta de incidencia, o un prefijo de clave completo). Si se indica, solo se
+# consideran las claves que empiezan por él (junto con kinds y only_ext, antes de
+# cualquier head-object). Debe cumplir ^manteniment/[0-9]+/([A-Za-z0-9._-]*)$; si no,
+# la ejecución falla antes de tocar la red. Vacío = sin filtro (y en las programadas).
+#
 # POLÍTICA DE VÍDEO (se decide con ffprobe sobre el original descargado)
 #   - REMUX (sin pérdida): H.264, lado corto <= 720, bitrate de vídeo <= 2 Mbit/s y
 #     contenedor .mov -> -c:v copy a .mp4 (audio copiado si es AAC, si no AAC 128k),
@@ -86,6 +92,10 @@ on:
         default: all
       only_ext:
         description: "Solo estas extensiones, separadas por comas y en minúsculas (p. ej. mov,m4v). Vacío = todas"
+        type: string
+        default: ""
+      only_prefix:
+        description: "Solo claves con este prefijo, p. ej. manteniment/250/ (carpeta de una incidencia). Vacío = todas"
         type: string
         default: ""
       crf:
@@ -170,6 +180,7 @@ jobs:
           LIMIT: ${{ github.event_name == 'workflow_dispatch' && inputs.limit || '0' }}
           KINDS: ${{ github.event_name == 'workflow_dispatch' && inputs.kinds || 'all' }}
           ONLY_EXT: ${{ github.event_name == 'workflow_dispatch' && inputs.only_ext || '' }}
+          ONLY_PREFIX: ${{ github.event_name == 'workflow_dispatch' && inputs.only_prefix || '' }}
           CRF: ${{ github.event_name == 'workflow_dispatch' && inputs.crf || '23' }}
           PRESET: ${{ github.event_name == 'workflow_dispatch' && inputs.preset || 'medium' }}
         run: |
@@ -562,6 +573,11 @@ jobs:
           # ------------------------------------------------------------------- main
           main() {
             : "${DRY_RUN:?}" "${LIMIT:?}" "${KINDS:?}"
+            local only_prefix="${ONLY_PREFIX:-}"
+            if [ -n "$only_prefix" ] && ! [[ "$only_prefix" =~ ^manteniment/[0-9]+/[A-Za-z0-9._-]*$ ]]; then
+              echo "::error::only_prefix no válido: debe ser manteniment/<id>/ o un prefijo de clave (recibido: '${only_prefix}')"
+              return 1
+            fi
             local only_ext=""
             only_ext="$(lower "${ONLY_EXT:-}")"
             only_ext="${only_ext//[[:space:]]/}"
@@ -579,7 +595,7 @@ jobs:
             : > "$RUN_DIR/deleted.log"; : > "$RUN_DIR/failed.txt"; : > "$RUN_DIR/orphans.txt"
 
             local T0=$SECONDS
-            echo "Modo: dry_run=${DRY_RUN} limit=${LIMIT} kinds=${KINDS} only_ext=${ONLY_EXT:-} crf=${CRF} preset=${PRESET}"
+            echo "Modo: dry_run=${DRY_RUN} limit=${LIMIT} kinds=${KINDS} only_ext=${ONLY_EXT:-} only_prefix=${only_prefix} crf=${CRF} preset=${PRESET}"
             list_all > "$RUN_DIR/list_before.tsv"
             local before_n before_b
             read -r before_n before_b < <(totals "$RUN_DIR/list_before.tsv")
@@ -587,11 +603,13 @@ jobs:
 
             # --- Descubrimiento ---
             # 1) Clasificación por extensión y filtros (sin red).
-            local heic=0 kind key size
+            local heic=0 kind key size prefix_n=0
             : > "$RUN_DIR/pre.tsv"
             while IFS=$'\t' read -r -u 3 key size; do
               [[ "$key" == manteniment/* ]] || continue
               [[ "$key" == */ ]] && continue
+              if [ -n "$only_prefix" ] && [[ "$key" != "$only_prefix"* ]]; then continue; fi
+              prefix_n=$((prefix_n + 1))
               if [ -n "$only_ext" ] && [[ "$only_ext" != *",$(ext_of "$key"),"* ]]; then continue; fi
               kind="$(kind_of "$key")"
               case "$kind" in
@@ -606,6 +624,9 @@ jobs:
             done 3< "$RUN_DIR/list_before.tsv"
             local pre_n
             pre_n="$(wc -l < "$RUN_DIR/pre.tsv")"
+            if [ -n "$only_prefix" ]; then
+              echo "Filtro only_prefix aplicado: ${prefix_n} de ${before_n} objetos del bucket"
+            fi
 
             # 2) Una sola consulta (solo lectura) con las filas por clave en BD.
             psql "$SUPABASE_DB_URL" -X -q -At -F $'\t' -v ON_ERROR_STOP=1 \
@@ -650,6 +671,17 @@ jobs:
             done 3< "$RUN_DIR/pre.tsv"
             echo "Descubrimiento terminado en $((SECONDS - T0)) s"
 
+            # Mayores vídeos candidatos (con los datos del descubrimiento, sin red y con
+            # los mismos filtros kinds / only_ext / only_prefix). Se ordena por tamaño
+            # descendente; awk (y no head) evita un SIGPIPE con pipefail.
+            local top
+            top="$(awk -F'\t' '$1=="video"' "$RUN_DIR/candidates.tsv" | sort -t $'\t' -k3,3nr \
+              | awk -F'\t' 'NR<=10 {printf "%d B  %.1f MB  %s\n", $3, $3/1048576, $2}')"
+            [ -n "$top" ] || top="(ninguno)"
+            echo "Mayores vídeos candidatos (top 10):"
+            echo "$top"
+            { echo "### Mayores vídeos candidatos (top 10):"; echo '```'; echo "$top"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+
             echo "Candidatos: ${cand_photo} fotos, ${cand_video} vídeos (${cand_bytes} bytes); ya optimizados: ${already}; huérfanos: ${orphans}; HEIC/HEIF ignorados: ${heic}"
 
             if [ "$DRY_RUN" = true ]; then
@@ -664,6 +696,9 @@ jobs:
                 echo "| Huérfanos (0 filas en BD) | ${orphans} |"
                 echo "| HEIC/HEIF ignorados | ${heic} |"
                 echo "| Bucket: objetos / bytes | ${before_n} / ${before_b} |"
+                if [ -n "$only_prefix" ]; then
+                  echo "| Filtro only_prefix aplicado | ${prefix_n} de ${before_n} objetos |"
+                fi
               } >> "$GITHUB_STEP_SUMMARY"
               echo "Duración total: $((SECONDS - T0)) s"
               return 0
