@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { getAdjunto } from "@/lib/api/manteniment-adjuntos.functions";
+import { fetchAdjuntoBlobUrl } from "@/lib/adjuntos-client";
 import { AdjuntoPicker, type AdjuntoTipo } from "@/components/reportar-incidencia";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -55,19 +55,6 @@ function todayISO(): string {
   const d = new Date();
   const tz = d.getTimezoneOffset() * 60000;
   return new Date(d.getTime() - tz).toISOString().slice(0, 10);
-}
-
-function dataUrlToBlobUrl(dataUrl: string): string {
-  const [header, base64] = dataUrl.split(",");
-  const contentType = header.match(/data:(.*?);base64/)?.[1] ?? "application/octet-stream";
-  const byteChars = atob(base64);
-  const byteNumbers = new Array(byteChars.length);
-  for (let i = 0; i < byteChars.length; i++) {
-    byteNumbers[i] = byteChars.charCodeAt(i);
-  }
-  const byteArray = new Uint8Array(byteNumbers);
-  const blob = new Blob([byteArray], { type: contentType });
-  return URL.createObjectURL(blob);
 }
 
 // Grouping-by-tipo (fotos as thumbnails, video/nota_veu/document as link lists)
@@ -161,10 +148,7 @@ function AdjuntosGroup({
 function AdjuntoThumbnail({ idAdjunto, url, label }: { idAdjunto: number; url: string; label: string }) {
   const thumbQ = useQuery({
     queryKey: ["adjunto-thumb", idAdjunto],
-    queryFn: async () => {
-      const result = await getAdjunto({ data: { key: url } });
-      return dataUrlToBlobUrl(result.dataUrl);
-    },
+    queryFn: () => fetchAdjuntoBlobUrl(url),
     staleTime: Infinity,
   });
 
@@ -230,9 +214,9 @@ export function MantenimientoPopover({
     const newWindow = window.open("", "_blank");
     setLoadingAdjunto(idAdjunto);
     try {
-      const result = await getAdjunto({ data: { key } });
+      const blobUrl = await fetchAdjuntoBlobUrl(key);
       if (newWindow) {
-        newWindow.location.href = dataUrlToBlobUrl(result.dataUrl);
+        newWindow.location.href = blobUrl;
       } else {
         toast.error("El navegador bloqueó la ventana. Permite ventanas emergentes e inténtalo de nuevo.");
       }

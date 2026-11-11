@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { fetchActivePersonal } from "@/lib/catalogos";
 import { useCurrentPersonal } from "@/hooks/use-current-personal";
 import { uploadAdjunto } from "@/lib/api/manteniment-adjuntos.functions";
+import { adjuntoUploadErrorMessage } from "@/lib/adjuntos-limits";
 import type { AdjuntoTipo } from "@/components/reportar-incidencia";
 import { findOpenSession, type AptLite, type EspacioLite, type GrupoLite, type Incidencia, type PersonaLite, type Prioridad, type Registre } from "@/lib/mantenimiento";
 
@@ -303,6 +304,7 @@ export function useMantenimientoActions(onMutated?: () => void) {
         const fd = new FormData();
         fd.set("file", a.file);
         fd.set("id_incidencia", String(idIncidencia));
+        fd.set("tipo", a.tipo);
         const result = await uploadAdjunto({ data: fd });
         await supabase.from("manteniment_adjunts").insert({
           id_incidencia: idIncidencia,
@@ -314,7 +316,7 @@ export function useMantenimientoActions(onMutated?: () => void) {
         });
       } catch (e) {
         console.error("[subirAdjuntosIncidencia] adjunto upload failed:", e);
-        toast.error(`No se pudo subir el adjunto "${a.file.name}"`);
+        toast.error(adjuntoUploadErrorMessage(e, a.file.name, 'No se pudo subir el adjunto "{nombre}"'));
       }
     }
   }

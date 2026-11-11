@@ -12,6 +12,7 @@ import { toast } from "sonner";
 import { AlertTriangle, Wrench, PackageX, HelpCircle, Camera, Video, Mic, FileText, X } from "lucide-react";
 import { TIPO_STYLE, PRIORIDAD_STYLE, ESTADO_FULL_STYLE, type IncidenciaTipo, type Prioridad, type Estat } from "@/lib/mantenimiento";
 import { uploadAdjunto } from "@/lib/api/manteniment-adjuntos.functions";
+import { adjuntoSizeError, adjuntoUploadErrorMessage } from "@/lib/adjuntos-limits";
 
 const TIPO_OPTIONS: { value: IncidenciaTipo; label: string; icon: typeof AlertTriangle }[] = [
   { value: "averia_rotura", label: "Avería / Rotura", icon: AlertTriangle },
@@ -44,6 +45,11 @@ export function AdjuntoPicker({
 }) {
   function addAdjunto(tipoAdj: AdjuntoTipo, file: File | null) {
     if (!file) return;
+    const sizeError = adjuntoSizeError(tipoAdj, file);
+    if (sizeError) {
+      toast.error(sizeError);
+      return;
+    }
     onChange([...adjuntos, { tipo: tipoAdj, file }]);
   }
   function removeAdjunto(i: number) {
@@ -306,6 +312,7 @@ export function ReportarIncidenciaSheet({
           const fd = new FormData();
           fd.set("file", a.file);
           fd.set("id_incidencia", String(inserted.id_incidencia));
+          fd.set("tipo", a.tipo);
           const result = await uploadAdjunto({ data: fd });
           await supabase.from("manteniment_adjunts").insert({
             id_incidencia: inserted.id_incidencia,
@@ -317,7 +324,13 @@ export function ReportarIncidenciaSheet({
           });
         } catch (e) {
           console.error("[ReportarIncidenciaSheet] adjunto upload failed:", e);
-          toast.error(`No se pudo subir el adjunto "${a.file.name}", la incidencia se guardó igualmente`);
+          toast.error(
+            adjuntoUploadErrorMessage(
+              e,
+              a.file.name,
+              'No se pudo subir el adjunto "{nombre}", la incidencia se guardó igualmente',
+            ),
+          );
         }
       }
     }
