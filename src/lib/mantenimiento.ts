@@ -117,6 +117,21 @@ export function resolveLocation(
   return grupoNombre ? `${base} · ${grupoNombre}` : base;
 }
 
+/**
+ * Group an incidencia belongs to FOR FILTERING. Its own id_grup wins; when that is
+ * NULL (the "Grupo" picker of the report form is optional, so picking an apartment
+ * directly leaves id_grup empty) the group of its apartment is used instead.
+ * Common-area incidencias (no id_apt) keep whatever id_grup they carry.
+ */
+export function incidenciaGrupoId(
+  inc: Pick<Incidencia, "id_apt" | "id_grup">,
+  aptById: Map<number, AptLite>,
+): number | null {
+  if (inc.id_grup != null) return inc.id_grup;
+  if (inc.id_apt != null) return aptById.get(inc.id_apt)?.id_grupo ?? null;
+  return null;
+}
+
 export function rightPanelStyle(estat: Estat, sessionCount: number): { bg: string; borderColor: string | null } {
   if (estat === "en_curs") return { bg: "rgba(55,138,221,0.13)", borderColor: "#378ADD" };
   if (estat === "validada" && sessionCount > 0) return { bg: "rgba(216,90,48,0.10)", borderColor: "#D85A30" };
