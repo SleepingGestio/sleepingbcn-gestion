@@ -3,7 +3,8 @@ name: Media optimize (R2)
 # Optimiza (reduce) los adjuntos de mantenimiento del bucket R2 en producción:
 #   - vídeos -> política por vídeo (ver "POLÍTICA DE VÍDEO"): remux sin pérdida,
 #               solo marcar, o recodificar a MP4 H.264 con el lado CORTO <= 720 px
-#   - fotos  -> JPEG con lado mayor <= 1600 px, calidad 75, sin metadatos
+#   - fotos  -> JPEG con lado mayor <= photo_max_px (def. 2400), calidad photo_quality
+#               (def. 85), sin metadatos
 # Se ejecuta ANTES de "Media backup (R2 to R2)" (03:13 vs 03:43 UTC) para que el
 # bucket de backup solo reciba las versiones ligeras. Los dos workflows comparten
 # el grupo de concurrencia "media-pipeline" y nunca se solapan.
@@ -54,7 +55,9 @@ name: Media optimize (R2)
 #     siempre (compatibilidad), aunque el ahorro sea menor.
 #   - Si cambia la extensión de la clave (p. ej. .MOV -> .mp4), la transacción de BD
 #     actualiza también manteniment_adjunts.nom_fitxer (solo vídeos).
-#   - Fotos: sin cambios.
+#   - Fotos: JPEG sRGB, lado mayor <= photo_max_px (sin ampliar; 1000-4000, def. 2400) y
+#     calidad photo_quality (60-95, def. 85), 4:2:0, progresivo, sin metadatos; si el
+#     resultado no pesa al menos un 10% menos, se conserva el original y solo se marca.
 #
 # PLAN DE DESPLIEGUE
 #   1) Ejecución manual con dry_run=true (solo lista candidatos y totales).
@@ -98,6 +101,14 @@ on:
         description: "Solo claves con este prefijo, p. ej. manteniment/250/ (carpeta de una incidencia). Vacío = todas"
         type: string
         default: ""
+      photo_max_px:
+        description: "Fotos: lado mayor máximo en px (entero 1000-4000; solo reduce, nunca amplía)"
+        type: string
+        default: "2400"
+      photo_quality:
+        description: "Fotos: calidad JPEG (entero 60-95)"
+        type: string
+        default: "85"
       crf:
         description: "CRF de libx264 para recodificar vídeos (entero 18-32; menor = más calidad)"
         type: string
@@ -188,6 +199,8 @@ jobs:
           KINDS: ${{ github.event_name == 'workflow_dispatch' && inputs.kinds || 'all' }}
           ONLY_EXT: ${{ github.event_name == 'workflow_dispatch' && inputs.only_ext || '' }}
           ONLY_PREFIX: ${{ github.event_name == 'workflow_dispatch' && inputs.only_prefix || '' }}
+          PHOTO_MAX_PX: ${{ github.event_name == 'workflow_dispatch' && inputs.photo_max_px || '2400' }}
+          PHOTO_QUALITY: ${{ github.event_name == 'workflow_dispatch' && inputs.photo_quality || '85' }}
           CRF: ${{ github.event_name == 'workflow_dispatch' && inputs.crf || '23' }}
           PRESET: ${{ github.event_name == 'workflow_dispatch' && inputs.preset || 'medium' }}
         run: |
@@ -308,14 +321,15 @@ jobs:
           }
 
           # Foto -> JPEG: orientación EXIF aplicada, color convertido a sRGB (con perfil
-          # incrustado si lo hay), lado mayor <= 1600 (sin ampliar), sin metadatos,
-          # calidad 75, 4:2:0, progresivo. Transparencias sobre blanco.
+          # incrustado si lo hay), lado mayor <= PHOTO_MAX_PX (sin ampliar), sin
+          # metadatos, calidad PHOTO_QUALITY, 4:2:0, progresivo. Transparencias sobre blanco.
           convert_photo() {
             local in="$1" out="$2" icc=()
             if [ -n "$SRGB_ICC" ]; then icc=(-profile "$SRGB_ICC"); fi
             "${CONVERT[@]}" "${in}[0]" -auto-orient -background white -alpha remove -alpha off \
               "${icc[@]}" -colorspace sRGB \
-              -strip -resize '1600x1600>' -sampling-factor 4:2:0 -interlace Plane -quality 75 "$out"
+              -strip -resize "${PHOTO_MAX_PX:-2400}x${PHOTO_MAX_PX:-2400}>" -sampling-factor 4:2:0 -interlace Plane \
+              -quality "${PHOTO_QUALITY:-85}" "$out"
           }
 
           # --- Vídeo ---
@@ -523,14 +537,14 @@ jobs:
                 "${CONVERT[@]}" "$out" null:            # decodificación completa
                 dims="$(image_dims "$out")" || { echo "identify no puede leer la salida" >&2; return 1; }
                 read -r w2 h2 <<<"$dims"
-                awk -v w="$w" -v h="$h" -v w2="$w2" -v h2="$h2" 'BEGIN{
+                awk -v w="$w" -v h="$h" -v w2="$w2" -v h2="$h2" -v px="${PHOTO_MAX_PX:-2400}" 'BEGIN{
                   li=(w>h)?w:h; si=(w>h)?h:w; lo=(w2>h2)?w2:h2; so=(w2>h2)?h2:w2;
-                  el=(li>1600)?1600:li; d=lo-el; if(d<0)d=-d;
+                  el=(li>px)?px:li; d=lo-el; if(d<0)d=-d;
                   if (d>1) exit 1;
                   r=(so*li-si*lo)/(si*lo); if(r<0)r=-r; if (r>0.02) exit 1; exit 0 }' \
                   || { echo "dimensiones inesperadas" >&2; return 1; }
                 out_size="$(stat -c %s "$out")"
-                echo "foto: ${in_size} -> ${out_size} bytes (ratio $(awk -v a="$out_size" -v b="$in_size" 'BEGIN{printf "%.2f", a/b}'))"
+                echo "foto: ${w}x${h} ${in_size} -> ${w2}x${h2} ${out_size} bytes (ratio $(awk -v a="$out_size" -v b="$in_size" 'BEGIN{printf "%.2f", a/b}')) px=${PHOTO_MAX_PX:-2400} q=${PHOTO_QUALITY:-85}"
                 if ! (( out_size * 10 <= in_size * 9 )); then
                   mark_only "$key"
                   echo "$kind $in_size $in_size" >> "$RUN_DIR/bytes.tsv"
@@ -638,6 +652,14 @@ jobs:
               veryfast|fast|medium|slow) ;;
               *) echo "::error::preset no válido: '${PRESET:-}'"; return 1 ;;
             esac
+            if ! [[ "${PHOTO_MAX_PX:-}" =~ ^[0-9]+$ ]] || [ "$PHOTO_MAX_PX" -lt 1000 ] || [ "$PHOTO_MAX_PX" -gt 4000 ]; then
+              echo "::error::photo_max_px debe ser un entero entre 1000 y 4000 (recibido: '${PHOTO_MAX_PX:-}')"
+              return 1
+            fi
+            if ! [[ "${PHOTO_QUALITY:-}" =~ ^[0-9]+$ ]] || [ "$PHOTO_QUALITY" -lt 60 ] || [ "$PHOTO_QUALITY" -gt 95 ]; then
+              echo "::error::photo_quality debe ser un entero entre 60 y 95 (recibido: '${PHOTO_QUALITY:-}')"
+              return 1
+            fi
             local v
             echo "Herramientas: magick=$(command -v magick || echo no) convert=$(command -v convert || echo no) identify=$(command -v identify || echo no) ffmpeg=$(command -v ffmpeg || echo no) ffprobe=$(command -v ffprobe || echo no)"
             v="$("${CONVERT[@]}" -version 2>&1)" || v="(no se pudo ejecutar ${CONVERT[*]} -version)"
@@ -649,7 +671,7 @@ jobs:
             : > "$RUN_DIR/deleted.log"; : > "$RUN_DIR/failed.txt"; : > "$RUN_DIR/orphans.txt"
 
             local T0=$SECONDS
-            echo "Modo: dry_run=${DRY_RUN} limit=${LIMIT} kinds=${KINDS} only_ext=${ONLY_EXT:-} only_prefix=${only_prefix} crf=${CRF} preset=${PRESET}"
+            echo "Modo: dry_run=${DRY_RUN} limit=${LIMIT} kinds=${KINDS} only_ext=${ONLY_EXT:-} only_prefix=${only_prefix} crf=${CRF} preset=${PRESET} photo_max_px=${PHOTO_MAX_PX} photo_quality=${PHOTO_QUALITY}"
             list_all > "$RUN_DIR/list_before.tsv"
             local before_n before_b
             read -r before_n before_b < <(totals "$RUN_DIR/list_before.tsv")
