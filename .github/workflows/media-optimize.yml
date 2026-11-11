@@ -1,7 +1,8 @@
 name: Media optimize (R2)
 
 # Optimiza (reduce) los adjuntos de mantenimiento del bucket R2 en producción:
-#   - vídeos -> MP4 H.264 a 720p máx. (CRF 28, AAC 96k, faststart)
+#   - vídeos -> MP4 H.264 con el lado CORTO <= 720 px (1080x1920 -> 720x1280,
+#               1920x1080 -> 1280x720; CRF 28, AAC 96k, faststart)
 #   - fotos  -> JPEG con lado mayor <= 1600 px, calidad 75, sin metadatos
 # Se ejecuta ANTES de "Media backup (R2 to R2)" (03:13 vs 03:43 UTC) para que el
 # bucket de backup solo reciba las versiones ligeras. Los dos workflows comparten
@@ -29,10 +30,18 @@ name: Media optimize (R2)
 # PROGRAMADAS solo corren si vale 'true' (interruptor de seguridad hasta validar
 # el paso 4 del plan). Las manuales (workflow_dispatch) corren siempre.
 #
+# Input manual opcional only_ext: lista de extensiones en minúsculas separadas por
+# comas (p. ej. "mov" o "mov,m4v"). Si no está vacío, solo se consideran los
+# objetos cuya extensión esté en la lista (en el dry-run y en las ejecuciones
+# reales, además de "kinds"). Las ejecuciones programadas usan el valor vacío.
+#
 # PLAN DE DESPLIEGUE
 #   1) Ejecución manual con dry_run=true (solo lista candidatos y totales).
-#   2) Manual con dry_run=false, limit=3, kinds=videos. El propietario comprueba
-#      en la app los 3 vídeos (se reproducen, en vertical si procede, con audio).
+#   2) Primero, con un clip real de iPhone: manual con dry_run=false, limit=2,
+#      kinds=videos, only_ext=mov, y comprobar que los colores NO salen lavados
+#      (HDR/10 bit sin tone mapping); si salen lavados, avisar y parar. Después,
+#      manual con dry_run=false, limit=3, kinds=videos y comprobar en la app los
+#      vídeos (se reproducen, en vertical si procede, con audio).
 #   3) Manual con dry_run=false, limit=10, kinds=photos y revisión visual.
 #   4) Ejecución completa manual (dry_run=false, limit=0, kinds=all). Después,
 #      crear la variable MEDIA_OPTIMIZE_SCHEDULE_ENABLED=true.
@@ -60,6 +69,10 @@ on:
           - photos
           - videos
         default: all
+      only_ext:
+        description: "Solo estas extensiones, separadas por comas y en minúsculas (p. ej. mov,m4v). Vacío = todas"
+        type: string
+        default: ""
 
 permissions:
   contents: read
@@ -105,6 +118,7 @@ jobs:
           DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || 'false' }}
           LIMIT: ${{ github.event_name == 'workflow_dispatch' && inputs.limit || '0' }}
           KINDS: ${{ github.event_name == 'workflow_dispatch' && inputs.kinds || 'all' }}
+          ONLY_EXT: ${{ github.event_name == 'workflow_dispatch' && inputs.only_ext || '' }}
         run: |
           set -euo pipefail
           mkdir -p "${RUNNER_TEMP}/media-optimize"
@@ -194,14 +208,16 @@ jobs:
               -strip -resize '1600x1600>' -sampling-factor 4:2:0 -interlace Plane -quality 75 "$out"
           }
 
-          # Vídeo -> MP4 H.264 <= 720 px de alto (sin ampliar, ancho par), CRF 28,
-          # veryfast, yuv420p, AAC 96k (o sin audio), faststart. ffmpeg aplica la
-          # rotación (autorotate) antes del filtro, así que "ih" es el alto real.
+          # Vídeo -> MP4 H.264 con el lado CORTO <= 720 px (sin ampliar, lados pares),
+          # CRF 28, veryfast, yuv420p, AAC 96k (o sin audio), faststart. ffmpeg aplica
+          # la rotación (autorotate) antes del filtro, así que iw/ih son los reales.
+          # Apaisado: alto = min(720, ih), ancho automático par. Vertical/cuadrado:
+          # ancho = min(720, iw), alto automático par.
           convert_video() {
             local in="$1" out="$2"
             timeout 25m ffmpeg -nostdin -hide_banner -loglevel error -y -i "$in" \
               -map 0:v:0 -map '0:a:0?' -sn -dn -map_metadata -1 \
-              -vf "scale=-2:'min(720,ih)'" \
+              -vf "scale='if(gt(iw,ih),-2,trunc(min(720,iw)/2)*2)':'if(gt(iw,ih),trunc(min(720,ih)/2)*2,-2)'" \
               -c:v libx264 -preset veryfast -crf 28 -pix_fmt yuv420p \
               -c:a aac -b:a 96k -movflags +faststart "$out"
           }
@@ -337,7 +353,7 @@ jobs:
                 oinfo="$(ffprobe -v error -select_streams v:0 -show_entries stream=codec_name,width,height -of csv=p=0 "$out")" \
                   || { echo "ffprobe no puede leer la salida" >&2; return 1; }
                 IFS=, read -r ocodec ow oh <<<"$oinfo"
-                if [ "$ocodec" != h264 ] || [ "$oh" -gt 720 ]; then echo "códec/alto de salida inesperado" >&2; return 1; fi
+                if [ "$ocodec" != h264 ] || [ "$(( ow < oh ? ow : oh ))" -gt 720 ]; then echo "códec/tamaño de salida inesperado" >&2; return 1; fi
                 dout="$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$out")"
                 [[ "$dout" =~ ^[0-9]+(\.[0-9]+)?$ ]] || { echo "duración de salida ilegible" >&2; return 1; }
                 awk -v a="$din" -v b="$dout" 'BEGIN{d=a-b; if(d<0)d=-d; t=a*0.02; if(t<1)t=1; exit !(d<=t)}' \
@@ -389,11 +405,15 @@ jobs:
           # ------------------------------------------------------------------- main
           main() {
             : "${DRY_RUN:?}" "${LIMIT:?}" "${KINDS:?}"
+            local only_ext=""
+            only_ext="$(lower "${ONLY_EXT:-}")"
+            only_ext="${only_ext//[[:space:]]/}"
+            if [ -n "$only_ext" ]; then only_ext=",${only_ext},"; fi
             [[ "$LIMIT" =~ ^[0-9]+$ ]] || LIMIT="${LIMIT%%.*}"
             : > "$RUN_DIR/candidates.tsv"; : > "$RUN_DIR/bytes.tsv"
             : > "$RUN_DIR/deleted.log"; : > "$RUN_DIR/failed.txt"; : > "$RUN_DIR/orphans.txt"
 
-            echo "Modo: dry_run=${DRY_RUN} limit=${LIMIT} kinds=${KINDS}"
+            echo "Modo: dry_run=${DRY_RUN} limit=${LIMIT} kinds=${KINDS} only_ext=${ONLY_EXT:-}"
             list_all > "$RUN_DIR/list_before.tsv"
             local before_n before_b
             read -r before_n before_b < <(totals "$RUN_DIR/list_before.tsv")
@@ -404,6 +424,7 @@ jobs:
             while IFS=$'\t' read -r -u 3 key size; do
               [[ "$key" == manteniment/* ]] || continue
               [[ "$key" == */ ]] && continue
+              if [ -n "$only_ext" ] && [[ "$only_ext" != *",$(ext_of "$key"),"* ]]; then continue; fi
               kind="$(kind_of "$key")"
               case "$kind" in
                 heic) heic=$((heic + 1)); continue ;;
