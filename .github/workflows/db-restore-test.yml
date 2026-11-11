@@ -1,0 +1,330 @@
+# Manual restore test for the daily DB backup (see db-backup.yml).
+#
+# Purpose: prove that the newest backup in the private R2 bucket "sleepingbcn-backups-bd"
+# is actually restorable. It downloads the newest .pgdump + .manifest.txt, verifies size
+# and sha256 against the manifest, restores the dump into a throwaway Postgres running in
+# a docker container on this runner, and compares row counts with the manifest.
+#
+# It only READS from R2 and NEVER touches Supabase (SUPABASE_DB_URL is not used here).
+# The dump contains personal data: it is never uploaded as a GitHub artifact and no row
+# contents are printed (only keys, sizes, counts and sanitized error lines).
+#
+# Required repository secrets: R2_BACKUP_ENDPOINT, R2_BACKUP_ACCESS_KEY_ID,
+# R2_BACKUP_SECRET_ACCESS_KEY.
+#
+# How to run: GitHub -> Actions -> "DB restore test (R2 to temporary Postgres)" -> Run workflow.
+
+name: DB restore test (R2 to temporary Postgres)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: db-restore-test
+  cancel-in-progress: false
+
+jobs:
+  restore-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      R2_BUCKET: sleepingbcn-backups-bd
+    steps:
+      - name: Find newest backup in R2
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_BACKUP_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_BACKUP_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+          AWS_REQUEST_CHECKSUM_CALCULATION: when_required
+          AWS_RESPONSE_CHECKSUM_VALIDATION: when_required
+          R2_BACKUP_ENDPOINT: ${{ secrets.R2_BACKUP_ENDPOINT }}
+        run: |
+          set -euo pipefail
+
+          aws --version
+
+          # Full listing (the CLI paginates automatically); sorted by LastModified in the shell.
+          LIST="$(aws s3api list-objects-v2 \
+            --bucket "$R2_BUCKET" --prefix daily/ \
+            --endpoint-url "$R2_BACKUP_ENDPOINT" \
+            --query 'Contents[].[Key,LastModified,Size]' --output text)"
+
+          NEWEST="$(printf '%s\n' "$LIST" \
+            | awk -F'\t' '$1 ~ /\.pgdump$/' \
+            | sort -t$'\t' -k2,2 -k1,1 \
+            | tail -n 1)"
+
+          if [ -z "$NEWEST" ]; then
+            echo "No .pgdump objects found under daily/" >&2
+            echo "RESULT_REASON=no backup found in R2 under daily/" >> "$GITHUB_ENV"
+            exit 1
+          fi
+
+          IFS=$'\t' read -r KEY LAST_MODIFIED SIZE <<< "$NEWEST"
+          BASE="${KEY%.pgdump}"
+          MANIFEST_KEY="${BASE}.manifest.txt"
+
+          echo "Newest dump:   ${KEY}"
+          echo "  size:        ${SIZE} bytes"
+          echo "  modified:    ${LAST_MODIFIED}"
+          echo "Manifest key:  ${MANIFEST_KEY}"
+
+          {
+            echo "DUMP_KEY=${KEY}"
+            echo "MANIFEST_KEY=${MANIFEST_KEY}"
+          } >> "$GITHUB_ENV"
+
+      - name: Download backup and verify against manifest
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_BACKUP_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_BACKUP_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+          AWS_REQUEST_CHECKSUM_CALCULATION: when_required
+          AWS_RESPONSE_CHECKSUM_VALIDATION: when_required
+          R2_BACKUP_ENDPOINT: ${{ secrets.R2_BACKUP_ENDPOINT }}
+        run: |
+          set -euo pipefail
+
+          aws s3 cp "s3://${R2_BUCKET}/${MANIFEST_KEY}" manifest.txt \
+            --endpoint-url "$R2_BACKUP_ENDPOINT" --no-progress
+          aws s3 cp "s3://${R2_BUCKET}/${DUMP_KEY}" dump.pgdump \
+            --endpoint-url "$R2_BACKUP_ENDPOINT" --no-progress
+
+          EXPECTED_SHA="$(awk -F': ' '/^dump_sha256:/{print $2; exit}' manifest.txt)"
+          EXPECTED_SIZE="$(awk -F': ' '/^dump_size_bytes:/{print $2; exit}' manifest.txt)"
+          ACTUAL_SHA="$(sha256sum dump.pgdump | cut -d' ' -f1)"
+          ACTUAL_SIZE="$(stat -c%s dump.pgdump)"
+
+          echo "size:   expected=${EXPECTED_SIZE} actual=${ACTUAL_SIZE}"
+          echo "sha256: expected=${EXPECTED_SHA}"
+          echo "        actual=${ACTUAL_SHA}"
+
+          if [ -z "$EXPECTED_SHA" ] || [ -z "$EXPECTED_SIZE" ]; then
+            echo "RESULT_REASON=manifest is missing dump_sha256 or dump_size_bytes" >> "$GITHUB_ENV"
+            exit 1
+          fi
+          if [ "$ACTUAL_SIZE" != "$EXPECTED_SIZE" ]; then
+            echo "RESULT_REASON=downloaded dump size differs from manifest" >> "$GITHUB_ENV"
+            exit 1
+          fi
+          if [ "$ACTUAL_SHA" != "$EXPECTED_SHA" ]; then
+            echo "RESULT_REASON=downloaded dump sha256 differs from manifest" >> "$GITHUB_ENV"
+            exit 1
+          fi
+          echo "Download verified (size and sha256 match the manifest)."
+
+      - name: Install matching PostgreSQL client
+        run: |
+          set -euo pipefail
+
+          SERVER_VERSION="$(awk -F': ' '/^server_version:/{print $2; exit}' manifest.txt)"
+          PG_MAJOR="${SERVER_VERSION%%[. ]*}"
+          if ! [[ "$PG_MAJOR" =~ ^[0-9]+$ ]]; then
+            echo "Cannot parse server major version from manifest (got: '${SERVER_VERSION}')" >&2
+            echo "RESULT_REASON=cannot parse server_version from manifest" >> "$GITHUB_ENV"
+            exit 1
+          fi
+          echo "Server version from manifest: ${SERVER_VERSION} (major ${PG_MAJOR})"
+
+          sudo install -d -m 0755 /usr/share/keyrings
+          curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc \
+            | sudo gpg --dearmor --yes -o /usr/share/keyrings/pgdg.gpg
+          echo "deb [signed-by=/usr/share/keyrings/pgdg.gpg] https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" \
+            | sudo tee /etc/apt/sources.list.d/pgdg.list >/dev/null
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq "postgresql-client-${PG_MAJOR}"
+
+          PGBIN="/usr/lib/postgresql/${PG_MAJOR}/bin"
+          "${PGBIN}/pg_restore" --version
+          {
+            echo "PG_MAJOR=${PG_MAJOR}"
+            echo "PGBIN=${PGBIN}"
+          } >> "$GITHUB_ENV"
+
+      - name: Start throwaway Postgres
+        run: |
+          set -euo pipefail
+
+          PGPASSWORD_TMP="$(openssl rand -hex 16)"
+          echo "::add-mask::${PGPASSWORD_TMP}"
+
+          docker run -d --name pgtest \
+            -e POSTGRES_PASSWORD="${PGPASSWORD_TMP}" \
+            -p 127.0.0.1:5433:5432 \
+            "postgres:${PG_MAJOR}" >/dev/null
+
+          {
+            echo "TARGET_URL=postgresql://postgres:${PGPASSWORD_TMP}@127.0.0.1:5433/postgres"
+          } >> "$GITHUB_ENV"
+
+          READY=0
+          for i in $(seq 1 30); do
+            if "${PGBIN}/pg_isready" -h 127.0.0.1 -p 5433 -U postgres >/dev/null 2>&1; then
+              READY=1
+              break
+            fi
+            sleep 2
+          done
+          if [ "$READY" != "1" ]; then
+            echo "Throwaway Postgres did not become ready in time" >&2
+            echo "RESULT_REASON=throwaway Postgres did not start" >> "$GITHUB_ENV"
+            exit 1
+          fi
+          echo "Throwaway Postgres ${PG_MAJOR} is ready on 127.0.0.1:5433"
+
+      - name: Prepare target DB like a Supabase database
+        run: |
+          set -euo pipefail
+
+          "${PGBIN}/psql" "$TARGET_URL" -v ON_ERROR_STOP=1 -q <<'SQL'
+          do $$
+          begin
+            if not exists (select 1 from pg_roles where rolname = 'anon') then
+              create role anon nologin;
+            end if;
+            if not exists (select 1 from pg_roles where rolname = 'authenticated') then
+              create role authenticated nologin;
+            end if;
+            if not exists (select 1 from pg_roles where rolname = 'service_role') then
+              create role service_role nologin bypassrls;
+            end if;
+            if not exists (select 1 from pg_roles where rolname = 'supabase_auth_admin') then
+              create role supabase_auth_admin nologin;
+            end if;
+            if not exists (select 1 from pg_roles where rolname = 'authenticator') then
+              create role authenticator noinherit login;
+            end if;
+          end
+          $$;
+          create schema if not exists extensions;
+          SQL
+          echo "Roles anon, authenticated, service_role, supabase_auth_admin, authenticator and schema extensions created."
+
+          for ext in pgcrypto uuid-ossp; do
+            if "${PGBIN}/psql" "$TARGET_URL" -v ON_ERROR_STOP=1 -q \
+                 -c "create extension if not exists \"${ext}\" with schema extensions" >/dev/null 2>&1; then
+              echo "Extension ${ext}: created in schema extensions"
+            else
+              echo "NOTE: extension ${ext} is not available in this image (ignored)"
+            fi
+          done
+
+      - name: Restore dump
+        run: |
+          set -euo pipefail
+
+          # No --exit-on-error: errors are collected and classified below.
+          RC=0
+          "${PGBIN}/pg_restore" --no-owner --no-privileges \
+            --dbname "$TARGET_URL" dump.pgdump 2> restore-stderr.txt || RC=$?
+          echo "pg_restore exit code: ${RC} (non-zero is expected when ignorable errors occur)"
+
+          # Only 'pg_restore: error:' headline lines are used; DETAIL/Command lines are never
+          # printed, and COPY failure details are suppressed because they may quote row data.
+          { grep '^pg_restore: error:' restore-stderr.txt || true; } \
+            | sed -E 's/(COPY failed for table "[^"]*").*/\1: (detail suppressed)/' \
+            | cut -c1-300 > restore-errors.txt
+
+          ERR_COUNT="$(wc -l < restore-errors.txt | tr -d ' ')"
+          echo "Error lines: ${ERR_COUNT}"
+
+          if [ "$ERR_COUNT" -gt 0 ]; then
+            echo "First 30 distinct error lines:"
+            awk '!seen[$0]++' restore-errors.txt | head -n 30
+
+            N_ROLE="$({ grep -Eci 'role "[^"]*" does not exist' restore-errors.txt || true; })"
+            N_EXT="$({ grep -Ei 'extension' restore-errors.txt | grep -Evci 'role "[^"]*" does not exist' || true; })"
+            N_SUPA="$({ grep -Ei 'schema "(auth|extensions|storage|realtime|vault|graphql|graphql_public|pgsodium|net)"|supabase|pgsodium|pg_net|pg_graphql|extensions\.' restore-errors.txt \
+                        | grep -Evci 'role "[^"]*" does not exist|extension' || true; })"
+            N_OTHER="$({ grep -Evci 'role "[^"]*" does not exist|extension|schema "(auth|extensions|storage|realtime|vault|graphql|graphql_public|pgsodium|net)"|supabase|pgsodium|pg_net|pg_graphql|extensions\.' restore-errors.txt || true; })"
+
+            echo "Error categories: missing-roles=${N_ROLE} extensions=${N_EXT} supabase-managed=${N_SUPA} other=${N_OTHER}"
+            if [ "${N_OTHER:-0}" -gt 0 ]; then
+              echo "::warning::${N_OTHER} restore error(s) are not about roles, extensions or Supabase-managed objects; review the lines above"
+              echo "Uncategorised error lines (first 30):"
+              { grep -Evi 'role "[^"]*" does not exist|extension|schema "(auth|extensions|storage|realtime|vault|graphql|graphql_public|pgsodium|net)"|supabase|pgsodium|pg_net|pg_graphql|extensions\.' restore-errors.txt || true; } \
+                | awk '!seen[$0]++' | head -n 30
+            fi
+          else
+            echo "Error categories: none (clean restore)"
+          fi
+
+      - name: Compare row counts with manifest
+        run: |
+          set -euo pipefail
+
+          FAILS=()
+          CHECKED=0
+
+          printf '%-20s | %10s | %10s | %8s\n' "table" "manifest" "restored" "diff"
+          printf -- '---------------------+------------+------------+---------\n'
+
+          while IFS= read -r line; do
+            [[ "$line" =~ ^[[:space:]]+([a-z_][a-z0-9_]*):[[:space:]]*(.*)$ ]] || continue
+            T="${BASH_REMATCH[1]}"
+            M="${BASH_REMATCH[2]}"
+            if ! [[ "$M" =~ ^[0-9]+$ ]]; then
+              printf '%-20s | %10s | %10s | %8s\n' "$T" "(not found)" "-" "-"
+              continue
+            fi
+            CHECKED=$((CHECKED + 1))
+
+            R="$("${PGBIN}/psql" "$TARGET_URL" -v ON_ERROR_STOP=1 -Atc "select count(*) from public.${T}" 2>/dev/null)" || R=""
+            if ! [[ "$R" =~ ^[0-9]+$ ]]; then
+              printf '%-20s | %10s | %10s | %8s\n' "$T" "$M" "MISSING" "-"
+              FAILS+=("${T} missing in restored DB")
+              continue
+            fi
+
+            D=$((R - M))
+            printf '%-20s | %10s | %10s | %8s\n' "$T" "$M" "$R" "$D"
+
+            if [ "$R" -eq 0 ] && [ "$M" -gt 0 ]; then
+              FAILS+=("${T} restored 0 rows (manifest ${M})")
+            elif [ $((R * 100)) -lt $((M * 99)) ]; then
+              FAILS+=("${T} restored ${R} rows, below 99% of manifest ${M}")
+            fi
+          done < <(sed -n '/^row_counts:/,$p' manifest.txt | tail -n +2)
+
+          if [ "$CHECKED" -eq 0 ]; then
+            FAILS+=("manifest has no row counts to compare")
+          fi
+
+          echo
+          echo "Tables restored per schema (base tables):"
+          "${PGBIN}/psql" "$TARGET_URL" -v ON_ERROR_STOP=1 -At -F ' : ' -c "
+            select s, (select count(*) from information_schema.tables
+                       where table_schema = s and table_type = 'BASE TABLE')
+            from unnest(array['public','pricing','auth']) as s"
+
+          if [ "${#FAILS[@]}" -gt 0 ]; then
+            REASON="$(IFS=';'; echo "${FAILS[*]}")"
+            echo "RESULT_REASON=${REASON}" >> "$GITHUB_ENV"
+            echo "Row count comparison FAILED: ${REASON}" >&2
+            exit 1
+          fi
+          echo "Row count comparison OK (${CHECKED} tables checked, all >= 99% of manifest)."
+
+      - name: Cleanup
+        if: always()
+        run: |
+          set -euo pipefail
+          docker rm -f pgtest >/dev/null 2>&1 || true
+          rm -f dump.pgdump manifest.txt restore-stderr.txt restore-errors.txt
+          echo "Container and local files removed."
+
+      - name: Result
+        if: always()
+        env:
+          JOB_STATUS: ${{ job.status }}
+        run: |
+          set -euo pipefail
+          if [ "$JOB_STATUS" = "success" ]; then
+            echo "RESTORE TEST PASSED"
+          else
+            echo "RESTORE TEST FAILED: ${RESULT_REASON:-a step failed or was cancelled before the comparison finished (see log above)}"
+            exit 1
+          fi
