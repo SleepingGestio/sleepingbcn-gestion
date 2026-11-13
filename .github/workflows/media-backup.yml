@@ -1,6 +1,6 @@
 name: Media backup (R2 to R2)
 
-# Copia ADITIVA diaria de los adjuntos de mantenimiento (fotos, vídeos, notas de
+# Copia ADITIVA diaria (espejo de la ÚLTIMA versión, sin borrar nunca) de los adjuntos de mantenimiento (fotos, vídeos, notas de
 # voz, documentos) del bucket R2 en producción a un segundo bucket R2 privado.
 #
 #   Origen:  sleepingbcn-manteniment      (solo lectura para este job)
@@ -14,6 +14,9 @@ name: Media backup (R2 to R2)
 #   R2_MEDIA_DST_SECRET_ACCESS_KEY     / sobre sleepingbcn-backups-media
 #
 # Diseño:
+# - La copia refleja la ÚLTIMA versión de cada objeto vivo: si el optimizador
+#   de medios reemplaza un objeto en el sitio (misma clave, nuevo tamaño), la
+#   copia se sobrescribe en la siguiente ejecución. Criterio: solo tamaño.
 # - El bucket de destino NO tiene regla de ciclo de vida / borrado a propósito:
 #   la copia solo crece. Los borrados en el origen NO se propagan al destino.
 # - El token de origen es de solo lectura y el de destino solo puede escribir en
@@ -21,7 +24,7 @@ name: Media backup (R2 to R2)
 #   adjuntos reales.
 # - Como los dos buckets usan credenciales distintas no hay copia en el servidor:
 #   rclone transmite los objetos a través del runner (R2 no cobra egress, el
-#   volumen es pequeño y solo se copian los objetos nuevos en cada ejecución).
+#   volumen es pequeño y solo se copian los objetos nuevos o modificados en cada ejecución).
 # - Las claves se mantienen idénticas en el destino (sin prefijo extra).
 #
 # Restaurar (requiere un token con escritura sobre el bucket de origen):
@@ -63,7 +66,7 @@ jobs:
           sudo mv "/tmp/rclone-v${MEDIA_RCLONE_VERSION}-linux-amd64/rclone" /usr/local/bin/rclone
           rclone version | head -1
 
-      - name: Copiar objetos nuevos (solo añadir)
+      - name: Copiar objetos nuevos o modificados (sin borrar)
         env:
           RCLONE_CONFIG_SRC_TYPE: s3
           RCLONE_CONFIG_SRC_PROVIDER: Cloudflare
@@ -81,14 +84,38 @@ jobs:
           RCLONE_CONFIG_DST_NO_CHECK_BUCKET: "true"
         run: |
           set -euo pipefail
-          # SOLO "rclone copy", nunca sync/move/delete/purge. --ignore-existing
-          # garantiza que un objeto que ya está en el destino no se sobrescribe
-          # jamás (los adjuntos son inmutables). Nivel de log NOTICE: solo se
-          # imprimen las estadísticas cada 30 s y los errores, no cada fichero.
+          # COMPROMISO ACEPTADO POR EL PROPIETARIO:
+          # - La copia refleja la ÚLTIMA versión de cada objeto vivo. El
+          #   optimizador de medios reemplaza objetos en el sitio (misma clave,
+          #   menos bytes), así que la copia debe sobrescribirse. Consecuencia:
+          #   un objeto vivo corrupto sobrescribiría su copia en la siguiente
+          #   ejecución.
+          # - Los borrados en el origen NUNCA se propagan: solo "rclone copy",
+          #   jamás sync/move/--delete-*/purge.
+          # - --size-only: las fechas pueden diferir entre buckets (el
+          #   optimizador escribe con PUT sin mtime de rclone) y no queremos
+          #   recopiarlo todo por eso. El optimizador solo conserva un
+          #   reemplazo si es más pequeño, así que cambia siempre el tamaño.
+          # -v (INFO) imprime "Copied" por cada objeto transferido; se guarda
+          # el log para resumir cuántos objetos y bytes se han copiado.
           rclone copy "src:${MEDIA_SRC_BUCKET}" "dst:${MEDIA_DST_BUCKET}" \
-            --ignore-existing \
+            --size-only \
             --transfers 4 --checkers 8 \
-            --log-level NOTICE --stats 30s --stats-one-line --stats-log-level NOTICE
+            -v --stats 30s --stats-one-line --stats-log-level NOTICE \
+            2>&1 | tee /tmp/rclone-copy.log
+
+          COPIED="$(grep -c 'INFO  : .*: Copied' /tmp/rclone-copy.log || true)"
+          STATS="$(grep -E 'ETA|, 100%' /tmp/rclone-copy.log | tail -1 | sed 's/^ *//' || true)"
+          echo "Objetos copiados en esta ejecución: ${COPIED}"
+          {
+            echo "### Copia de medios"
+            echo "- Objetos nuevos o modificados, copiados: ${COPIED}"
+            echo "- Estadísticas rclone: \`${STATS:-sin transferencias}\`"
+            if [ "$COPIED" -gt 0 ]; then
+              echo "- Claves:"
+              grep 'INFO  : .*: Copied' /tmp/rclone-copy.log | sed -E 's/^.*INFO  : (.*): Copied.*/  - \1/' | head -50
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Verificar copia
         env:
@@ -109,8 +136,8 @@ jobs:
         run: |
           set -euo pipefail
 
-          # a) Cada objeto del origen debe existir en el destino con el mismo
-          #    tamaño (--one-way: los objetos extra del destino son normales).
+          # a) Mismo criterio que la copia (--size-only): cada objeto del origen
+          #    debe existir en el destino con el mismo tamaño (--one-way: los objetos extra del destino son normales).
           #    Si falla, puede ser un adjunto subido entre la copia y la
           #    comprobación: se repite la copia UNA vez y se comprueba de nuevo;
           #    si vuelve a fallar, el job falla.
@@ -120,7 +147,7 @@ jobs:
           if ! "${CHECK_CMD[@]}"; then
             echo "::warning::La comprobación ha fallado; se repite la copia una vez (posible subida concurrente)."
             rclone copy "src:${MEDIA_SRC_BUCKET}" "dst:${MEDIA_DST_BUCKET}" \
-              --ignore-existing \
+              --size-only \
               --transfers 4 --checkers 8 \
               --log-level NOTICE --stats 30s --stats-one-line --stats-log-level NOTICE
             if ! "${CHECK_CMD[@]}"; then
